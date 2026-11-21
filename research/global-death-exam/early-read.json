@@ -1,0 +1,486 @@
+{
+  "source": "用户提供的明文镜像；与当前番茄版本存在差异",
+  "reading_scope": "按顺序全文阅读第1—96章；输出截断位置均已补读",
+  "fully_read": [
+    {
+      "order": 1,
+      "title": "第1章 剛下刑場，你讓我去考試？",
+      "url": "https://m.xsw.tw/1760170/255979666.html"
+    },
+    {
+      "order": 2,
+      "title": "第2章 死考？",
+      "url": "https://m.xsw.tw/1760170/255979669.html"
+    },
+    {
+      "order": 3,
+      "title": "第3章 神類起源？",
+      "url": "https://m.xsw.tw/1760170/255979671.html"
+    },
+    {
+      "order": 4,
+      "title": "第4章 抉擇",
+      "url": "https://m.xsw.tw/1760170/255979673.html"
+    },
+    {
+      "order": 5,
+      "title": "第5章 破門",
+      "url": "https://m.xsw.tw/1760170/255979675.html"
+    },
+    {
+      "order": 6,
+      "title": "第6章 未知的題目",
+      "url": "https://m.xsw.tw/1760170/255979677.html"
+    },
+    {
+      "order": 7,
+      "title": "第7章 祂們是誰？",
+      "url": "https://m.xsw.tw/1760170/255979679.html"
+    },
+    {
+      "order": 8,
+      "title": "第8章 浮「世」繪",
+      "url": "https://m.xsw.tw/1760170/255979681.html"
+    },
+    {
+      "order": 9,
+      "title": "第9章 異種",
+      "url": "https://m.xsw.tw/1760170/255979683.html"
+    },
+    {
+      "order": 10,
+      "title": "第10章 擊殺",
+      "url": "https://m.xsw.tw/1760170/255979685.html"
+    },
+    {
+      "order": 11,
+      "title": "第11章 三條路",
+      "url": "https://m.xsw.tw/1760170/255979687.html"
+    },
+    {
+      "order": 12,
+      "title": "第12章 實驗室",
+      "url": "https://m.xsw.tw/1760170/255979689.html"
+    },
+    {
+      "order": 13,
+      "title": "第13章 畫？",
+      "url": "https://m.xsw.tw/1760170/255979691.html"
+    },
+    {
+      "order": 14,
+      "title": "第14章 誘餌",
+      "url": "https://m.xsw.tw/1760170/255979693.html"
+    },
+    {
+      "order": 15,
+      "title": "第15章 神？",
+      "url": "https://m.xsw.tw/1760170/255979696.html"
+    },
+    {
+      "order": 16,
+      "title": "第16章 它想做什麽？",
+      "url": "https://m.xsw.tw/1760170/255979698.html"
+    },
+    {
+      "order": 17,
+      "title": "第17章 新異種",
+      "url": "https://m.xsw.tw/1760170/255979701.html"
+    },
+    {
+      "order": 18,
+      "title": "第18章 突變",
+      "url": "https://m.xsw.tw/1760170/255979703.html"
+    },
+    {
+      "order": 19,
+      "title": "第19章 莫瑞幹",
+      "url": "https://m.xsw.tw/1760170/255979705.html"
+    },
+    {
+      "order": 20,
+      "title": "第20章 戰爭女神",
+      "url": "https://m.xsw.tw/1760170/255979707.html"
+    },
+    {
+      "order": 21,
+      "title": "第21章 第二位",
+      "url": "https://m.xsw.tw/1760170/255979709.html"
+    },
+    {
+      "order": 22,
+      "title": "第22章 黃粱",
+      "url": "https://m.xsw.tw/1760170/255979713.html"
+    },
+    {
+      "order": 23,
+      "title": "第23章 謎底",
+      "url": "https://m.xsw.tw/1760170/255979716.html"
+    },
+    {
+      "order": 24,
+      "title": "第24章 神是誰？",
+      "url": "https://m.xsw.tw/1760170/255979718.html"
+    },
+    {
+      "order": 25,
+      "title": "第25章 維修區",
+      "url": "https://m.xsw.tw/1760170/255979720.html"
+    },
+    {
+      "order": 26,
+      "title": "第26章 隱藏",
+      "url": "https://m.xsw.tw/1760170/255979722.html"
+    },
+    {
+      "order": 27,
+      "title": "第27章 刷分",
+      "url": "https://m.xsw.tw/1760170/255979724.html"
+    },
+    {
+      "order": 28,
+      "title": "第28章 逃離",
+      "url": "https://m.xsw.tw/1760170/255979726.html"
+    },
+    {
+      "order": 29,
+      "title": "第29章 真正的難度",
+      "url": "https://m.xsw.tw/1760170/255979728.html"
+    },
+    {
+      "order": 30,
+      "title": "第30章 返回",
+      "url": "https://m.xsw.tw/1760170/255979730.html"
+    },
+    {
+      "order": 31,
+      "title": "第31章 B級評價",
+      "url": "https://m.xsw.tw/1760170/255979731.html"
+    },
+    {
+      "order": 32,
+      "title": "第32章 房間與兌換",
+      "url": "https://m.xsw.tw/1760170/255979733.html"
+    },
+    {
+      "order": 33,
+      "title": "第33章 血統",
+      "url": "https://m.xsw.tw/1760170/255979735.html"
+    },
+    {
+      "order": 34,
+      "title": "第34章 第一個離開的人",
+      "url": "https://m.xsw.tw/1760170/255979739.html"
+    },
+    {
+      "order": 35,
+      "title": "第35章 出乎意料",
+      "url": "https://m.xsw.tw/1760170/255979741.html"
+    },
+    {
+      "order": 36,
+      "title": "第36章 專屬於你",
+      "url": "https://m.xsw.tw/1760170/255979743.html"
+    },
+    {
+      "order": 37,
+      "title": "第37章 特殊血統",
+      "url": "https://m.xsw.tw/1760170/255979745.html"
+    },
+    {
+      "order": 38,
+      "title": "第38章 黃粱的想法",
+      "url": "https://m.xsw.tw/1760170/255979747.html"
+    },
+    {
+      "order": 39,
+      "title": "第39章 與我何幹",
+      "url": "https://m.xsw.tw/1760170/255979749.html"
+    },
+    {
+      "order": 40,
+      "title": "第40章 準備進入",
+      "url": "https://m.xsw.tw/1760170/255979751.html"
+    },
+    {
+      "order": 41,
+      "title": "第41章 暴君血統",
+      "url": "https://m.xsw.tw/1760170/255979753.html"
+    },
+    {
+      "order": 42,
+      "title": "第42章 進入",
+      "url": "https://m.xsw.tw/1760170/255979755.html"
+    },
+    {
+      "order": 43,
+      "title": "第43章 抹殺",
+      "url": "https://m.xsw.tw/1760170/255979757.html"
+    },
+    {
+      "order": 44,
+      "title": "第44章 合作與競爭",
+      "url": "https://m.xsw.tw/1760170/255979759.html"
+    },
+    {
+      "order": 45,
+      "title": "第45章 災難前奏",
+      "url": "https://m.xsw.tw/1760170/255979761.html"
+    },
+    {
+      "order": 46,
+      "title": "第46章 病毒",
+      "url": "https://m.xsw.tw/1760170/255979764.html"
+    },
+    {
+      "order": 47,
+      "title": "第47章 進化",
+      "url": "https://m.xsw.tw/1760170/255979766.html"
+    },
+    {
+      "order": 48,
+      "title": "第48章 爆發",
+      "url": "https://m.xsw.tw/1760170/255979768.html"
+    },
+    {
+      "order": 49,
+      "title": "第49章 變異體",
+      "url": "https://m.xsw.tw/1760170/255979770.html"
+    },
+    {
+      "order": 50,
+      "title": "第50章 古代石板",
+      "url": "https://m.xsw.tw/1760170/255979772.html"
+    },
+    {
+      "order": 51,
+      "title": "第51章 突襲",
+      "url": "https://m.xsw.tw/1760170/255979774.html"
+    },
+    {
+      "order": 52,
+      "title": "第52章 隱藏的怪物",
+      "url": "https://m.xsw.tw/1760170/255979776.html"
+    },
+    {
+      "order": 53,
+      "title": "第53章 特殊變異體",
+      "url": "https://m.xsw.tw/1760170/255979780.html"
+    },
+    {
+      "order": 54,
+      "title": "第54章 七日殺",
+      "url": "https://m.xsw.tw/1760170/255979782.html"
+    },
+    {
+      "order": 55,
+      "title": "第55章 問題與潘多拉",
+      "url": "https://m.xsw.tw/1760170/255979784.html"
+    },
+    {
+      "order": 56,
+      "title": "第56章 月亮與陷阱",
+      "url": "https://m.xsw.tw/1760170/255979786.html"
+    },
+    {
+      "order": 57,
+      "title": "第57章 滅絕",
+      "url": "https://m.xsw.tw/1760170/255979787.html"
+    },
+    {
+      "order": 58,
+      "title": "第58章 蜘蛛變異體",
+      "url": "https://m.xsw.tw/1760170/255979789.html"
+    },
+    {
+      "order": 59,
+      "title": "第59章 石板的秘密",
+      "url": "https://m.xsw.tw/1760170/255979791.html"
+    },
+    {
+      "order": 60,
+      "title": "第60章 我們的血",
+      "url": "https://m.xsw.tw/1760170/255979793.html"
+    },
+    {
+      "order": 61,
+      "title": "第61章 融合體",
+      "url": "https://m.xsw.tw/1760170/255979796.html"
+    },
+    {
+      "order": 62,
+      "title": "第62章 難度鎖定？",
+      "url": "https://m.xsw.tw/1760170/255979798.html"
+    },
+    {
+      "order": 63,
+      "title": "第63章 融合",
+      "url": "https://m.xsw.tw/1760170/255979800.html"
+    },
+    {
+      "order": 64,
+      "title": "第64章 激戰",
+      "url": "https://m.xsw.tw/1760170/255979802.html"
+    },
+    {
+      "order": 65,
+      "title": "第65章 吞吃",
+      "url": "https://m.xsw.tw/1760170/255979804.html"
+    },
+    {
+      "order": 66,
+      "title": "第66章 雛形",
+      "url": "https://m.xsw.tw/1760170/255979807.html"
+    },
+    {
+      "order": 67,
+      "title": "第67章 錄音機",
+      "url": "https://m.xsw.tw/1760170/255979809.html"
+    },
+    {
+      "order": 68,
+      "title": "第68章 特殊存在",
+      "url": "https://m.xsw.tw/1760170/255979811.html"
+    },
+    {
+      "order": 69,
+      "title": "第69章 答案",
+      "url": "https://m.xsw.tw/1760170/255979813.html"
+    },
+    {
+      "order": 70,
+      "title": "第70章 它在哪？",
+      "url": "https://m.xsw.tw/1760170/255979816.html"
+    },
+    {
+      "order": 71,
+      "title": "第71章 巨炮",
+      "url": "https://m.xsw.tw/1760170/255979820.html"
+    },
+    {
+      "order": 72,
+      "title": "第72章 雛形能力",
+      "url": "https://m.xsw.tw/1760170/255979822.html"
+    },
+    {
+      "order": 73,
+      "title": "第73章 第二輪",
+      "url": "https://m.xsw.tw/1760170/255979824.html"
+    },
+    {
+      "order": 74,
+      "title": "第74章 孕育",
+      "url": "https://m.xsw.tw/1760170/255979825.html"
+    },
+    {
+      "order": 75,
+      "title": "第75章 融合能力",
+      "url": "https://m.xsw.tw/1760170/255979827.html"
+    },
+    {
+      "order": 76,
+      "title": "第76章 底牌",
+      "url": "https://m.xsw.tw/1760170/255979830.html"
+    },
+    {
+      "order": 77,
+      "title": "第77章 感染",
+      "url": "https://m.xsw.tw/1760170/255979833.html"
+    },
+    {
+      "order": 78,
+      "title": "第78章 第七輪",
+      "url": "https://m.xsw.tw/1760170/255979835.html"
+    },
+    {
+      "order": 79,
+      "title": "第79章 對峙",
+      "url": "https://m.xsw.tw/1760170/255979837.html"
+    },
+    {
+      "order": 80,
+      "title": "第80章 同隊",
+      "url": "https://m.xsw.tw/1760170/255979839.html"
+    },
+    {
+      "order": 81,
+      "title": "第81章 死亡與新生",
+      "url": "https://m.xsw.tw/1760170/255979841.html"
+    },
+    {
+      "order": 82,
+      "title": "第82章 回歸",
+      "url": "https://m.xsw.tw/1760170/255979845.html"
+    },
+    {
+      "order": 83,
+      "title": "第83章 死與恨",
+      "url": "https://m.xsw.tw/1760170/255979848.html"
+    },
+    {
+      "order": 84,
+      "title": "第84章 強化方式",
+      "url": "https://m.xsw.tw/1760170/255979851.html"
+    },
+    {
+      "order": 85,
+      "title": "第85章 特殊兌換",
+      "url": "https://m.xsw.tw/1760170/255979854.html"
+    },
+    {
+      "order": 86,
+      "title": "第86章 問答道具",
+      "url": "https://m.xsw.tw/1760170/255979861.html"
+    },
+    {
+      "order": 87,
+      "title": "第87章 謎底與兌換",
+      "url": "https://m.xsw.tw/1760170/255979864.html"
+    },
+    {
+      "order": 88,
+      "title": "第88章 墳墓裏的人",
+      "url": "https://m.xsw.tw/1760170/255979867.html"
+    },
+    {
+      "order": 89,
+      "title": "第89章 旋渦異常",
+      "url": "https://m.xsw.tw/1760170/255979870.html"
+    },
+    {
+      "order": 90,
+      "title": "第90章 未知的變化",
+      "url": "https://m.xsw.tw/1760170/255979873.html"
+    },
+    {
+      "order": 91,
+      "title": "第91章 第三場",
+      "url": "https://m.xsw.tw/1760170/255979875.html"
+    },
+    {
+      "order": 92,
+      "title": "第92章 鑰匙世界",
+      "url": "https://m.xsw.tw/1760170/255979878.html"
+    },
+    {
+      "order": 93,
+      "title": "第93章 第三場前的兌換",
+      "url": "https://m.xsw.tw/1760170/255979882.html"
+    },
+    {
+      "order": 94,
+      "title": "第94章 能力強化",
+      "url": "https://m.xsw.tw/1760170/255979885.html"
+    },
+    {
+      "order": 95,
+      "title": "第95章 準備完成",
+      "url": "https://m.xsw.tw/1760170/255979888.html"
+    },
+    {
+      "order": 96,
+      "title": "第96章 進入前的談話",
+      "url": "https://m.xsw.tw/1760170/255979891.html"
+    }
+  ]
+}

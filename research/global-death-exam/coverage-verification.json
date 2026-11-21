@@ -1,0 +1,22 @@
+{
+  "scope": "original mirror index 1–456 plus supplement titles455–466",
+  "original_index_entries": 456,
+  "gap_orders": [],
+  "replacement_sources": [
+    390,
+    452
+  ],
+  "supplement_pages": 12,
+  "supplement_near_duplicate_entries": [
+    460,
+    461
+  ],
+  "latest_official_titles_not_fully_read": [
+    467,
+    468,
+    469,
+    470
+  ],
+  "local_markdown_link_errors": [],
+  "validation_scope": "Reading-ledger continuity and local document links; not proof that all mirrors match the official current edition."
+}

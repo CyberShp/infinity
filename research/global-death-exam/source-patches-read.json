@@ -1,0 +1,46 @@
+{
+  "checked_at": "2026-11-21",
+  "entries": [
+    {
+      "order": 390,
+      "title": "第390章【酆都】：鬼类起源",
+      "url": "https://www.timotxt.com/2501590824/390.html",
+      "official_preview_url": "https://fanqienovel.com/reader/7695437500969402904",
+      "read_mode": "sequential_full_text",
+      "coverage": "whole body through chapter ending and next-chapter navigation",
+      "limitations": [
+        "Some common glyphs replaced by Hangul characters",
+        "Official full text not available; opening matched official preview"
+      ],
+      "replaces_mismatched_source_url": "https://m.xsw.tw/1760170/256250308.html"
+    }
+  ],
+  "not_read": [
+    {
+      "printed_number": 467,
+      "title": "阻止复制",
+      "status": "catalog_only_no_full_body",
+      "attempted_full_url": "https://www.timotxt.com/2501590824/467.html",
+      "ordinary_get_http_status": 403,
+      "ordinary_get_bytes": 5409
+    },
+    {
+      "printed_number": 468,
+      "title": "梳妆",
+      "status": "catalog_only_no_full_body",
+      "attempted_full_url": "https://www.timotxt.com/2501590824/468.html",
+      "ordinary_get_http_status": 403,
+      "ordinary_get_bytes": 5409
+    },
+    {
+      "printed_number": 469,
+      "title": "它的脸",
+      "status": "official_catalog_only"
+    },
+    {
+      "printed_number": 470,
+      "title": "镜鬼之谜",
+      "status": "official_catalog_only"
+    }
+  ]
+}
