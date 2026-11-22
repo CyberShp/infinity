@@ -94,6 +94,14 @@
     .bg-rose-950\/70 { background-color: rgba(76, 5, 25, 0.7); }
     .border-rose-500\/40 { border-color: rgba(244, 63, 94, 0.4); }
     .border-red-900\/50 { border-color: rgba(127, 29, 29, 0.5); }
+    .bg-red-950\/50 { background-color: rgba(69, 10, 10, 0.5); }
+    .border-red-500\/40 { border-color: rgba(239, 68, 68, 0.4); }
+    .mt-8 { margin-top: 2rem; }
+    .h-\[calc\(100vh-132px\)\] { height: calc(100vh - 132px); }
+    .from-black\/75 { --tw-gradient-from: rgba(0,0,0,0.75) var(--tw-gradient-from-position); --tw-gradient-to: rgba(0,0,0,0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+    .to-black\/45 { --tw-gradient-to: rgba(0,0,0,0.45) var(--tw-gradient-to-position); }
+    .group:hover .group-hover\:opacity-100 { opacity: 1; }
+    .group:hover .group-hover\:bg-red-950\/45 { background-color: rgba(69, 10, 10, 0.45); }
 
     @keyframes screenShake {
       0%, 100% { transform: translate3d(0, 0, 0); }
@@ -318,7 +326,8 @@ let noiseBuf = null;
 // 当音频槽位为 null 时，由下方物理木石共鸣器与极低频空间残响引擎提供克制、自然的拟音反馈。
 window.AV_MANIFEST = {
   scenes: {
-    title: 'assets/title_main_keyart.jpg',
+    title: '../assets/hall-vortex.webp',
+    hall_judgment: '../assets/hall-judgment.webp',
     alley: 'assets/exam1_alley.jpg',
     courtyard: 'assets/exam1_courtyard.jpg',
     gate: 'assets/scenes/exam1_gate.webp',
@@ -329,7 +338,7 @@ window.AV_MANIFEST = {
     well: 'assets/exam1_well.jpg',
     crisis_window: 'assets/scenes/exam1_crisis_window.webp',
     canal: 'assets/scenes/exam1_canal.webp',
-    space: 'assets/exam1_space.jpg'
+    space: '../assets/hall-vortex.webp'
   },
   portraits: {
     zhou: { calm: 'assets/portraits/zhou_calm.webp', tense: 'assets/portraits/zhou_tense.webp', injured: 'assets/portraits/zhou_injured.webp' },
@@ -2570,7 +2579,7 @@ function settleExam() {
   const net = base + bonus - fee - repair;
 
   if (net < 0) {
-    triggerEnding(false, `【结局 · 负分抹杀】你活着爬出了白雾古宅，却在纯白大厅的账单前凝固了呼吸：总收入 ${base + bonus} 分，扣除 60 分基础费与 ${repair} 分躯体修复费后，净积分跌至 ${net} 分。腕表亮起猩红处决光束——首场便死于死考空间的经济铁律。`);
+    triggerEnding(false, `【结局 · 负分抹杀】你活着爬出了白雾古宅，却在死考空间大厅的深红旋涡前凝固了呼吸：总收入 ${base + bonus} 分，扣除 60 分基础费与 ${repair} 分躯体修复费后，净积分跌至 ${net} 分。抹杀红光骤然降下——首场便死于死考空间的经济铁律。`);
     return;
   }
 
@@ -2606,7 +2615,8 @@ function buyItem(id) {
   const it = SHOP_ITEMS.find(i => i.id === id);
   if (!it || it.locked || S.shopBought.includes(id) || S.points < it.price) return;
   S.points -= it.price; S.shopBought.push(id);
-  S.spaceNote = `已兑换【${it.name}】（-${it.price} 分）。冰冷白光在掌心凝聚成型。`;
+  playSfx('clue');
+  S.spaceNote = `你将手探入大厅深红旋涡，兑换光幕收拢——【${it.name}】（-${it.price} 分）在掌心凝聚成型。`;
   render();
 }
 
@@ -2616,18 +2626,18 @@ function spaceRestAction(act) {
   const aliveAllies = Object.values(S.npcs).filter(n => n.alive && n.room === 'well');
   if (act === 'tea') {
     if (aliveAllies.length > 0) {
-      S.spaceNote = `你在纯白大厅与生还的 ${aliveAllies.map(n=>n.name).join('、')} 复盘了整场白雾古宅。活着回来的人彼此对视一眼，都没再提阵亡者的名字。`;
+      S.spaceNote = `你在半圆形死考空间大厅与生还的 ${aliveAllies.map(n=>n.name).join('、')} 复盘了整场白雾古宅。深红旋涡在远处无声流转，活着回来的人彼此对视一眼，都没再提阵亡者的名字。`;
     } else {
-      S.spaceNote = '纯白大厅空荡荡的，只有你一个生还者。你独自端起一杯空间模拟出的热茶，意识到在这场死考里，能托付后背的只有自己的判断。';
+      S.spaceNote = '半圆形大厅空荡荡的，金属穹顶压低了视线，身后十四扇私人房门紧闭。你望着面前缓缓流转的深红旋涡，意识到在这场死考里能托付后背的只有自己的判断。';
     }
   } else if (act === 'train') {
     S.trained = true; S.stats.phy += 1; S.stats.agi += 1;
-    S.spaceNote = '你在纯白训练区完成了高强度耐寒与冷兵器适应训练（体魄 +1，敏捷 +1）。';
+    S.spaceNote = '你推开弧形廊边的私人房门，在按心意布置的专属演武空间内完成了耐寒与冷兵器适应训练（体魄 +1，敏捷 +1）。';
   } else if (act === 'watch') {
-    S.spaceNote = '你核对腕表条款：D 级权限已激活；下一场考核将在 72 小时归零时强制传召，空气里隐约浮出锈铁与海腥味……';
+    S.spaceNote = '你触碰深红旋涡核对光幕与腕表：D 级权限已激活；休整次日晚间系统下发下一场预告，空气里隐约浮出锈铁与海腥味……';
   } else if (act === 'finish') {
     S.spaceEnded = true;
-    S.spaceNote = '72:00:00 倒计时归零！白光再次笼罩纯白大厅——准备踏入第一季第二场：《黑水船坞》。（第一场《白雾古宅》完整通关！）';
+    S.spaceNote = '72:00:00 倒计时归零！大厅深红旋涡骤然加速翻涌，传召光柱笼罩全身——准备踏入第一季第二场：《黑水船坞》。（第一场《白雾古宅》完整通关！）';
   }
   render();
 }
@@ -2791,6 +2801,21 @@ function bindTitleParallax() {
   };
 }
 
+function getHallEdition() {
+  try { return localStorage.getItem('infinity.menu.edition') === 'judgment' ? 'judgment' : 'numinous'; }
+  catch (e) { return 'numinous'; }
+}
+function setHallEdition(ed) {
+  const next = ed === 'judgment' ? 'judgment' : 'numinous';
+  try { localStorage.setItem('infinity.menu.edition', next); } catch (e) {}
+  render({ preserveScroll: true });
+}
+function resolveHallMedia() {
+  const ed = getHallEdition();
+  if (ed === 'judgment') return resolveSceneMedia('hall_judgment');
+  return resolveSceneMedia('title');
+}
+
 function startTitleCanvas() {
   const canvas = document.getElementById('title-fx-canvas');
   if (!canvas || !canvas.getContext) return;
@@ -2798,36 +2823,38 @@ function startTitleCanvas() {
   if (!ctx) return;
   let w = canvas.width = window.innerWidth;
   let h = canvas.height = window.innerHeight;
-  const drops = Array.from({ length: 110 }, () => ({
-    x: Math.random() * w, y: Math.random() * h,
-    len: 12 + Math.random() * 18, spd: 9 + Math.random() * 8, alpha: 0.08 + Math.random() * 0.16
-  }));
-  const mists = Array.from({ length: 16 }, () => ({
-    x: Math.random() * w, y: h * (0.45 + Math.random() * 0.5),
-    r: 140 + Math.random() * 220, vx: 0.18 + Math.random() * 0.35, alpha: 0.025 + Math.random() * 0.045
+  const ed = getHallEdition();
+  const cxRatio = 0.75, cyRatio = ed === 'numinous' ? 0.66 : 0.57;
+  const motes = Array.from({ length: 28 }, (_, i) => ({
+    ang: (i / 28) * Math.PI * 2,
+    rad: 0.08 + Math.random() * 0.24,
+    spd: 0.004 + Math.random() * 0.006,
+    inward: 0.0005 + Math.random() * 0.0008,
+    alpha: 0.14 + Math.random() * 0.28
   }));
   let t = 0;
   function frame() {
     if (S.stage !== 'title' || !FX_ENABLED) return;
-    t += 0.015;
+    t += 0.016;
     ctx.clearRect(0, 0, w, h);
-    for (const m of mists) {
-      m.x += m.vx; if (m.x - m.r > w) m.x = -m.r;
-      const g = ctx.createRadialGradient(m.x, m.y, 10, m.x, m.y, m.r);
-      g.addColorStop(0, `rgba(210,224,236,${m.alpha})`); g.addColorStop(1, 'rgba(210,224,236,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2); ctx.fill();
+    const vx = w * cxRatio, vy = h * cyRatio;
+    const baseR = Math.min(w, h) * (ed === 'numinous' ? 0.34 : 0.24);
+    const pulse = 0.12 + Math.sin(t * 0.9) * 0.045;
+    const rg = ctx.createRadialGradient(vx, vy, baseR * 0.08, vx, vy, baseR);
+    rg.addColorStop(0, `rgba(220,38,38,${pulse})`);
+    rg.addColorStop(0.55, `rgba(153,27,27,${pulse * 0.55})`);
+    rg.addColorStop(1, 'rgba(127,29,29,0)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, w, h);
+    for (const m of motes) {
+      m.ang += m.spd;
+      m.rad -= m.inward;
+      if (m.rad < 0.05) m.rad = 0.28 + Math.random() * 0.06;
+      const px = vx + Math.cos(m.ang) * (baseR * m.rad * 1.45);
+      const py = vy + Math.sin(m.ang) * (baseR * m.rad * 0.72);
+      ctx.fillStyle = `rgba(252,211,77,${m.alpha * Math.sin((m.rad / 0.34) * Math.PI)})`;
+      ctx.beginPath(); ctx.arc(px, py, 1.3, 0, Math.PI * 2); ctx.fill();
     }
-    ctx.lineWidth = 1;
-    for (const d of drops) {
-      ctx.strokeStyle = `rgba(203,213,225,${d.alpha})`;
-      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 2.2, d.y + d.len); ctx.stroke();
-      d.y += d.spd; d.x -= 1.1;
-      if (d.y > h) { d.y = -d.len; d.x = Math.random() * (w + 120); }
-    }
-    const pulse = 0.06 + Math.sin(t * 1.4) * 0.035;
-    const rg = ctx.createRadialGradient(w * 0.76, h * 0.62, 10, w * 0.76, h * 0.62, Math.min(w, h) * 0.36);
-    rg.addColorStop(0, `rgba(185,28,28,${pulse})`); rg.addColorStop(1, 'rgba(185,28,28,0)');
-    ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h);
     titleRafId = requestAnimationFrame(frame);
   }
   titleRafId = requestAnimationFrame(frame);
@@ -2836,88 +2863,118 @@ function startTitleCanvas() {
 function renderTitleScreen() {
   const saved = loadSavedMeta();
   const savedLoc = saved && saved.location && ROOMS[saved.location] ? ROOMS[saved.location].name : (saved && saved.stage === 'space' ? '死考空间大厅' : '老街雨巷');
-  const savedTime = saved ? fmtTime(saved.timeMin || 1230) : '';
-  const titleMedia = resolveSceneMedia('title');
-  const isTitleVideo = typeof titleMedia === 'string' && /\.(mp4|webm)(\?.*)?$/i.test(titleMedia);
+  const savedTime = saved ? (saved.stage === 'space' ? '72h 休整' : fmtTime(saved.timeMin || 1230)) : '';
+  const ed = getHallEdition();
+  const titleMedia = resolveHallMedia();
 
   return `
-  <div class="relative w-screen h-screen overflow-hidden bg-[#07090c] text-[#e6e1d6] select-none">
-    ${isTitleVideo
-      ? `<video id="title-bg-media" data-scene-key="title" src="${titleMedia}" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover transition-transform duration-300 ease-out" style="transform:scale(1.05);"></video>`
-      : `<img id="title-bg-media" data-scene-key="title" src="${titleMedia}" alt="全球死考主视觉" class="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-300 ease-out ${FX_ENABLED ? 'scene-bg-anim' : ''}" style="transform:scale(1.05);" />`
-    }
+  <div class="relative w-screen h-screen overflow-hidden bg-[#090b0e] text-[#e6e1d6] select-none" style="background:#11100f;color:#e4d7be;">
+    <img id="title-bg-media" data-scene-key="${ed === 'judgment' ? 'hall_judgment' : 'title'}" src="${titleMedia}" alt="死考空间大厅" class="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-300 ease-out" style="transform:scale(1.03);" />
     <canvas id="title-fx-canvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
-    <div class="absolute inset-0 bg-gradient-to-r from-[#06080b]/94 via-[#06080b]/58 to-transparent pointer-events-none"></div>
-    <div class="absolute inset-0 bg-gradient-to-t from-[#06080b]/88 via-transparent to-[#06080b]/55 pointer-events-none"></div>
+    <div class="absolute inset-0 bg-gradient-to-r from-black/75 via-black/20 to-transparent pointer-events-none"></div>
+    <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/45 pointer-events-none"></div>
 
-    <div class="relative z-10 flex items-center justify-between px-8 lg:px-14 pt-7">
+    <!-- Interactive Crimson Vortex Touch Zone -->
+    <button type="button" onclick="toggleTitleModal('vortex')"
+      aria-label="触碰旋涡，查看兑换光幕"
+      style="left:74.5%;top:${ed === 'numinous' ? '68%' : '57%'};width:28%;height:26%;"
+      class="group absolute -translate-x-1/2 -translate-y-1/2 z-10 rounded-full flex items-center justify-center transition">
+      <span class="px-3.5 py-1.5 rounded-full bg-black/50 border border-red-500/50 text-xs tracking-[0.22em] text-amber-100 opacity-70 group-hover:opacity-100 group-hover:bg-red-950/45 transition backdrop-blur-md">触碰旋涡</span>
+    </button>
+
+    <!-- Top Right Hall Edition & AV Controls -->
+    <div class="relative z-20 flex items-center justify-between px-8 lg:px-14 pt-7">
       <div class="flex items-center gap-3 font-mono-ui text-[11px] tracking-[0.24em] text-stone-400">
         <span class="w-2 h-2 rounded-full bg-red-600/90 animate-pulse"></span>
-        <span>DEATH EXAM TERMINAL // TRUTH ENGINE 1.0</span>
+        <span>DEATH EXAM SPACE // INFINITY</span>
       </div>
-      <div class="font-mono-ui text-[11px] tracking-[0.18em] text-stone-500 hidden sm:block">SEASON I · WHITE MIST MANOR</div>
+      <div class="flex items-center gap-3">
+        <div class="av-switches" role="group" aria-label="大厅美术版本">
+          <button type="button" onclick="setHallEdition('judgment')" aria-pressed="${ed === 'judgment'}"><b>A</b> 即梦</button>
+          <button type="button" onclick="setHallEdition('numinous')" aria-pressed="${ed === 'numinous'}"><b>B</b> Midjourney</button>
+        </div>
+        ${renderAvControls()}
+      </div>
     </div>
 
-    <div class="relative z-10 h-[calc(100vh-120px)] flex flex-col justify-center px-8 lg:px-16 max-w-xl">
+    <!-- Left Inscribed Hall Menu -->
+    <div class="relative z-20 h-[calc(100vh-132px)] flex flex-col justify-center px-8 lg:px-16 max-w-xl">
       <div class="space-y-3">
-        <div class="font-sans-ui text-[11px] tracking-[0.38em] text-amber-300/75 uppercase">Global Death Exam · Interactive Simulation</div>
+        <div class="font-mono-ui text-[10.5px] tracking-[0.38em] text-amber-300/75 uppercase">Global Death Exam · Infinity</div>
         <h1 class="text-5xl lg:text-6xl font-semibold tracking-[0.22em] text-stone-100 drop-shadow-[0_6px_28px_rgba(0,0,0,0.85)]">全球死考</h1>
         <div class="flex items-center gap-3 pt-1">
           <span class="h-[1px] w-10 bg-red-500/70"></span>
-          <span class="font-sans-ui text-xs tracking-[0.26em] text-stone-300/90">第一场 · 白雾古宅</span>
+          <span class="font-sans-ui text-xs tracking-[0.24em] text-stone-300/90">死考空间 · 大厅</span>
         </div>
-        <p class="font-sans-ui text-xs leading-6 text-stone-400/90 max-w-md pt-2">
-          规则逐轮发布，真假情报混杂，时间绝不够逛完全图。点击场景物件、试探同行者、决定服从还是独自离队。
+        <p class="font-sans-ui text-xs leading-6 text-stone-300/90 max-w-md pt-1">
+          半圆形金属大厅压低了视线，面前是缓缓流转的深红兑换旋涡，身后十四扇私人房门沿弧线排开。可触碰右侧旋涡查看兑换光幕，或直接踏入首场考核《白雾古宅》。
         </p>
       </div>
 
-      <div class="mt-10 space-y-2.5 max-w-xs font-sans-ui">
-        <button onclick="startNewExam()" class="group w-full text-left px-5 py-3.5 rounded-lg bg-white/[0.06] hover:bg-red-950/45 border border-white/15 hover:border-red-500/55 backdrop-blur-md transition flex items-center justify-between">
+      <div class="mt-8 space-y-2.5 max-w-xs font-sans-ui">
+        <button onclick="startNewExam()" class="group w-full text-left px-5 py-3.5 rounded-lg bg-black/50 hover:bg-red-950/45 border border-white/15 hover:border-red-500/55 backdrop-blur-md transition flex items-center justify-between">
           <div>
-            <div class="text-sm font-medium tracking-[0.16em] text-stone-100 group-hover:text-red-100 transition">开始首场考核</div>
-            <div class="text-[10.5px] text-stone-400 mt-0.5">从现实雨夜接入 · 0 分凡人开局</div>
+            <div class="text-sm font-medium tracking-[0.18em] text-stone-100 group-hover:text-red-100 transition">开始游戏</div>
+            <div class="text-[10.5px] text-stone-400 mt-0.5">第一场《白雾古宅》 · 0 分凡人接入</div>
           </div>
           <span class="text-stone-400 group-hover:text-red-300 group-hover:translate-x-1 transition">→</span>
         </button>
 
-        <button onclick="continueSavedGame()" ${saved ? '' : 'disabled'} class="w-full text-left px-5 py-3 rounded-lg border backdrop-blur-md transition flex items-center justify-between ${saved ? 'bg-white/[0.03] hover:bg-white/[0.08] border-white/10 hover:border-amber-400/45 text-stone-200' : 'bg-white/[0.015] border-white/5 text-stone-600 cursor-not-allowed'}">
+        <button onclick="continueSavedGame()" ${saved ? '' : 'disabled'} class="w-full text-left px-5 py-3 rounded-lg border backdrop-blur-md transition flex items-center justify-between ${saved ? 'bg-black/45 hover:bg-white/[0.08] border-white/15 hover:border-amber-400/45 text-stone-200' : 'bg-white/[0.015] border-white/5 text-stone-600 cursor-not-allowed'}">
           <div>
-            <div class="text-xs font-medium tracking-[0.16em]">继续上次进度</div>
-            <div class="text-[10px] mt-0.5 ${saved ? 'text-amber-300/75' : 'text-stone-600'}">${saved ? `${savedTime} · ${savedLoc}` : '暂无本地考核存档'}</div>
+            <div class="text-xs font-medium tracking-[0.18em]">继续游戏</div>
+            <div class="text-[10px] mt-0.5 ${saved ? 'text-amber-300/80' : 'text-stone-600'}">${saved ? `白雾古宅 · ${savedTime} · ${savedLoc}` : '暂无本地档案'}</div>
           </div>
-          <span class="font-mono-ui text-[10px]">${saved ? 'LOAD' : 'EMPTY'}</span>
+          <span class="font-mono-ui text-[10px]">${saved ? 'RESUME' : 'EMPTY'}</span>
         </button>
 
         <div class="grid grid-cols-2 gap-2.5 pt-1">
-          <button onclick="toggleTitleModal('codex')" class="px-4 py-2.5 rounded-lg bg-black/40 hover:bg-white/[0.07] border border-white/10 text-xs tracking-[0.12em] text-stone-300 backdrop-blur-md transition">死考规则档案</button>
-          <button onclick="toggleTitleModal('settings')" class="px-4 py-2.5 rounded-lg bg-black/40 hover:bg-white/[0.07] border border-white/10 text-xs tracking-[0.12em] text-stone-300 backdrop-blur-md transition">画面与动效</button>
+          <button onclick="toggleTitleModal('codex')" class="px-4 py-2.5 rounded-lg bg-black/45 hover:bg-white/[0.07] border border-white/12 text-xs tracking-[0.14em] text-stone-200 backdrop-blur-md transition">考场图鉴</button>
+          <button onclick="toggleTitleModal('settings')" class="px-4 py-2.5 rounded-lg bg-black/45 hover:bg-white/[0.07] border border-white/12 text-xs tracking-[0.14em] text-stone-200 backdrop-blur-md transition">系统设置</button>
         </div>
       </div>
     </div>
 
-    <div class="absolute bottom-5 left-8 right-8 lg:left-16 lg:right-14 z-10 flex items-center justify-between text-[11px] font-mono-ui text-stone-500">
-      <span>PROJECT INFINITY · TRUTH-FIRST ENGINE</span>
-      <span class="text-stone-400">SIGNAL STANDBY</span>
+    <div class="absolute bottom-5 left-8 right-8 lg:left-16 lg:right-14 z-20 flex items-end justify-between text-[11px] font-sans-ui text-stone-400">
+      <div>${saved ? `已存档 · ${savedLoc}` : '暂无本地档案 · 点击右侧旋涡可预览兑换光幕'}</div>
+      <div class="text-right">
+        <div class="text-xs tracking-[0.18em] text-stone-200">死考空间 · 大厅</div>
+        <div class="text-[10px] text-stone-400 mt-0.5">${ed === 'numinous' ? '首考回归 · 兑换旋涡' : '第三十二章《房间与兑换》'}</div>
+      </div>
     </div>
     ${S.titleModal ? renderTitleModal() : ''}
   </div>`;
 }
 
 function renderTitleModal() {
-  const isCodex = S.titleModal === 'codex';
+  const mode = S.titleModal;
   const hasSave = !!loadSavedMeta();
+  const titleText = mode === 'vortex' ? '深红旋涡 · 兑换光幕' : (mode === 'codex' ? '考场图鉴与规则档案' : '系统设置');
   return `
   <div class="fixed inset-0 z-40 bg-black/75 backdrop-blur-md flex items-center justify-center p-5" onclick="if(event.target===this) toggleTitleModal(null)">
     <div class="w-full max-w-lg bg-[#0d1015]/95 border border-white/15 rounded-2xl shadow-2xl overflow-hidden font-sans-ui">
       <div class="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-        <span class="text-sm font-medium tracking-[0.14em] text-stone-100">${isCodex ? '死考基础规则档案' : '画面、音效与叙事设置'}</span>
+        <span class="text-sm font-medium tracking-[0.14em] text-stone-100">${titleText}</span>
         <button onclick="toggleTitleModal(null)" class="text-xs text-stone-400 hover:text-stone-100 px-2 py-0.5 rounded bg-white/[0.05]">关闭 ✕</button>
       </div>
       <div class="p-6 space-y-3.5 text-xs leading-6 text-stone-300">
-        ${isCodex ? `
-        <p><span class="text-amber-300 font-medium">一、逐轮发布：</span>死考考题随阶段动态推送，腕表仅显示考生编号而不公开真名。</p>
-        <p><span class="text-amber-300 font-medium">二、基础扣费：</span>普通考场通关强制扣除 60 分基础费，修复另计，负分抹杀。</p>
-        <p><span class="text-amber-300 font-medium">三、自由调查与分队：</span>点击左侧场景热点自由查证，与不同房间队友套话甄别真伪；拒绝错误指挥可分队甚至单人通关。</p>
+        ${mode === 'vortex' ? `
+        <p class="text-stone-200">你将手探进大厅中央缓缓旋转的深红色旋涡，冰冷光幕在眼前层层展开——血统、古典神通、科技武装、灵异媒介与救急耗材尽在其中。</p>
+        <p class="text-stone-400">首场考核以 <span class="text-amber-300">0 分凡人</span> 身份入场；通关白雾古宅并扣除 60 分空间基础费与伤势修复费后，即可回到这座死考空间大厅，用净余积分兑换 D 级超凡强化与器物，并开启十四扇私人房门进行 72 小时休整。</p>
+        <div class="pt-2 flex justify-end">
+          <button onclick="toggleTitleModal(null); startNewExam();" class="px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-900/50 text-white text-xs font-medium transition">踏入首场考核《白雾古宅》 →</button>
+        </div>
+        ` : mode === 'codex' ? `
+        <div class="space-y-2">
+          <div class="p-3 rounded-lg bg-white/[0.03] border border-white/10">
+            <div class="text-amber-300 font-medium">第一季首场 · 《白雾古宅》（当前可玩）</div>
+            <div class="text-stone-400 mt-0.5">规则逐轮发布，腕表仅记编号不公开真名；保护期自由勘察取证、说服或脱离错误指挥，撑过十点叩门异变并于子时窗口逃离白雾。</div>
+          </div>
+          <div class="p-3 rounded-lg bg-white/[0.02] border border-white/5">
+            <div class="text-stone-200 font-medium">原著死考空间铁律</div>
+            <div class="text-stone-400 mt-0.5">考场阵亡即现实身死；通关回归死考空间大厅后强制扣除 60 分基础费，伤势由大厅白光专门修复并按损计费，积分归负当场抹杀。</div>
+          </div>
+        </div>
         ` : `
         <div class="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/10">
           <div>
@@ -2928,15 +2985,15 @@ function renderTitleModal() {
         </div>
         <div class="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/10">
           <div>
-            <div class="text-stone-100 font-medium">实时雨雾粒子与视差动效</div>
-            <div class="text-[11px] text-stone-400 mt-0.5">Canvas 动态寒霜、风灯余烬与窗纸微颤</div>
+            <div class="text-stone-100 font-medium">实时旋涡与场景粒子动效</div>
+            <div class="text-[11px] text-stone-400 mt-0.5">大厅旋涡流光、古宅动态寒霜、风灯余烬与窗纸微颤</div>
           </div>
           <button onclick="toggleFx()" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${FX_ENABLED ? 'bg-red-600/80 text-white' : 'bg-white/10 text-stone-400'}">${FX_ENABLED ? '已开启' : '已关闭'}</button>
         </div>
         <div class="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/10">
           <div>
             <div class="text-stone-100 font-medium">物理空间环境与事件声效</div>
-            <div class="text-[11px] text-stone-400 mt-0.5">低频建筑气压、腕表触觉脉冲与厚木叩门声效</div>
+            <div class="text-[11px] text-stone-400 mt-0.5">死考大厅低频共鸣、腕表触觉脉冲与厚木叩门声效</div>
           </div>
           <button onclick="toggleSfx()" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${SFX_ENABLED ? 'bg-red-600/80 text-white' : 'bg-white/10 text-stone-400'}">${SFX_ENABLED ? '已开启' : '已关闭'}</button>
         </div>
@@ -3758,78 +3815,85 @@ function renderSpaceMode() {
   const cats = ['全部', '古典神话', '血统', '科技', '灵异', '耗材'];
   const items = SHOP_ITEMS.filter(i => S.shopFilter === '全部' || i.cat === S.shopFilter);
   const survivors = Object.values(S.npcs).filter(n => n.alive && n.room === 'well');
+  const ed = getHallEdition();
 
   return `
-  <div class="relative w-screen h-screen overflow-hidden flex flex-col lg:flex-row text-slate-900 font-sans-ui">
-    <img data-scene-key="space" src="${resolveSceneMedia('space')}" alt="死考空间" class="absolute inset-0 w-full h-full object-cover opacity-90 pointer-events-none select-none" />
-    <div class="absolute inset-0 bg-white/45 backdrop-blur-[2px] pointer-events-none"></div>
+  <div class="relative w-screen h-screen overflow-hidden flex flex-col lg:flex-row text-[#e6e1d6] font-sans-ui" style="background:#11100f;">
+    <img data-scene-key="${ed === 'judgment' ? 'hall_judgment' : 'space'}" src="${resolveHallMedia()}" alt="死考空间大厅" class="absolute inset-0 w-full h-full object-cover opacity-90 pointer-events-none select-none" />
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-[2px] pointer-events-none"></div>
 
     <div class="relative z-10 w-full lg:w-[42%] h-[46vh] lg:h-full p-5 flex flex-col gap-4 overflow-y-auto scroll-thin">
-      <div class="bg-white/78 backdrop-blur-xl border border-slate-200/90 rounded-2xl p-5 shadow-lg">
+      <div class="bg-[#0b0d11]/90 backdrop-blur-xl border border-white/15 rounded-2xl p-5 shadow-2xl">
         <div class="flex items-center justify-between">
           <div>
             <div class="flex items-center gap-2">
-              <span class="text-[10px] tracking-[0.22em] text-slate-400 uppercase">Death Exam Space · 回归大厅</span>
-              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-amber-300">${st.rank || '标准通关'}</span>
+              <span class="text-[10px] tracking-[0.22em] text-amber-300/80 uppercase">死考空间 · 半圆大厅</span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-950/50 border border-red-500/50 text-amber-200">${st.rank || '标准通关'}</span>
             </div>
-            <h2 class="text-xl font-semibold text-slate-900 mt-1">${survivors.length === 0 ? '孤狼生还 · D 级权限开启' : '第一场已通关 · D 级权限开启'}</h2>
+            <h2 class="text-xl font-semibold text-stone-100 mt-1">${survivors.length === 0 ? '孤狼生还 · D 级旋涡开启' : '首考回归 · D 级旋涡开启'}</h2>
           </div>
           <div class="text-right">
-            <div class="text-[10px] text-slate-400">距下场强制传召</div>
-            <div class="font-mono-ui text-lg font-semibold text-slate-800">${S.spaceEnded ? '00:00:00' : '72:00:00'}</div>
+            <div class="text-[10px] text-stone-400">距下场强制传召</div>
+            <div class="font-mono-ui text-lg font-semibold text-amber-200">${S.spaceEnded ? '00:00:00' : '72:00:00'}</div>
           </div>
         </div>
-        ${st.rankDesc ? `<div class="mt-2 text-xs text-slate-600 leading-5">${st.rankDesc}</div>` : ''}
-        <div class="mt-1.5 text-xs text-slate-500">本场共同生还者：${survivors.length ? survivors.map(n => n.name).join('、') : '仅你一人独活'}</div>
-        <div class="mt-3 pt-3 border-t border-slate-200/80 grid grid-cols-2 gap-y-1.5 text-xs">
-          <span class="text-slate-500">轮次基础分（抉择/洞悉/逃生）</span><span class="text-right font-mono-ui text-slate-800">+${st.base}</span>
-          <span class="text-slate-500">破局贡献${st.soloBonus ? '（含孤狼独活）' : ''}与地契暗线</span><span class="text-right font-mono-ui text-emerald-700">+${st.bonus}</span>
-          <span class="text-slate-500">死考空间基础扣费</span><span class="text-right font-mono-ui text-rose-600">-${st.fee}</span>
-          <span class="text-slate-500">躯体修复费</span><span class="text-right font-mono-ui text-rose-600">-${st.repair}</span>
-          <div class="col-span-2 mt-2 pt-2 border-t border-slate-200 flex items-center justify-between">
-            <span class="font-medium text-slate-700">当前可用余额</span>
-            <span class="font-mono-ui text-2xl font-bold text-slate-900">${S.points} <span class="text-xs font-normal text-slate-500">分</span></span>
+        ${st.rankDesc ? `<div class="mt-2 text-xs text-stone-300 leading-5">${st.rankDesc}</div>` : ''}
+        <div class="mt-1.5 text-xs text-stone-400">本场共同生还者：${survivors.length ? survivors.map(n => n.name).join('、') : '仅你一人独活'}</div>
+        <div class="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 gap-y-1.5 text-xs">
+          <span class="text-stone-400">轮次基础分（存续/补全/逃生）</span><span class="text-right font-mono-ui text-stone-200">+${st.base}</span>
+          <span class="text-stone-400">破局贡献${st.soloBonus ? '（含孤狼独活）' : ''}与地契暗线</span><span class="text-right font-mono-ui text-emerald-300">+${st.bonus}</span>
+          <span class="text-stone-400">死考空间基础扣费</span><span class="text-right font-mono-ui text-rose-300">-${st.fee}</span>
+          <span class="text-stone-400">大厅白光躯体修复费</span><span class="text-right font-mono-ui text-rose-300">-${st.repair}</span>
+          <div class="col-span-2 mt-2 pt-2 border-t border-white/10 flex items-center justify-between">
+            <span class="font-medium text-stone-300">当前净余积分</span>
+            <span class="font-mono-ui text-2xl font-bold text-amber-300">${S.points} <span class="text-xs font-normal text-stone-400">分</span></span>
           </div>
         </div>
       </div>
 
-      <div class="bg-white/78 backdrop-blur-xl border border-slate-200/90 rounded-2xl p-5 shadow-lg space-y-3">
+      <div class="bg-[#0b0d11]/90 backdrop-blur-xl border border-white/15 rounded-2xl p-5 shadow-2xl space-y-3">
         <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold tracking-wider text-slate-700">72 小时休整行动</span>
-          <span class="font-mono-ui text-xs text-slate-500">剩余行动点 ${S.restAP}/6</span>
+          <span class="text-xs font-semibold tracking-wider text-stone-200">大厅与私人房间（72 小时休整）</span>
+          <span class="font-mono-ui text-xs text-amber-300/80">剩余行动点 ${S.restAP}/6</span>
         </div>
-        ${S.spaceNote ? `<div class="text-xs leading-6 text-slate-700 bg-slate-100/90 border border-slate-200 rounded-xl p-3">${S.spaceNote}</div>` : ''}
+        ${S.spaceNote ? `<div class="text-xs leading-6 text-stone-200 bg-white/[0.05] border border-amber-400/30 rounded-xl p-3">${S.spaceNote}</div>` : ''}
         <div class="grid grid-cols-1 gap-2">
-          <button onclick="spaceRestAction('tea')" ${S.restAP<=0?'disabled':''} class="text-left px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-800 transition disabled:opacity-40">
-            ${survivors.length ? '与生还队友在大厅喝茶复盘' : '独自在纯白大厅复盘首场得失'} <span class="text-slate-400 float-right">-1 AP</span>
+          <button onclick="spaceRestAction('tea')" ${S.restAP<=0?'disabled':''} class="text-left px-3.5 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 text-xs text-stone-200 transition disabled:opacity-40">
+            ${survivors.length ? '与生还队友在半圆大厅复盘首场得失' : '独自在半圆大厅凝视深红旋涡复盘得失'} <span class="text-stone-400 float-right">-1 AP</span>
           </button>
-          <button onclick="spaceRestAction('train')" ${S.restAP<=0?'disabled':''} class="text-left px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-800 transition disabled:opacity-40">
-            空间体能与冷兵器挥砍适应训练 <span class="text-slate-400 float-right">-1 AP</span>
+          <button onclick="spaceRestAction('train')" ${S.restAP<=0?'disabled':''} class="text-left px-3.5 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 text-xs text-stone-200 transition disabled:opacity-40">
+            进入弧廊私人房间进行体能与兵刃适应训练 <span class="text-stone-400 float-right">-1 AP</span>
           </button>
-          <button onclick="spaceRestAction('watch')" ${S.restAP<=0?'disabled':''} class="text-left px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-800 transition disabled:opacity-40">
-            核对腕表条款与第二场《黑水船坞》传召前兆 <span class="text-slate-400 float-right">-1 AP</span>
+          <button onclick="spaceRestAction('watch')" ${S.restAP<=0?'disabled':''} class="text-left px-3.5 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 text-xs text-stone-200 transition disabled:opacity-40">
+            触碰旋涡核对权限条款与第二场《黑水船坞》前兆 <span class="text-stone-400 float-right">-1 AP</span>
           </button>
-          <button onclick="spaceRestAction('finish')" ${S.spaceEnded?'disabled':''} class="text-left px-3.5 py-2.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs transition disabled:opacity-40">
-            结束 72 小时休整 · 准备踏入第二场《黑水船坞》 <span class="text-slate-400 float-right">→</span>
+          <button onclick="spaceRestAction('finish')" ${S.spaceEnded?'disabled':''} class="text-left px-3.5 py-2.5 rounded-xl bg-red-600/80 text-white hover:bg-red-900/50 border border-red-500/50 text-xs font-medium transition disabled:opacity-40">
+            结束 72 小时休整 · 踏入第二场《黑水船坞》 <span class="text-amber-100 float-right">→</span>
           </button>
         </div>
-        <div class="pt-2 flex items-center justify-between text-xs">
-          <span class="text-slate-500">已兑换：${S.shopBought.length ? S.shopBought.map(id => SHOP_ITEMS.find(x=>x.id===id).name).join('、') : '暂无'}</span>
-          ${renderAvControls()}
-          <button onclick="returnToTitle()" class="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 transition">返回主菜单</button>
+        <div class="pt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span class="text-stone-400">已兑换：${S.shopBought.length ? S.shopBought.map(id => SHOP_ITEMS.find(x=>x.id===id).name).join('、') : '暂无'}</span>
+          <div class="flex items-center gap-2">
+            <div class="av-switches" role="group" aria-label="大厅版本">
+              <button type="button" onclick="setHallEdition('judgment')" aria-pressed="${ed === 'judgment'}">A 即梦</button>
+              <button type="button" onclick="setHallEdition('numinous')" aria-pressed="${ed === 'numinous'}">B MJ</button>
+            </div>
+            ${renderAvControls()}
+            <button onclick="returnToTitle()" class="px-3 py-1.5 rounded-lg bg-white/10 text-stone-200 hover:bg-white/[0.08] border border-white/15 transition">返回大厅菜单</button>
+          </div>
         </div>
       </div>
     </div>
 
     <div class="relative z-10 w-full lg:w-[58%] h-[54vh] lg:h-full p-5 flex flex-col overflow-hidden">
-      <div class="flex-1 min-h-0 bg-white/80 backdrop-blur-2xl border border-slate-200/90 rounded-2xl shadow-xl flex flex-col overflow-hidden">
-        <div class="shrink-0 p-5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex-1 min-h-0 bg-[#0b0d11]/90 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div class="shrink-0 p-5 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div class="text-[10px] tracking-[0.2em] text-slate-400 uppercase">Death Exam Exchange</div>
-            <h3 class="text-lg font-semibold text-slate-900">死考商城（D 级权限视图）</h3>
+            <div class="text-[10px] tracking-[0.22em] text-red-300 uppercase">Crimson Vortex Exchange</div>
+            <h3 class="text-lg font-semibold text-stone-100">深红旋涡 · 兑换光幕（D 级权限）</h3>
           </div>
           <div class="flex flex-wrap gap-1.5">
-            ${cats.map(c => `<button onclick="setShopFilter('${c}')" class="px-2.5 py-1 rounded-full text-[11px] transition ${S.shopFilter===c ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${c}</button>`).join('')}
+            ${cats.map(c => `<button onclick="setShopFilter('${c}')" class="px-2.5 py-1 rounded-full text-[11px] border transition ${S.shopFilter===c ? 'bg-red-600/80 border-red-500/60 text-white' : 'bg-white/[0.03] border-white/10 text-stone-300 hover:bg-white/[0.08]'}">${c}</button>`).join('')}
           </div>
         </div>
         <div class="flex-1 min-h-0 overflow-y-auto scroll-thin p-5 grid grid-cols-1 md:grid-cols-2 gap-3 content-start">
@@ -3837,18 +3901,18 @@ function renderSpaceMode() {
             const owned = S.shopBought.includes(it.id);
             const canBuy = !it.locked && !owned && S.points >= it.price;
             return `
-            <div class="p-4 rounded-xl border transition ${it.locked ? 'bg-slate-100/70 border-slate-200/70 opacity-60' : (owned ? 'bg-emerald-50/80 border-emerald-300' : 'bg-white/90 border-slate-200 hover:border-slate-400')}">
+            <div class="p-4 rounded-xl border transition ${it.locked ? 'bg-white/[0.015] border-white/5 opacity-50' : (owned ? 'bg-emerald-950/35 border-emerald-500/40' : 'bg-white/[0.03] border-white/10 hover:border-amber-400/45')}">
               <div class="flex items-start justify-between gap-2">
                 <div>
-                  <span class="font-mono-ui text-[10px] px-1.5 py-0.5 rounded ${it.locked ? 'bg-slate-200 text-slate-500' : 'bg-slate-900 text-white'}">${it.tier}级</span>
-                  <span class="text-xs font-semibold text-slate-900 ml-1.5">${it.name}</span>
+                  <span class="font-mono-ui text-[10px] px-1.5 py-0.5 rounded ${it.locked ? 'bg-white/5 text-stone-500' : 'bg-red-950/50 border border-red-500/40 text-amber-200'}">${it.tier}级</span>
+                  <span class="text-xs font-semibold text-stone-100 ml-1.5">${it.name}</span>
                 </div>
-                <span class="font-mono-ui text-xs font-semibold ${it.locked ? 'text-slate-400' : 'text-slate-800'}">${it.price}分</span>
+                <span class="font-mono-ui text-xs font-semibold ${it.locked ? 'text-stone-500' : 'text-amber-300'}">${it.price}分</span>
               </div>
-              <p class="text-[11.5px] leading-5 text-slate-500 mt-2">${it.desc}</p>
+              <p class="text-[11.5px] leading-5 text-stone-400 mt-2">${it.desc}</p>
               <div class="mt-3 flex items-center justify-between">
-                <span class="text-[10px] text-slate-400">${it.cat} · ${it.id}</span>
-                ${it.locked ? `<span class="text-[10px] text-slate-400">🔒 权限不足</span>` : owned ? `<span class="text-[11px] font-medium text-emerald-700">✓ 已兑换</span>` : `<button onclick="buyItem('${it.id}')" ${canBuy?'':'disabled'} class="px-3 py-1 rounded-lg text-[11px] font-medium transition ${canBuy ? 'bg-slate-900 text-white hover:bg-slate-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}">兑换</button>`}
+                <span class="text-[10px] text-stone-500">${it.cat} · ${it.id}</span>
+                ${it.locked ? `<span class="text-[10px] text-stone-500">🔒 权限不足</span>` : owned ? `<span class="text-[11px] font-medium text-emerald-300">✓ 已兑换</span>` : `<button onclick="buyItem('${it.id}')" ${canBuy?'':'disabled'} class="px-3 py-1 rounded-lg text-[11px] font-medium transition ${canBuy ? 'bg-red-600/80 text-white hover:bg-red-900/50' : 'bg-white/5 text-stone-600 cursor-not-allowed'}">触碰兑换</button>`}
               </div>
             </div>`;
           }).join('')}
