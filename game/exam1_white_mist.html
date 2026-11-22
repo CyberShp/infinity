@@ -66,6 +66,30 @@
       to { opacity: 1; transform: translateY(0); }
     }
     .text-reveal { animation: textReveal 0.32s ease-out; }
+
+    @keyframes screenShake {
+      0%, 100% { transform: translate3d(0, 0, 0); }
+      20% { transform: translate3d(-5px, 2px, 0); }
+      40% { transform: translate3d(5px, -3px, 0); }
+      60% { transform: translate3d(-4px, -2px, 0); }
+      80% { transform: translate3d(4px, 2px, 0); }
+    }
+    .fx-shake { animation: screenShake 0.42s cubic-bezier(.36,.07,.19,.97); }
+
+    @keyframes lampFlicker {
+      0%, 100% { opacity: 0.22; }
+      45% { opacity: 0.34; }
+      52% { opacity: 0.16; }
+      75% { opacity: 0.28; }
+    }
+    .fx-lamp-glow { animation: lampFlicker 3.6s ease-in-out infinite; }
+
+    @keyframes mistReverse {
+      0% { transform: translateX(0) scale(1.04); opacity: 0.32; }
+      50% { transform: translateX(9%) scale(0.96); opacity: 0.14; }
+      100% { transform: translateX(0) scale(1.04); opacity: 0.32; }
+    }
+    .mist-reverse { animation: mistReverse 9s ease-in-out infinite; }
   </style>
 </head>
 <body>
@@ -128,11 +152,11 @@ const ROOMS = {
 // Free-click interactive scene hotspots on the left 58% artwork canvas (including red herrings!)
 const ROOM_HOTSPOTS = {
   courtyard: [
-    { id: 'cy_stone', label: '湿滑青石板', x: 34, y: 66, mins: 2, decoy: true,
+    { id: 'cy_stone', label: '湿滑青石板', x: 34, y: 54, mins: 0.5, decoy: true,
       text: '青石板缝里长满发黑的湿苔，白雾正贴着地面以肉眼可见的速度缓缓抬升，此外并无特别机关。' },
-    { id: 'cy_lantern', label: '檐下旧灯笼', x: 58, y: 44, mins: 2, decoy: true,
+    { id: 'cy_lantern', label: '檐下旧灯笼', x: 56, y: 38, mins: 0.5, decoy: true,
       text: '一盏早已熄灭的破纸灯笼在风里微晃，里头只剩半截受潮发霉的蜡烛头。' },
-    { id: 'cy_layout', label: '院落朝向与雾线', x: 76, y: 36, mins: 2,
+    { id: 'cy_layout', label: '院落朝向与雾线', x: 75, y: 30, mins: 1,
       text: '你快速测算了整座四合院的动线：主厅居中破败，东侧祠堂三面死墙无后窗，唯独西厢紧挨后院小径，真要出事有退路。',
       profText: {
         arch: '【结构直觉】你一眼看出西厢地势略高且后墙带窗，而东侧祠堂处于整座院子的低洼聚阴死角！',
@@ -141,60 +165,60 @@ const ROOM_HOTSPOTS = {
     }
   ],
   gate: [
-    { id: 'gt_chain', label: '结霜铁链与门缝', x: 34, y: 50, mins: 2,
+    { id: 'gt_chain', label: '结霜铁链与门缝', x: 38, y: 50, mins: 1,
       text: '你贴近结霜的厚木门缝屏息倾听——浓雾外不到五米处，有极缓慢、拖沓的脚步声正沿着院墙巡游，每走三步便停顿一下，仿佛在侧耳倾听院内动静。' },
-    { id: 'gt_knocker', label: '铜制兽首门环', x: 38, y: 40, mins: 2, decoy: true,
+    { id: 'gt_knocker', label: '铜制兽首门环', x: 58, y: 34, mins: 0.5, decoy: true,
       text: '门环冻得粘手，上面覆着一层诡异的白霜，敲击它显然只会招来祸端。' }
   ],
   shrine: [
-    { id: 'sh_censer', label: '青铜香炉', x: 55, y: 60, mins: 2, clue: 'E01',
+    { id: 'sh_censer', label: '青铜香炉', x: 50, y: 48, mins: 1, clue: 'E01',
       text: '你伸指捻了捻铜炉里的香灰——竟然是湿润结块的，指腹瞬间沁出一股透骨的阴寒。',
       profText: {
         archive: '【古制辨识】正统祖祠讲究香火干爽聚阳，香灰潮湿结块说明此地常年积阴返潮，绝非庇护之所！',
         arch: '【结构直觉】香炉受潮结块，结合墙根黑绿水渍，说明这间屋子地势最低、最容易被浓雾倒灌！'
       }
     },
-    { id: 'sh_table', label: '暗红供桌内侧', x: 64, y: 74, mins: 2, clue: 'E02',
+    { id: 'sh_table', label: '暗红供桌内侧', x: 64, y: 58, mins: 1, clue: 'E02',
       text: '你蹲下身掀开桌布，供桌内侧与木柱根部密密麻麻刻满细碎的指甲抓痕——方向全是从里向外拼命抠挠的！',
       profText: {
         medic: '【创伤辨识】你凑近细看，木缝里甚至嵌着几片发黑的人类断甲与暗褐血渍——以前躲进来的人是被活活堵死在里面的！',
         climb: '【撤离动线】抓痕从内向外，且祠堂三面砖墙封死毫无后窗，一旦正门被封就是铁板钉钉的死瓮！'
       }
     },
-    { id: 'sh_tablets', label: '蒙尘灵位架', x: 62, y: 44, mins: 2, decoy: true,
-      text: '三排木制灵位上的金漆早已剥落模糊，看不清具体姓氏，只是白白耗掉了两分钟宝贵时间。' },
-    { id: 'sh_door', label: '厚重正门', x: 18, y: 45, mins: 2, decoy: true,
+    { id: 'sh_tablets', label: '蒙尘灵位架', x: 66, y: 33, mins: 0.5, decoy: true,
+      text: '三排木制灵位上的金漆早已剥落模糊，看不清具体姓氏，只是白白耗掉了半分钟。' },
+    { id: 'sh_door', label: '厚重正门', x: 24, y: 42, mins: 0.5, decoy: true,
       text: '正门木板确实厚实，但门缝底下已经渗进一缕缕冰冷的白雾。' }
   ],
   west: [
-    { id: 'ws_stove', label: '旧土灶膛与铁门闩', x: 24, y: 62, mins: 2, clue: 'E03',
+    { id: 'ws_stove', label: '旧土灶膛与铁门闩', x: 26, y: 52, mins: 1, clue: 'E03',
       text: '门后那根熟铁门闩沉重完好，卡槽毫无朽烂；你把掌心探进土灶深处，竟还摸到一丝极微弱的残余暖意。后墙木窗直通后院小径，进退有据。' },
-    { id: 'ws_ledger', label: '书案泛黄账本', x: 68, y: 74, mins: 2, clue: 'E04',
+    { id: 'ws_ledger', label: '书案泛黄账本', x: 68, y: 56, mins: 1, clue: 'E04',
       text: '你翻到旧账本末页，发黄宣纸上用焦黑炭笔歪歪扭扭划着半行残字：“子时雾倒流，莫唤生人名，莫举明火灯。”最后几笔拉得很长，像是写字人突然被拖走。' },
-    { id: 'ws_cabinet', label: '墙角樟木立柜', x: 52, y: 50, mins: 3, special: 'cabinet',
+    { id: 'ws_cabinet', label: '墙角樟木立柜', x: 48, y: 40, mins: 1.5, special: 'cabinet',
       text: '墙角腐朽的樟木立柜背板隐约错位，敲上去发出空洞回响。' },
-    { id: 'ws_window', label: '后墙木格窗', x: 74, y: 36, mins: 2,
+    { id: 'ws_window', label: '后墙木格窗', x: 74, y: 30, mins: 0.5,
       text: '透过朽旧的窗格往外看，浓雾后方隐约可见一条碎石小径通向后院枯井方向。' }
   ],
   hall: [
-    { id: 'hl_portrait', label: '无面家主画像', x: 56, y: 36, mins: 2, clue: 'E09',
-      text: '你踮脚细看正墙高悬的民国画像——那根本不是胡乱划毁，而是**双眼位置被极其精细地挖空了两个黑洞**，耳朵与嘴部却完好无损。',
+    { id: 'hl_portrait', label: '无面家主画像', x: 56, y: 34, mins: 1, clue: 'E09',
+      text: '你踮脚细看正墙高悬的民国画像——那根本不是胡乱划毁，而是双眼位置被极其精细地挖空了两个黑洞，耳朵与嘴部却完好无损。',
       profText: {
         archive: '【古制辨识】挖目留耳口——这是典型的“盲灵听声”禁忌暗示！',
         medic: '【创伤辨识】挖痕边缘极其平整，刻意针对双目，说明这宅子的主人没有视觉。'
       }
     },
-    { id: 'hl_bolt', label: '断裂门闩与破窗', x: 20, y: 48, mins: 2, decoy: true,
+    { id: 'hl_bolt', label: '断裂门闩与破窗', x: 26, y: 46, mins: 0.5, decoy: true,
       text: '主厅大门的木闩早已从中断裂，四面花格窗纸破得像渔网，根本无法作为今夜落脚点。' }
   ],
   east: [
-    { id: 'es_corpse', label: '坍塌柴堆与焦黑油灯', x: 46, y: 66, mins: 3, clue: 'E05',
+    { id: 'es_corpse', label: '坍塌柴堆与焦黑油灯', x: 42, y: 54, mins: 1.5, clue: 'E05',
       text: '你拨开半塌的柴堆，露出一具蜷缩的干尸——双眼空洞，怀里死死攥着一盏烧得焦黑变形的铜油灯。明火热源会直接招致致命袭杀！' },
-    { id: 'es_tools', label: '墙角杂物堆', x: 74, y: 62, mins: 2, special: 'east_tools',
+    { id: 'es_tools', label: '墙角杂物堆', x: 70, y: 44, mins: 1.5, special: 'east_tools',
       text: '你在发霉的柴薪底下摸到一根沉手的【生锈短撬棍】与半卷【浸油粗麻绳】——关键时刻能撬死铁闸或绑死门闩！' }
   ],
   well: [
-    { id: 'wl_ladder', label: '井壁生锈铁梯', x: 48, y: 60, mins: 2,
+    { id: 'wl_ladder', label: '井壁生锈铁梯', x: 50, y: 48, mins: 1,
       text: '锈迹斑斑的铁梯直通三米深的枯井底部，井底斜嵌着一扇厚重的生锈排水铁闸，缝隙里渗出流动的冷风。' }
   ]
 };
@@ -212,10 +236,10 @@ const CLUES = {
 };
 
 const HYPOTHESES = [
-  { id: 'h_correct', label: '盲灵：无视觉，循活人真名与明火热源索命', correct: true, reqAny: [['E04'], ['E05', 'E06'], ['E04', 'E06'], ['E09', 'E06'], ['E09', 'E05']] },
-  { id: 'h_wrong1', label: '恶鬼怕火：必须一直点亮明火驱散寒雾', correct: false },
-  { id: 'h_wrong2', label: '绝对禁声：只要发出任何物理声响就会即死', correct: false },
-  { id: 'h_wrong3', label: '祠堂庇护：死守祠堂熬到天亮即可生还', correct: false }
+  { id: 'h_correct', label: '补全：【生人真名】与【明火热源】', correct: true, reqAny: [['E04'], ['E05', 'E06'], ['E04', 'E06'], ['E09', 'E06'], ['E09', 'E05']] },
+  { id: 'h_wrong1', label: '补全：【寒雾】与【阴气】（须举明火驱寒）', correct: false },
+  { id: 'h_wrong2', label: '补全：【脚步声】与【呼吸声】（绝对不可发声）', correct: false },
+  { id: 'h_wrong3', label: '补全：【牌位】与【香火】（死守祠堂至天亮）', correct: false }
 ];
 
 const SHOP_ITEMS = [
@@ -246,7 +270,163 @@ const SHOP_ITEMS = [
 const TITLE_VIDEO_URL = '';
 const SAVE_KEY = 'death_exam_s1e1_save_v4';
 let FX_ENABLED = true;
+let SFX_ENABLED = true;
 let titleRafId = null;
+let audioCtx = null;
+
+// ======================== CODEX VISUAL / AUDIO / FX MANIFEST ========================
+// 供美术/视听协作（Codex）直接挂载静态图、动态背景视频、角色立绘、BGM与音效。
+// 任何字段留 null 时，引擎会自动无报错回退到内嵌 Base64 场景图 / Web Audio 合成音效。
+window.AV_MANIFEST = {
+  scenes: {
+    title: null,          // e.g. 'assets/scenes/title_main.webp' or '.mp4'
+    alley: null,          // 现实老街雨巷
+    courtyard: null,      // 白雾古宅·前院
+    gate: null,           // 厚木院门·结霜铁链
+    hall: null,           // 主厅·无目画像
+    shrine: null,         // 东侧祠堂
+    west: null,           // 西厢·旧灶账房
+    east: null,           // 东厢·破柴房
+    well: null,           // 后院枯井
+    crisis_window: null,  // 22:00 敲门惊变·窗外苍白无目轮廓
+    canal: null,          // 00:00 地下排水暗渠
+    space: null           // 纯白死考空间
+  },
+  portraits: {
+    zhou: { calm: null, tense: null, injured: null },
+    shen: { calm: null, tense: null, injured: null },
+    chen: { calm: null, tense: null, injured: null },
+    zhao: { calm: null, tense: null, injured: null },
+    lin:  { calm: null, tense: null, injured: null },
+    su:   { calm: null, tense: null, injured: null }
+  },
+  bgm: {
+    title: null,          // e.g. 'assets/audio/bgm/title_drone.ogg'
+    alley: null,          // 雨巷低频环境音
+    protect: null,        // 保护期阴冷静谧
+    night: null,          // 雾夜压迫潜伏
+    crisis: null,         // 22:00 敲门惊变/逃生高危
+    space: null           // 纯白空间空灵白噪
+  },
+  sfx: {
+    watch: null,          // 腕表提示音
+    clue: null,           // 线索发现音
+    knock: null,          // 22:00 三声慢叩
+    danger: null,         // 危机重击/死亡播报
+    door_slam: null,      // 狂暴撞门
+    frost_crack: null,    // 院门结霜冰裂
+    gate_pry: null,       // 枯井铁闸撬动
+    brick_throw: null,    // 抛砖声东击西
+    water_wade: null      // 暗渠涉水冲刺
+  }
+};
+
+const AudioDirector = {
+  currentBgmKey: null,
+  bgmEl: null,
+  setBgm(trackKey) {
+    if (!SFX_ENABLED) { this.stopBgm(); return; }
+    const src = window.AV_MANIFEST && window.AV_MANIFEST.bgm && window.AV_MANIFEST.bgm[trackKey];
+    if (!src) {
+      if (this.currentBgmKey !== trackKey) this.stopBgm();
+      this.currentBgmKey = trackKey;
+      return;
+    }
+    if (this.currentBgmKey === trackKey && this.bgmEl && !this.bgmEl.paused) return;
+    this.stopBgm();
+    try {
+      const el = new Audio(src);
+      el.loop = true;
+      el.volume = 0.35;
+      el.play().catch(() => {});
+      this.bgmEl = el;
+      this.currentBgmKey = trackKey;
+    } catch (e) {}
+  },
+  stopBgm() {
+    try {
+      if (this.bgmEl) { this.bgmEl.pause(); this.bgmEl.currentTime = 0; }
+    } catch (e) {}
+    this.bgmEl = null;
+  },
+  playSfx(type) {
+    if (!SFX_ENABLED) return;
+    const customSrc = window.AV_MANIFEST && window.AV_MANIFEST.sfx && window.AV_MANIFEST.sfx[type];
+    if (customSrc) {
+      try {
+        const el = new Audio(customSrc);
+        el.volume = 0.65;
+        el.play().catch(() => {});
+        return;
+      } catch (e) {}
+    }
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!audioCtx) audioCtx = new Ctx();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const now = audioCtx.currentTime;
+      if (type === 'watch') {
+        [880, 1174].forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+          osc.type = 'sine'; osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+          g.gain.setValueAtTime(0.035, now + idx * 0.08);
+          g.gain.exponentialRampToValueAtTime(0.0008, now + idx * 0.08 + 0.14);
+          osc.connect(g); g.connect(audioCtx.destination);
+          osc.start(now + idx * 0.08); osc.stop(now + idx * 0.08 + 0.15);
+        });
+      } else if (type === 'clue') {
+        const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(660, now);
+        osc.frequency.exponentialRampToValueAtTime(990, now + 0.18);
+        g.gain.setValueAtTime(0.04, now); g.gain.exponentialRampToValueAtTime(0.0008, now + 0.22);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.23);
+      } else if (type === 'knock') {
+        [0, 0.36, 0.72].forEach(dt => {
+          const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+          osc.type = 'sine'; osc.frequency.setValueAtTime(145, now + dt);
+          osc.frequency.exponentialRampToValueAtTime(52, now + dt + 0.11);
+          g.gain.setValueAtTime(0.14, now + dt); g.gain.exponentialRampToValueAtTime(0.001, now + dt + 0.13);
+          osc.connect(g); g.connect(audioCtx.destination);
+          osc.start(now + dt); osc.stop(now + dt + 0.14);
+        });
+      } else if (type === 'door_slam' || type === 'danger') {
+        const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(type === 'door_slam' ? 115 : 92, now);
+        osc.frequency.exponentialRampToValueAtTime(36, now + 0.36);
+        g.gain.setValueAtTime(type === 'door_slam' ? 0.085 : 0.055, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.39);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.4);
+      } else if (type === 'frost_crack' || type === 'gate_pry' || type === 'brick_throw' || type === 'water_wade') {
+        const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+        osc.type = type === 'water_wade' ? 'sine' : 'triangle';
+        const f0 = type === 'frost_crack' ? 520 : (type === 'gate_pry' ? 310 : (type === 'brick_throw' ? 210 : 180));
+        osc.frequency.setValueAtTime(f0, now);
+        osc.frequency.exponentialRampToValueAtTime(f0 * 0.45, now + 0.22);
+        g.gain.setValueAtTime(0.045, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.25);
+      }
+    } catch (e) {}
+  }
+};
+
+const FXDirector = {
+  pendingShake: false,
+  trigger(effectName) {
+    if (!FX_ENABLED) return;
+    if (effectName === 'shake') this.pendingShake = true;
+  },
+  consumeShakeClass() {
+    if (!FX_ENABLED || !this.pendingShake) return '';
+    this.pendingShake = false;
+    return 'fx-shake';
+  }
+};
+
+function playSfx(type) { AudioDirector.playSfx(type); }
 
 function saveProgress() {
   try {
@@ -260,6 +440,10 @@ function loadSavedMeta() {
     const raw = localStorage.getItem(SAVE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (e) { return null; }
+}
+function clearSaveData() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+  render();
 }
 function continueSavedGame() {
   const saved = loadSavedMeta();
@@ -279,6 +463,8 @@ function initState(startStage = 'title') {
     stage: startStage,
     titleModal: null,
     timeMin: 20 * 60 + 30,
+    protectEndMin: 20 * 60 + 52,      // 10-min safe timer starts AFTER introductions (20:42 -> 20:52)
+    protectDeadlineMin: 20 * 60 + 58, // Gradual fog creep (20:52 -> 20:58) before vote is forced
     bg: null,
     realName: '陆寻',
     aliasUsed: null, // null = realName, or string like '陈七'
@@ -298,10 +484,15 @@ function initState(startStage = 'title') {
     rounds: { r1: false, r2: false, r3: false },
     flags: {
       prologueStep: 0,
+      introStep: 0,
       introDone: false,
       nameChoiceDone: false,
+      protectEndedNotified: false,
+      fogClosingNotified: false,
+      nightNoiseWarned: false,
       hotspotsChecked: {}, // hotspotId -> true
       npcTalkedProtect: {},
+      npcTopics: {},       // `${npcId}_${topic}` -> true
       voteStep: 0,
       splitParty: false,       // true if player defied Zhao and went to West Wing
       zhouKnockedHelp: false,  // 21:30 injured Zhou banging on West Wing door
@@ -309,6 +500,10 @@ function initState(startStage = 'title') {
       lampDebateDone: false,
       foundDeed: false,
       nightTalks: {},
+      nightLampEventDone: false,
+      nightEchoEventDone: false,
+      lateHuddleDone: false,
+      activeMidEvent: null,
       crisisStep: 0,
       midnightDebateStep: 0,
       escapeStep: 0,
@@ -322,46 +517,49 @@ function initState(startStage = 'title') {
     restAP: 6,
     trained: false,
     spaceEnded: false,
+    activeTalk: null,
+    activeHotspot: null,
     drawer: null,
     // Calibrated NPC Ledgers (Redline #2 & #3: Real shop powers + Fog-of-War knownLevel 0/1/2 + live room)
+    // All 7 arrive in courtyard first; veterans scatter AFTER introductions & safe period begins!
     npcs: {
       zhou: {
-        id: 'zhou', knownLevel: 0, room: 'courtyard', alive: true, hp: 140, maxHp: 140, trust: 50,
+        id: 'zhou', code: 'CN-04118', knownLevel: 0, room: 'courtyard', alive: true, hp: 140, maxHp: 140, trust: 50,
         anonName: '拎暗青短斧的男人', anonDesc: '三十出头，站姿如松，手里提着一柄泛着冷光的厚重短斧与一盏铜壳风灯。',
         name: '周衡', role: '前消防班长 · 历三场（队长）',
         note: '行事稳重护新人，腰间悬着一盏微微泛青的镇魂风灯。',
         realGear: '【C初战力】古武横练体魄 + D+ 破邪消防斧 + D 级镇魂风灯（示警阴气，但本质仍是明火热源）'
       },
       shen: {
-        id: 'shen', knownLevel: 0, room: 'hall', alive: true, hp: 110, maxHp: 110, trust: 45,
-        anonName: '穿深灰冲锋衣的女人', anonDesc: '约莫三十岁，抱臂冷眼打量四周，已独自走向主厅方向。',
+        id: 'shen', code: 'CN-06302', knownLevel: 0, room: 'courtyard', alive: true, hp: 110, maxHp: 110, trust: 45,
+        anonName: '穿深灰冲锋衣的女人', anonDesc: '约莫三十岁，抱臂冷眼打量四周，神情沉静警惕。',
         name: '沈岚', role: '前急诊药师 · 历两场',
         note: '冷峻实用主义，只认硬物证，反感盲目迷信。',
         realGear: '【D高战力】基础精神感知强化 + 治疗喷雾(G001) + 战术冷光灯 + 袖藏镀银手术刀'
       },
       chen: {
-        id: 'chen', knownLevel: 0, room: 'west', alive: true, hp: 105, maxHp: 105, trust: 52,
-        anonName: '穿工装外套的青年', anonDesc: '二十五六岁，指间转着一把带细微高频纹路的合金改锥，正往西厢张望。',
+        id: 'chen', code: 'CN-06895', knownLevel: 0, room: 'courtyard', alive: true, hp: 105, maxHp: 105, trust: 52,
+        anonName: '穿工装外套的青年', anonDesc: '二十五六岁，指间转着一把带细微高频纹路的合金改锥。',
         name: '陈默', role: '前汽修工 · 历两场',
         note: '热心手巧，擅长拆锁与机械结构，但缺乏对灵异的正面手段。',
         realGear: '【D中战力】神经反射微强化 + 高频破拆改锥 + 便携震动感应器'
       },
       zhao: {
-        id: 'zhao', knownLevel: 0, room: 'shrine', alive: true, hp: 115, maxHp: 115, trust: 36,
-        anonName: '胡茬粗犷的中年男人', anonDesc: '三十多岁，眉心拧着川字，正大步往东侧祠堂走去。',
+        id: 'zhao', code: 'CN-08144', knownLevel: 0, room: 'courtyard', alive: true, hp: 115, maxHp: 115, trust: 36,
+        anonName: '胡茬粗犷的中年男人', anonDesc: '三十多岁，眉心拧着川字，正打量着东侧祠堂的方向。',
         name: '赵川', role: '前长途司机 · 历一场',
         note: '刚侥幸活过一场，脾气急、笃信传统避邪老规矩。',
         realGear: '【D初战力】基础体魄微强化 + 一次性 D 级低阶镇宅驱邪符（不防规则盲灵）'
       },
       lin: {
-        id: 'lin', knownLevel: 0, room: 'shrine', alive: true, hp: 90, maxHp: 90, trust: 35,
-        anonName: '穿湿皱西装的男人', anonDesc: '脸色惨白、呼吸急促，不停推眼镜，慌张地紧跟在胡茬男身后。',
+        id: 'lin', code: 'CN-09472', knownLevel: 0, room: 'courtyard', alive: true, hp: 90, maxHp: 90, trust: 35,
+        anonName: '穿湿皱西装的男人', anonDesc: '脸色惨白、呼吸急促，不停推眼镜，紧挨在老考生身旁。',
         name: '林哲', role: '同批新人 · 0场凡人',
         note: '金融从业者，神经极度紧绷、嘴硬爱抢话，开局老实报了真名。',
         realGear: '【0场凡人】无任何超凡强化'
       },
       su: {
-        id: 'su', knownLevel: 0, room: 'courtyard', alive: true, hp: 80, maxHp: 80, trust: 45,
+        id: 'su', code: 'CN-09473', knownLevel: 0, room: 'courtyard', alive: true, hp: 80, maxHp: 80, trust: 45,
         anonName: '背帆布包的女生', anonDesc: '二十岁上下，缩在廊檐下肩膀发抖，死死攥着帆布包带。',
         name: '苏晓', role: '同批新人 · 0场凡人',
         note: '胆小但听指挥，开局老实报了真名。',
@@ -376,8 +574,21 @@ function initState(startStage = 'title') {
 
 // ======================== HELPERS & DYNAMIC PARTY POOL ========================
 function fmtTime(mins) {
-  const m = ((mins % 1440) + 1440) % 1440;
-  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const totalSec = Math.round((((mins % 1440) + 1440) % 1440) * 60);
+  const hh = Math.floor(totalSec / 3600) % 24;
+  const mm = Math.floor((totalSec % 3600) / 60);
+  const ss = totalSec % 60;
+  const base = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  return ss > 0 ? `${base}:${String(ss).padStart(2, '0')}` : base;
+}
+function fmtDurShort(mins) {
+  if (mins < 1) return `${Math.round(mins * 60)}s`;
+  return `${mins}m`;
+}
+function fmtCountdown(remMins) {
+  const sec = Math.max(0, Math.round(remMins * 60));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function hasItem(id) { return S.inventory.some(i => i.id === id); }
@@ -393,8 +604,54 @@ function removeItem(id) {
 function addClue(id) {
   if (!S.clues.includes(id)) {
     S.clues.push(id);
+    playSfx('clue');
     pushBeat(`获得线索【${CLUES[id].title}】——已归档至右上角「线索板」。`, 'clue');
   }
+}
+
+function applyDamage(amount, deathReason = '伤势过重，你在刺骨白雾中失去意识。腕表冰冷提示：【考生 CN-09471 已死亡】。') {
+  S.hp = clamp(S.hp - amount, 0, S.maxHp);
+  if (amount > 0) playSfx('danger');
+  if (S.hp <= 0) {
+    triggerEnding(false, deathReason);
+    return true;
+  }
+  return false;
+}
+
+function useMedkit(targetId = 'self') {
+  const mk = getItem('medkit');
+  if (!mk || !mk.uses || mk.uses <= 0) return;
+  if (S.stage === 'dead' || S.stage === 'space' || S.stage === 'title') return;
+  S.drawer = null;
+  beginTurn('紧急止血包扎');
+  if (targetId === 'self') {
+    if (S.hp >= S.maxHp) {
+      pushBeat('你检查了一下自身状况，目前并无明显外伤，没必要浪费急救包。', 'warn');
+      render(); return;
+    }
+    mk.uses -= 1;
+    const before = S.hp;
+    S.hp = clamp(S.hp + 25, 0, S.maxHp);
+    pushBeat(`你熟练地拆开便携外伤急救包完成清创止血（生命 ${before} → ${S.hp}，剩余 ${mk.uses} 次）。`, 'clue');
+    if (mk.uses <= 0) removeItem('medkit');
+    render(); return;
+  }
+  const npc = S.npcs[targetId];
+  if (!npc || !npc.alive || npc.room !== S.location) return;
+  if (npc.hp >= npc.maxHp) {
+    pushBeat(`${npc.name}目前伤势已稳，无需重复包扎。`, 'warn');
+    render(); return;
+  }
+  mk.uses -= 1;
+  const before = npc.hp;
+  npc.hp = clamp(npc.hp + 30, 0, npc.maxHp);
+  npc.trust += 18;
+  S.contrib.door = Math.min(10, S.contrib.door + 3);
+  pushBeat(`你迅速拆开急救包替${npc.name}止血固定（${npc.name}伤势大幅稳定 ${before} → ${npc.hp}，剩余 ${mk.uses} 次）。`, 'clue');
+  pushBeat(`${npc.name}咬牙忍着痛，眼神明显松动下来：“谢了……回空间后我欠你一个人情。”`, 'dialogue', npc.name);
+  if (mk.uses <= 0) removeItem('medkit');
+  render();
 }
 
 // Core Redline #5 helper: live NPCs currently sharing the player's room/group
@@ -436,17 +693,50 @@ function rollCheck(statKey, dc, bonus = 0, label = '') {
   return ok;
 }
 
+function resolveSceneMedia(key, fallbackKey = 'courtyard') {
+  const custom = window.AV_MANIFEST && window.AV_MANIFEST.scenes && window.AV_MANIFEST.scenes[key];
+  if (custom) return custom;
+  return SCENE_IMGS[key] || SCENE_IMGS[fallbackKey] || SCENE_IMGS.courtyard;
+}
+
 function getActiveArtwork() {
-  if (S.stage === 'space') return SCENE_IMGS.space;
-  if (S.stage === 'char_select' || S.stage.startsWith('prologue')) return SCENE_IMGS.alley;
-  if (S.stage === 'exam_crisis' || S.flags.wellAlert) return SCENE_IMGS.well;
+  if (S.stage === 'space') return resolveSceneMedia('space', 'space');
+  if (S.stage === 'char_select' || S.stage.startsWith('prologue')) return resolveSceneMedia('alley', 'alley');
+  if (S.stage === 'exam_crisis') return resolveSceneMedia('crisis_window', 'well');
+  if (S.stage === 'exam_escape' && S.flags.escapeStep >= 3) return resolveSceneMedia('canal', 'well');
+  if (S.flags.wellAlert) return resolveSceneMedia('well', 'well');
   const r = ROOMS[S.location];
-  return (r && SCENE_IMGS[r.art]) ? SCENE_IMGS[r.art] : SCENE_IMGS.courtyard;
+  if (r) return resolveSceneMedia(r.id, r.art || 'courtyard');
+  return resolveSceneMedia('courtyard', 'courtyard');
+}
+
+function getNpcPortrait(npcId) {
+  const p = window.AV_MANIFEST && window.AV_MANIFEST.portraits && window.AV_MANIFEST.portraits[npcId];
+  if (!p) return null;
+  const n = S.npcs && S.npcs[npcId];
+  if (n && n.hp < n.maxHp * 0.65 && p.injured) return p.injured;
+  const d = getDangerLevel();
+  if ((d === 'tense' || d === 'critical') && p.tense) return p.tense;
+  return p.calm || p.tense || p.injured || null;
+}
+
+function getStageBgmKey() {
+  if (S.stage === 'title') return 'title';
+  if (S.stage === 'space') return 'space';
+  if (S.stage === 'char_select' || S.stage.startsWith('prologue')) return 'alley';
+  if (S.stage === 'exam_crisis' || S.stage === 'exam_escape') return 'crisis';
+  if (S.stage === 'exam_night' || S.stage === 'exam_late') return 'night';
+  return 'protect';
 }
 
 function getDangerLevel() {
   if (S.stage === 'exam_crisis' || S.flags.wellAlert || S.flags.zhouKnockedHelp) return 'critical';
-  if (S.timeMin < 20 * 60 + 50) return 'safe';
+  if (S.stage === 'exam_protect') {
+    if (!S.flags.nameChoiceDone) return 'safe';
+    if (S.timeMin < S.protectEndMin) return 'safe';
+    if (S.timeMin < S.protectEndMin + 3) return 'calm'; // Gradual fog creep (20:52-20:55)
+    return 'tense'; // Frost sealing & footsteps approaching (20:55-20:58)
+  }
   if (S.sound >= 70 || S.heat >= 75) return 'critical';
   if (S.sound >= 35 || S.heat >= 45) return 'tense';
   return 'calm';
@@ -454,7 +744,12 @@ function getDangerLevel() {
 
 function getWatchOmen() {
   if (S.stage === 'char_select' || S.stage.startsWith('prologue')) return '信号中断 · 等待接入';
-  if (S.stage === 'exam_protect') return `保护期剩余 ${Math.max(0, 20*60+50 - S.timeMin)} 分钟`;
+  if (S.stage === 'exam_protect') {
+    if (!S.flags.nameChoiceDone) return '载入完成 · 等待全员照面报号';
+    if (S.timeMin < S.protectEndMin) return `安全保护期 · 剩余 ${fmtCountdown(S.protectEndMin - S.timeMin)}`;
+    if (S.timeMin < S.protectEndMin + 3) return '保护期结束 · 院外白雾渐浓';
+    return '院门结霜 · 脚步声正缓慢逼近';
+  }
   const lvl = getDangerLevel();
   if (lvl === 'critical') return '腕表剧震 · 异物已贴近';
   if (lvl === 'tense') return S.oilLampLit && S.heat >= 45 ? '空气发烫 · 寒雾正压向窗缝' : '雾色翻涌 · 院外似有脚步';
@@ -464,28 +759,94 @@ function getWatchOmen() {
 
 // World Clock & Objective Rule Triggers
 function advanceTime(mins) {
-  S.timeMin += mins;
+  S.timeMin = Math.round((S.timeMin + mins) * 10) / 10;
 
-  if (S.timeMin >= 20 * 60 + 50 && S.stage.startsWith('exam')) {
-    if (S.oilLampLit && S.baseRoom && isHere('zhou')) S.heat = clamp(S.heat + Math.round(mins * 1.1), 0, 100);
-    else S.heat = clamp(S.heat - Math.round(mins * 1.0), 0, 100);
-    S.sound = clamp(S.sound - Math.round(mins * 1.1), 0, 100);
+  if (S.timeMin >= S.protectEndMin && S.stage.startsWith('exam')) {
+    if (S.oilLampLit && S.baseRoom && S.location === S.baseRoom && isHere('zhou')) {
+      S.heat = clamp(S.heat + Math.round(mins * 1.1), 0, 100);
+    } else {
+      S.heat = clamp(S.heat - Math.round(mins * 1.0), 0, 100);
+    }
+    S.sound = clamp(S.sound - Math.round(mins * 0.9), 0, 100);
   }
 
-  // 20:50 Protection ends -> Vote
-  if (S.stage === 'exam_protect' && S.timeMin >= 20 * 60 + 50) {
-    resolveProtectionEnd(); return;
+  // Gradual escalation after 10-min protection period ends (NO instant death / NO abrupt teleport!)
+  if (S.stage === 'exam_protect' && S.flags.nameChoiceDone) {
+    if (!S.flags.protectEndedNotified && S.timeMin >= S.protectEndMin) {
+      S.flags.protectEndedNotified = true;
+      playSfx('watch');
+      pushBeat('【安全保护期结束】腕表蓝光悄然熄灭。院门外并没有立刻冲进怪物，但白雾已开始顺着门缝缓慢渗入前院，空气一点点变冷——你仍可抓紧收尾手头调查，但最好尽快回前院定下今晚落脚点。', 'warn');
+    }
+    if (!S.flags.fogClosingNotified && S.timeMin >= S.protectEndMin + 3) {
+      S.flags.fogClosingNotified = true;
+      S.sound = clamp(S.sound + 12, 0, 100);
+      playSfx('frost_crack');
+      pushBeat('厚木院门发出低沉的冰裂声，白雾渐渐漫过鞋面，院墙外隐约传来极其缓慢的拖沓脚步声。前院方向传来周衡压低的催促：“雾压上来了，别再耽搁，回前院选房！”', 'warn');
+    }
+    if (S.timeMin >= S.protectDeadlineMin) {
+      S.timeMin = S.protectDeadlineMin;
+      S.sta = clamp(S.sta - 8, 0, 100);
+      resolveProtectionEnd(true); return;
+    }
+  }
+
+  // Dual-Channel Night Prowler Escalation (Gradual warning -> Ambush if player keeps pushing noise!)
+  if ((S.stage === 'exam_night' || S.stage === 'exam_late') && S.baseRoom && S.location !== S.baseRoom) {
+    if (S.sound >= 40 && S.sound < 65 && !S.flags.nightNoiseWarned) {
+      S.flags.nightNoiseWarned = true;
+      pushBeat('【渐进警觉】回廊尽头的浓雾微微翻涌，远处那道拖沓脚步声停顿了一瞬，似乎正朝你这边缓慢挪近——再制造动静就会引来追猎！', 'warn');
+    } else if (S.sound >= 65 || S.heat >= 75) {
+      S.flags.nightNoiseWarned = false;
+      playSfx('danger');
+      FXDirector.trigger('shake');
+      pushBeat('回廊深处的白雾骤然炸开！你持续发出的声响彻底惊动了巡游的盲目守夜人——一道苍白修长的无眼轮廓正循声疾掠而来！', 'danger');
+      const ok = rollCheck('agi', 13, S.bg.id === 'climb' ? 2 : 0, '贴墙静默脱身');
+      S.sound = 20;
+      if (ok) {
+        S.sta = clamp(S.sta - 12, 0, 100);
+        pushBeat('你瞬间屏息滚进廊柱阴影，一动不动直到那股刺骨寒风擦着鼻尖掠过，冷汗浸透了后背。', 'clue');
+      } else {
+        const dead = applyDamage(18, '夜探暴露动静过大，苍白雾爪在回廊将你当场撕碎。腕表冰冷提示：【考生 CN-09471 已死亡】。');
+        if (dead) return;
+        S.location = S.baseRoom;
+        pushBeat(`你没能完全藏住身形，肩背被冰冷雾爪狠狠擦过，强忍剧痛一声未吭连滚带爬逃回【${ROOMS[S.baseRoom].name}】落锁！`, 'danger');
+      }
+    }
+  }
+
+  // 21:15 Mid-Night Literary Event: Spirit Lamp & Frost Probe
+  if (S.stage === 'exam_night' && !S.flags.nightLampEventDone && S.timeMin >= 21 * 60 + 15) {
+    S.timeMin = Math.min(S.timeMin, 21 * 60 + 15);
+    triggerNightLampEvent();
+    return;
   }
 
   // 21:30 Shrine Fog Flood (Objective World Event!)
   if (S.stage === 'exam_night' && !S.flags.shrineResolved && S.timeMin >= 21 * 60 + 30) {
-    resolveShrineFlood();
-    if (S.flags.zhouKnockedHelp) return; // pause for door decision
+    const triggered = resolveShrineFlood();
+    if (triggered) {
+      S.timeMin = Math.min(S.timeMin, 21 * 60 + 30);
+      return; // Never collide with 22:00 crisis in the same turn!
+    }
+  }
+
+  // 21:42 Pre-Crisis Foreshadowing: Courtyard Mimic Echo
+  if (S.stage === 'exam_night' && !S.flags.nightEchoEventDone && S.timeMin >= 21 * 60 + 42) {
+    S.timeMin = Math.min(S.timeMin, 21 * 60 + 42);
+    triggerNightEchoEvent();
+    return;
   }
 
   // 22:00 First Knock Crisis (Dynamic based on presentNpcs!)
   if (S.stage === 'exam_night' && S.timeMin >= 22 * 60 && S.flags.crisisStep === 0) {
     trigger2200Crisis(); return;
+  }
+
+  // 23:05 Post-Crisis Silent Dark Huddle
+  if (S.stage === 'exam_late' && !S.flags.lateHuddleDone && S.timeMin >= 23 * 60 + 5) {
+    S.timeMin = Math.min(S.timeMin, 23 * 60 + 5);
+    triggerLateHuddleEvent();
+    return;
   }
 
   // 23:30 Publish Round 3 if still not published
@@ -496,12 +857,13 @@ function advanceTime(mins) {
   // 23:40 Midnight Fog Reversal
   if (S.stage === 'exam_late' && S.timeMin >= 23 * 60 + 40 && !S.clues.includes('E08')) {
     addClue('E08');
+    playSfx('frost_crack');
     pushBeat('你贴近窗缝，忽然察觉风向逆转——原本拼命往屋里钻的白雾，正在缓慢倒吸回院外！如果傻等到卯时天亮，回缩的雾压会把整间屋子抽成窒息死域。', 'clue');
   }
 
   // 00:25 Suffocation Fail
   if (S.stage === 'exam_late' && S.timeMin >= 24 * 60 + 25) {
-    triggerEnding(false, '你错过了子时 15 分钟的白雾倒流窗口。凌晨过后，浓雾如混凝土般倒灌进屋，全员在寂静中窒息。腕表冰冷提示：【考生已死亡】。');
+    triggerEnding(false, '你错过了子时 15 分钟的白雾倒流窗口。凌晨过后，浓雾如混凝土般倒灌进屋，全员在寂静中窒息。腕表冰冷提示：【考生 CN-09471 已死亡】。');
   }
 }
 
@@ -529,7 +891,7 @@ function prologueStepAction(act) {
     else pushBeat('你加快脚步想冲出老巷，跑了二十多步却发现自己仍站在同一块缺角的青石板上。四周静得只剩心跳。');
     S.timeMin = 20 * 60 + 32;
     S.flags.prologueStep = 2;
-    pushBeat('左手腕猛地一沉。一块通体哑黑的金属腕表不知何时紧扣在皮肤上，屏幕跳出一串陌生编号【CN-09471】与一行冰冷红字：');
+    pushBeat('左手腕猛地一沉。一块通体哑黑的金属腕表不知何时紧扣在皮肤上，冷得像块贴肉的铁片。暗色表盘左上角跳出一串暗红编号【CN-09471】，下方是当前时间与一道极细的心率折线，屏幕中央缓缓浮现一行红字：');
     pushBeat('【欢迎参加全球死考 · 你的首场考核将在 60 秒后载入。放弃或强行摘除将即刻抹杀。】', 'system');
   } else if (S.flags.prologueStep === 2) {
     if (act === 'pull') {
@@ -537,7 +899,7 @@ function prologueStepAction(act) {
       pushBeat('你用力去掰金属表带，表背骤然释放出一道刺骨电流，皮肤灼痛发麻——根本摘不下来。');
     } else if (act === 'check') {
       S.stats.wil += 1;
-      pushBeat(`你强迫自己稳住呼吸，确认随身的【${S.bg.item.name}】触手可及，同时记住了腕表只显示编号而未公开真名这一点（意志 +1）。`, 'clue');
+      pushBeat(`你强迫自己稳住呼吸，低头仔细扫过表盘上的暗红编号【CN-09471】、倒计时与心率读数，顺手确认随身的【${S.bg.item.name}】触手可及（意志 +1）。`, 'clue');
     } else if (act === 'grab') {
       if (addItem({ id: 'brick', name: '半块湿砖', desc: '沉手，可作一次性诱饵或防身' })) {
         pushBeat('你迅速从墙根抄起半块沉手的湿砖揣进兜里。不管雾后面是什么，手里总得有件能砸出响动的硬物。');
@@ -554,160 +916,400 @@ function enterExam() {
   S.stage = 'exam_protect';
   S.timeMin = 20 * 60 + 40;
   S.location = 'courtyard';
-  S.publishedRounds.r1 = true; // REDLINE #1: ONLY Round 1 published!
-  beginTurn('20:40 · 载入第一场《白雾古宅》');
-  pushBeat('失重感散去，鞋底踩在湿冷的青石板上。四周是一座荒废的二进民国四合院，厚重的朱漆大门正在身后缓缓合拢，门缝渗进黏稠的白雾。');
-  pushBeat('院子里一共站着七个人。四名举止老练的男女正迅速分散走向不同厢房勘察；剩下两男一女（包括你）还愣在原地盯着手腕。');
-  pushBeat('【第一轮·抉择】白雾将于 10 分钟保护期后封死院门，全员须选定今夜落脚房间：主厅／祠堂／西厢。（基础分：20）', 'system');
-  pushBeat('腕表蓝光倒计时跳动：【新手入场保护期 · 剩余 10 分钟】。时间极紧，你绝对不可能一个人逛完所有房间——可以直接点击左侧画面上的物件热点、与同房的人交谈，或点击左下角拓扑图移动。');
+  S.flags.introStep = 1;
+  S.activeTalk = null;
+  S.activeHotspot = null;
+  Object.values(S.npcs).forEach(n => { n.room = 'courtyard'; });
+  beginTurn('20:40 · 坠入白雾古宅');
+  pushBeat('失重感骤然砸落，鞋底狠狠磕在湿滑冰冷的青石板上。腐木、霉土与陈年潮气瞬间灌进鼻腔——四周是一座荒废多年的民国二进四合院，朱漆剥落的厚木大门在身后沉闷合拢，门缝外翻涌着浓得化不开的白雾。');
+  pushBeat('院子里连你在内一共七个人。三个穿着日常衣物的男女和你一样刚跌坐在地；屋檐下却已经站着四个衣着利落、神色异常冷静的陌生人——为首是个三十出头、拎着暗青短斧的寸头男人。');
+  pushBeat('“搞什么鬼？！绑架还是非法真人秀？！”穿湿皱西装的男人第一个跳起来，举着毫无信号的手机嘶吼，“谁把我信号屏蔽了？！我要报警——这破门怎么反锁了！”他满脸涨红，直接朝朱漆大门冲过去猛拽门环！', 'dialogue', '穿湿皱西装的男人');
+  pushBeat('旁边背帆布包的女生吓得双腿一软跪在青石板上，死死捂着嘴剧烈喘息。檐下转着金属改锥的青年下意识想伸手拦，却被拎斧男人轻轻抬手压住了。', 'normal');
+  pushBeat('“别拦，让他碰一下门。”拎斧男人声音低沉平静，眼神里没有嘲讽，只有看惯生死的冷硬，“不亲手撞一次南墙，新人永远不会信这里是什么地方。”', 'dialogue', '拎暗青短斧的男人');
   render();
 }
 
-// ======================== ACT 1: FREE-CLICK HOTSPOTS, ALIAS & DYNAMIC NPCS ========================
-function chooseNamePolicy(useAlias) {
-  S.flags.nameChoiceDone = true;
-  S.flags.introDone = true;
-  S.npcs.zhou.knownLevel = Math.max(S.npcs.zhou.knownLevel, 1);
-  S.npcs.su.knownLevel = Math.max(S.npcs.su.knownLevel, 1);
-  beginTurn('20:40 · 前院初次照面与报号');
-  pushBeat('“都别喊，先看表！”拎暗青短斧的男人压低声音开口，“我叫周衡，历过三场。你们三个新人记住两条铁律：死在这儿现实就真死了；活着回去先扣 60 分基础费。我那三个伙计已经散开查房间了，20:50 准时回前院定落脚点！”', 'dialogue', '周衡');
-  pushBeat('缩在檐下的女生抖着声音老实报出自己叫“苏晓”，刚跑去东边祠堂的西装男回头喊了句自己叫“林哲”。周衡转向你：“你叫什么？”', 'dialogue', '周衡');
-  if (useAlias) {
-    S.aliasUsed = '陈七';
-    S.npcs.zhou.trust += 8; S.npcs.shen.trust += 10;
-    pushBeat('你扫了眼只显示编号【CN-09471】的腕表，心头一动，随口报了个假名：“叫我陈七就行。”');
-    pushBeat('周衡目光在你脸上顿了半秒，嘴角极轻地扬了一下：“脑子挺清醒，不像一般愣头青。抓紧时间，只剩八分钟！”', 'clue');
-  } else {
-    S.aliasUsed = null;
-    pushBeat(`你如实报出了自己的真名：“${S.realName}。”周衡点点头：“抓紧时间散开看一两个房间，20:50 准时汇合！”`);
-  }
-  advanceTime(2);
-  render();
-}
-
-function clickHotspot(hotspotId) {
-  if (S.stage !== 'exam_protect' && S.stage !== 'exam_night' && S.stage !== 'exam_late') return;
-  const list = ROOM_HOTSPOTS[S.location] || [];
-  const hs = list.find(h => h.id === hotspotId);
-  if (!hs) return;
-
-  beginTurn(`查看物件 · ${hs.label}`);
-  if (S.flags.hotspotsChecked[hotspotId] && hs.special !== 'cabinet') {
-    pushBeat(`你又看了一眼【${hs.label}】，没有新的发现。`);
-    render(); return;
-  }
-
-  // Special interactive hotspots
-  if (hs.special === 'cabinet') {
-    if (S.flags.foundDeed) {
-      pushBeat('樟木立柜的夹层已经撬开，里面空空如也。');
-      render(); return;
-    }
-    const bonus = hasItem('knife') ? 2 : (S.bg.id === 'arch' ? 2 : 0);
-    const ok = rollCheck(hasItem('knife') ? 'agi' : 'obs', 13, bonus, '撬查木柜夹层');
-    S.flags.foundDeed = true;
-    S.flags.hotspotsChecked[hotspotId] = true;
-    if (ok) {
-      pushBeat('你顺着错位的暗榫无声撬开木柜夹层，抽出一张泛黄的《老宅地契》！背面朱砂清楚标明：后院枯井下连着一条 300 米排水暗渠，直通宅外溪涧！');
+function introStepAction(act) {
+  beginTurn();
+  if (S.flags.introStep === 1) {
+    if (act === 'check_gate') {
+      pushBeat('你同样满腹狐疑，快步跟到院门边想亲眼看清机关——却在离门两步时被一股违背常理的刺骨寒气逼得呼吸一滞。');
+    } else if (act === 'observe_vets') {
+      S.stats.obs += 1;
+      pushBeat('你强压下心头惊悸，先退半步顺手扶住发抖的女生，目光飞快扫过檐下四人：拎斧男腰间挂着泛微青光的铜风灯；深灰冲锋衣女人袖口隐露冷光与银色手术刀柄；工装青年指间改锥刻着极细的高频纹路——这些人绝不是节目组群演（观察 +1）。', 'clue');
     } else {
-      S.sound = clamp(S.sound + 12, 0, 100);
-      pushBeat('暗榫卡得很死，你费了点劲掰开木板发出一声闷响。好在夹层里藏着《老宅地契》，标明了后院枯井下通往宅外的 300 米排水暗渠！');
+      const profReacts = {
+        arch: '【结构直觉】你抬头扫过飞檐与砖缝，后背瞬间发凉——这绝不是影视城搭的景，墙体百年风化、青苔走向和地基沉降全是真的，可外头那些白雾却像被无形玻璃罩死死压在院墙上空！',
+        climb: '【体能本能】你本能屈膝稳住重心，试着吸了口气——气温至少比刚才的老巷低了十二度，空气湿度却低得反常，绝非自然气象。',
+        archive: '【古制辨识】你一眼认出檐下雀替与门簪的民国浙赣民居形制，可空气里混着的不是自然露水，而是死水潭配陈年湿香灰的阴寒味。',
+        medic: '【临床直觉】你摸了摸自己狂跳的脉搏，又瞥了眼西装男发青的嘴唇——没有麻药致幻的瞳孔散大，所有人都是完全清醒状态下被直接挪进来的。'
+      };
+      pushBeat(profReacts[S.bg.id] || '你深吸一口冷气，强迫自己用专业直觉审视四周，越看越觉得头皮发麻。', 'clue');
     }
-    addClue('E07');
-    S.contrib.deed = 10;
-    advanceTime(hs.mins);
+
+    playSfx('danger');
+    pushBeat('“啊——！！”西装男的惨叫骤然打断了所有人的思绪！他的手掌刚触到铜门环，一层薄得近乎透明的黑霜瞬间粘住皮肤，紧接着一股无形巨力凭空将他震飞两米摔在石板上！他惊恐地去扯手腕上的黑表，表背“滋啦”爆出一缕蓝白电弧，烫得他嚎叫着滚作一团！', 'danger');
+    pushBeat('院子里瞬间死寂，只剩西装男粗重的抽泣和女生压抑的啜泣。刚才还半信半疑的空气，被这一幕彻底砸得粉碎。');
+    pushBeat('拎暗青短斧的男人这才迈步走过来，没有居高临下，只是冲身旁转改锥的青年微微偏了下头：“陈默，把规矩跟三个新人讲透。沈岚，你去盯着院墙雾线。”', 'dialogue', '周衡');
+    pushBeat('叫陈默的青年收起嬉皮笑脸，蹲到你们面前叹了口气，语速快而实在：“别找摄像头了，真没拍戏。我叫陈默，活过两场；站那儿拎斧子的是周衡周队，历过三场；那边穿冲锋衣的姐叫沈岚，两场；板着脸那位大哥叫赵川，一场。”', 'dialogue', '陈默');
+    pushBeat('“手腕这东西叫死考腕表，咱们现在在‘考场’里。两条铁律刻进脑子里：第一，在这儿死了，现实里就真死了——前阵子新闻压下去的那些‘从怪雾漩涡里凭空掉出来的学生和路人尸体’，全都是死在考场里的考生；第二，活着通关回‘死考空间’，系统先强制扣 60 分基础费，受伤修复另算，积分扣成负数——当场抹杀。”', 'dialogue', '陈默');
+    pushBeat('站在廊柱阴影里的沈岚没回头，只冷冷补了一句：“别指望老考生免费当保姆。我们的装备都是拿命换来的，想活，自己把脑子捡起来。”', 'dialogue', '沈岚');
+    S.npcs.zhou.knownLevel = 1; S.npcs.shen.knownLevel = 1; S.npcs.chen.knownLevel = 1; S.npcs.zhao.knownLevel = 1;
+    S.flags.introStep = 2;
+    S.timeMin = 20 * 60 + 41;
     render(); return;
   }
 
-  if (hs.special === 'east_tools') {
-    S.flags.hotspotsChecked[hotspotId] = true;
-    pushBeat(hs.text);
-    addItem({ id: 'crowbar', name: '生锈短撬棍', desc: '关键时刻可独自强撬枯井锈死铁闸' });
-    addItem({ id: 'rope', name: '浸油粗麻绳', desc: '结实防滑，可加固木门或枯井垂降' });
-    advanceTime(hs.mins);
-    render(); return;
-  }
-
-  S.flags.hotspotsChecked[hotspotId] = true;
-  pushBeat(hs.text);
-  if (hs.profText && hs.profText[S.bg.id]) {
-    pushBeat(hs.profText[S.bg.id], 'clue');
-  }
-  if (hs.clue) addClue(hs.clue);
-  if (S.stage === 'exam_night' && S.location !== S.baseRoom) S.sound = clamp(S.sound + 10, 0, 100);
-  advanceTime(hs.mins);
-  render();
-}
-
-// Dynamic Room NPC Dialogue (Redline #4: True clues, Misleading veteran bias, Panic noise)
-function talkToNpcInRoom(npcId) {
-  const n = S.npcs[npcId];
-  if (!n || !n.alive || n.room !== S.location) return;
-  n.knownLevel = Math.max(n.knownLevel, 1);
-
-  beginTurn(`与 ${n.name} 交谈`);
-  if (S.stage === 'exam_protect') {
-    S.flags.npcTalkedProtect[npcId] = true;
-    if (npcId === 'zhou') {
-      n.knownLevel = 2;
-      pushBeat('周衡拍了拍腰间泛着微弱青光的铜风灯，低声道：“这是我在空间换的【镇魂风灯】，阴气逼近火苗就会变绿。刚才我听见大门外有拖沓脚步声，保护期一过绝不能硬闯院门。”', 'dialogue', '周衡');
-      pushBeat('你暗暗记下：周衡作为三场队长，确实有空间兑换的破邪斧和风灯护身——但那盏风灯里面烧的终究是明火。', 'clue');
-    } else if (npcId === 'su') {
-      S.npcs.su.trust += 12;
-      pushBeat('苏晓缩在廊檐下声音发颤：“你、你刚才听见了吗？浓雾刚围上来的时候，院子外面好像有个很哑的声音，在轻轻念一个人的名字……”', 'dialogue', '苏晓');
-      pushBeat('她吓得说不清具体念了谁，但你立刻捕捉到了关键词：雾里的东西会念名字。', 'clue');
-    } else if (npcId === 'zhao') {
-      n.knownLevel = 2;
-      pushBeat('赵川正拍着祠堂厚实的木门板，嗤笑一声：“小子，听叔一句劝，今晚必须住祠堂！我上场靠这张空间换的【镇宅驱邪符】加上老祖宗牌位稳稳熬到天亮，这门板比防盗门还厚，错不了！”', 'dialogue', '赵川');
-      pushBeat('【情报辨析】赵川极度笃信他上一场的驱邪经验，甚至根本没低头看过香炉和供桌底下。', 'warn');
-    } else if (npcId === 'lin') {
-      pushBeat('林哲满头冷汗地贴着祠堂门框往外张望：“我刚才好像听见远处有警笛声！这肯定是某个非法真人秀节目，只要咱们躲在祠堂里等警察找来就行了！”', 'dialogue', '林哲');
-      pushBeat('【情报辨析】完全是恐慌下的自我安慰噪音，毫无价值。', 'warn');
-    } else if (npcId === 'shen') {
-      n.knownLevel = 2;
-      S.npcs.shen.trust += 14;
-      pushBeat('沈岚正用战术冷光灯照着主厅正墙，头也没回：“主厅门闩全断了，住不了。还有——别信赵川那套祠堂鬼话。你看墙上这幅家主画像，眼睛是被精细挖空的。这宅子里的东西，多半不靠眼睛看人。”', 'dialogue', '沈岚');
-      addClue('E09');
-      pushBeat('她转过头冷冷看了你一眼：“你要是查出西厢能住，待会儿表决我会站你这边。”', 'dialogue', '沈岚');
-    } else if (npcId === 'chen') {
-      n.knownLevel = 2;
-      S.npcs.chen.trust += 10;
-      pushBeat('陈默正用高频破拆改锥敲着西厢门闩，见你进来咧嘴一笑：“这熟铁门闩结实得很！就是这破灶房太阴暗了，我都拿不准该住这儿还是祠堂。对了，墙角那破木柜刚才我撞了一下，里头好像是空的。”', 'dialogue', '陈默');
-      addClue('E03');
+  if (S.flags.introStep === 2) {
+    if (act === 'ask_gear') {
+      S.npcs.chen.trust += 8;
+      S.npcs.chen.knownLevel = 2;
+      pushBeat('你压低声音追问陈默：“周队手里的斧子、你指间的改锥，都是你说的那个‘死考空间’里换的？”');
+      pushBeat('陈默咧嘴苦笑了一下，晃了晃指间的高频破拆改锥：“对，通关扣完基础费剩下的净分，能在空间里换血统、法器、科技装备，也能买治疗喷雾。像周队那把破邪斧和镇魂风灯就是硬货——不过别以为有装备就能横推，这种阴森古宅多半是规则考场，踩错规矩照样死。”', 'dialogue', '陈默');
+    } else if (act === 'challenge_zhou') {
+      S.npcs.zhou.trust += 10;
+      S.npcs.shen.trust += 8;
+      pushBeat('你直视着周衡的眼睛，没有退缩：“规矩我听懂了。但我怎么知道你们不会拿我们三个新人当探路炮灰？”');
+      pushBeat('赵川在旁边嗤笑一声想顶嘴，却被周衡一个眼神按住。周衡平静地回望你：“我进死考前干过八年消防班长。我不拿活人垫背，但也绝不会为了不听劝的蠢货搭上自己和兄弟的命。待会儿分头查房，你查你的、我查我的，信不信——拿证据说话。”', 'dialogue', '周衡');
+    } else {
+      S.npcs.su.trust += (S.bg.id === 'medic' ? 18 : 10);
+      pushBeat(S.bg.id === 'medic'
+        ? '你半蹲在发抖的女生身旁，轻按她手腕帮她放慢过度换气的呼吸节奏：“先跟着我吸气、呼气……别看大门，越慌越容易出事。”她眼泪汪汪地点头，颤声道：“谢谢你……我、我叫苏晓。”'
+        : '你蹲下来递了张纸巾给发抖的女生：“先稳住呼吸，既然走不掉，就先听他们把情况说完。”她死死攥着衣角小声道谢：“我叫苏晓……”');
+      S.npcs.su.knownLevel = 1;
     }
-    advanceTime(2);
-    render(); return;
-  }
 
-  // Night phase talks with teammates who are actually in your room!
-  if (S.stage === 'exam_night') {
-    S.flags.nightTalks[npcId] = true;
-    n.knownLevel = 2;
-    if (npcId === 'zhou') {
-      n.trust += 10;
-      pushBeat('周衡擦拭着暗青色的破邪消防斧，压低声音：“上一场我们五个人死了个冲动的新人。空间里什么都能换，但完美修复极贵，付不起扣成负分当场抹杀。你今晚比我们当年稳得多，别信习惯，信证据。”', 'dialogue', '周衡');
-    } else if (npcId === 'shen') {
-      n.trust += 12;
-      pushBeat('沈岚检查着袖口的镀银手术刀与治疗喷雾，淡声道：“能模仿人声却在门外徘徊的异常，必然受限于某种感知规则。如果它真的无目，那听觉、真名、或者热源，至少占一样。”', 'dialogue', '沈岚');
-    } else if (npcId === 'chen') {
-      n.trust += 10;
-      pushBeat('陈默把高频改锥别回腰间：“真要往外跑的时候叫我，什么生锈铁锁在我手里都撑不过十秒。就是这鬼雾里的玩意儿，我这堆科技小玩意儿打不着它。”', 'dialogue', '陈默');
-    } else if (npcId === 'su') {
-      const ok = rollCheck('wil', 12, S.bg.id === 'medic' ? 3 : 0, '安抚稳态');
-      n.trust += ok ? 16 : 6;
-      pushBeat(ok ? '你轻声教苏晓调整呼吸节律，她发抖的肩膀渐渐稳了下来，红着眼点点头：“我一定听你的，绝不乱喊。”' : '你低声安抚了苏晓几句，她依旧吓得死死咬住袖口。');
-    } else if (npcId === 'zhao') {
-      pushBeat('赵川黑着脸摩挲兜里的黄符：“哼，走着瞧吧，等天亮太阳出来你就知道谁对谁错了。”', 'dialogue', '赵川');
-    } else if (npcId === 'lin') {
-      pushBeat('林哲抱膝缩在墙角浑身发抖，嘴里反复念叨着明早还要开早会，完全无法正常沟通。');
-    }
-    advanceTime(6);
+    pushBeat('胡茬粗犷的赵川不耐烦地拍了拍兜里露出一角的黄符：“行了行了，别磨蹭了，赶紧互相报个名字！等下考题一发，咱们抓紧找间厚实屋子躲着才是正事！”', 'dialogue', '赵川');
+    pushBeat('地上的西装男捂着被电红的手腕，脸色惨白地报了真名：“我……我叫林哲……”女生也低声确认自己叫“苏晓”。周衡目光落到你身上：“你呢？怎么称呼？”', 'dialogue', '周衡');
+    S.npcs.lin.knownLevel = 1; S.npcs.su.knownLevel = 1;
+    S.flags.introStep = 3;
     render();
   }
 }
 
+// ======================== ACT 1: NAME POLICY, INTERACTIVE HOTSPOTS & MULTI-TOPIC NPCS ========================
+function chooseNamePolicy(useAlias) {
+  S.flags.nameChoiceDone = true;
+  S.flags.introDone = true;
+  Object.values(S.npcs).forEach(n => { n.knownLevel = Math.max(n.knownLevel, 1); });
+  // Scatter veterans to their rooms AFTER introductions & rule briefing!
+  S.npcs.zhou.room = 'courtyard';
+  S.npcs.su.room = 'courtyard';
+  S.npcs.shen.room = 'hall';
+  S.npcs.chen.room = 'west';
+  S.npcs.zhao.room = 'shrine';
+  S.npcs.lin.room = 'shrine';
+
+  S.timeMin = 20 * 60 + 42;
+  S.protectEndMin = 20 * 60 + 52;      // Full 10-minute safe period starts NOW!
+  S.protectDeadlineMin = 20 * 60 + 58; // Gradual danger creep until 20:58
+  S.publishedRounds.r1 = true;         // REDLINE #1: Round 1 published ONLY NOW!
+  playSfx('watch');
+
+  beginTurn('20:42 · 报号完毕，首轮考题下发');
+  if (useAlias) {
+    S.aliasUsed = '陈七';
+    S.npcs.zhou.trust += 8; S.npcs.shen.trust += 10;
+    pushBeat('对着一群来历不明的陌生人，你留了个心眼，随口报了个代号：“叫我陈七就行。”');
+    pushBeat('沈岚挑了下眉，多看了你一眼；周衡嘴角极轻地压了一下，没点破：“行，陈七。”', 'clue');
+  } else {
+    S.aliasUsed = null;
+    pushBeat(`你没有隐瞒，报出了自己的名字：“${S.realName}。”周衡点点头记了下来。`);
+  }
+  pushBeat('就在最后一人报号完毕的刹那，七只腕表同时发出低沉嗡鸣，表盘亮起幽蓝冷光，首轮考题冷冰冰浮现：\n【第一轮 · 抉择】白雾封院，择室安身：主厅／祠堂／西厢。（基础分：20｜新手保护期：10:00）', 'system');
+  pushBeat('“保护期整整十分钟，足够把院子摸个大概，但一个人肯定逛不全。”周衡干脆利落分了工——沈岚转身进主厅，陈默快步去西厢，赵川招呼着惊魂未定的林哲直奔东侧祠堂，周衡自己守在前院大门附近照看苏晓。', 'dialogue', '周衡');
+  pushBeat('湿冷夜风从檐角掠过，青石板上的雾丝正贴着鞋边微微晃动。你可以点击左侧画面上的物件仔细查探、点击上方「同房在场」与同行者交谈，或通过左下角拓扑图穿行各房。');
+  render();
+}
+
+function closeInteraction() {
+  S.activeTalk = null;
+  S.activeHotspot = null;
+  beginTurn(`环顾 · ${ROOMS[S.location].name}`);
+  const here = presentNpcs();
+  const whoStr = here.length ? ` 房内还有：${here.map(n => npcDisplayName(n)).join('、')}。` : ' 四周空无一人。';
+  pushBeat(`你收起思绪，重新打量【${ROOMS[S.location].name}】。${ROOMS[S.location].desc}${whoStr}`);
+  render();
+}
+
+const RICH_HOTSPOTS = ['gt_chain', 'sh_censer', 'sh_table', 'ws_ledger', 'ws_cabinet', 'es_corpse', 'es_tools', 'hl_portrait'];
+
+function clickHotspot(hotspotId) {
+  if (S.stage !== 'exam_protect' && S.stage !== 'exam_night' && S.stage !== 'exam_late') return;
+  if (S.stage === 'exam_protect' && !S.flags.nameChoiceDone) return;
+  const list = ROOM_HOTSPOTS[S.location] || [];
+  const hs = list.find(h => h.id === hotspotId);
+  if (!hs) return;
+
+  S.activeTalk = null;
+  beginTurn(`近距离查看 · ${hs.label}`);
+
+  // Rich tactile multi-action hotspots
+  if (RICH_HOTSPOTS.includes(hotspotId) && !S.flags.hotspotsChecked[hotspotId]) {
+    S.activeHotspot = hotspotId;
+    const previews = {
+      gt_chain: '你走近朱漆剥落的厚木大门，指尖距铁链还有半寸就能感到刺骨寒意。门缝底下贴着一层发黑的湿霜，隐约能听见院墙外浓雾深处传来某种沉重、拖沓的摩擦声。',
+      sh_censer: '供桌正中摆着一只沉甸甸的青铜香炉，炉口堆满发黑板结的香灰。凑近一闻，没有半分寺庙线香的暖意，反倒透出一股潮湿腐烂的井底阴气。',
+      sh_table: '褪色的暗红供桌垂着发霉的棉布，桌底阴影漆黑一片。你隐约看见内侧红漆木柱根部布满密密麻麻的惨白划痕。',
+      ws_ledger: '账房书案蒙着厚灰，摊开着一本发黄卷边的民国旧账本，旁边压着半截断裂的焦黑炭笔，纸页间透着潮冷霉味。',
+      ws_cabinet: '墙角那口腐朽的樟木立柜散发着刺鼻樟脑混着霉木的气味。你屈指轻叩背板——中段发出明显空洞的回响，木板接缝隐约错位，里面藏着暗格！',
+      es_corpse: '半塌的柴堆后蜷缩着一具早已风干发黑的人形干尸，空气里弥漫着刺鼻的焦糊与陈腐尸臭。他僵硬的手指死死攥着一盏烧得变形的铜油灯。',
+      es_tools: '坍塌的木架下压着生锈农具与发霉麻绳，木料搭得很脆，贸然硬扯可能会发出不小的碰撞声。',
+      hl_portrait: '主厅正墙高悬着一幅半人高的民国水墨家主画像，画中人身穿长衫端坐太师椅，可面孔上半截透着极不自然的漆黑空洞。'
+    };
+    pushBeat(previews[hotspotId] || hs.text);
+    render(); return;
+  }
+
+  if (S.flags.hotspotsChecked[hotspotId]) {
+    S.activeHotspot = null;
+    pushBeat(`你又仔细端详了一遍【${hs.label}】，该确认的细节都已记牢。`);
+    render(); return;
+  }
+
+  // Quick glance hotspots (30s-1m)
+  S.activeHotspot = null;
+  S.flags.hotspotsChecked[hotspotId] = true;
+  pushBeat(hs.text);
+  if (hs.profText && hs.profText[S.bg.id]) pushBeat(hs.profText[S.bg.id], 'clue');
+  if (hs.clue) addClue(hs.clue);
+  if ((S.stage === 'exam_night' || S.stage === 'exam_late') && S.location !== S.baseRoom) S.sound = clamp(S.sound + 8, 0, 100);
+  advanceTime(hs.mins);
+  render();
+}
+
+function hotspotAction(hotspotId, act) {
+  const list = ROOM_HOTSPOTS[S.location] || [];
+  const hs = list.find(h => h.id === hotspotId);
+  S.activeHotspot = null;
+  if (!hs || act === 'leave') {
+    beginTurn('退开观察');
+    pushBeat('你没有轻举妄动，退后半步重新审视房间。');
+    render(); return;
+  }
+
+  beginTurn(`交互 · ${hs.label}`);
+  if (hotspotId === 'gt_chain') {
+    S.flags.hotspotsChecked[hotspotId] = true;
+    if (act === 'listen') {
+      pushBeat('你屏住呼吸将耳朵贴近门缝三寸处细听——雾外不到五米，沉重拖沓的脚步每走三步便戛然而止，随后传来极轻微的、类似侧耳倾听空气动静的衣料摩挲声。');
+      pushBeat('它走得极慢却极具规律，像是在黑暗中完全依赖听觉巡游。', 'clue');
+      advanceTime(1);
+    } else {
+      pushBeat('你用指背极轻地碰了一下门缝渗出的白霜，一股令人牙酸的阴寒瞬间顺着指骨往上窜，紧接着一层无形弹力把你的手推了回来——保护期外，这扇门绝不是凡人蛮力能撞开的。', 'warn');
+      advanceTime(0.5);
+    }
+  } else if (hotspotId === 'sh_censer') {
+    S.flags.hotspotsChecked[hotspotId] = true;
+    pushBeat(hs.text);
+    if (act === 'sample') {
+      pushBeat('你顺手掏出纸巾捏了一撮冰冷结块的湿香灰包好——待会儿选房交锋时，这就是直接打脸赵川“祠堂聚阳”论的铁证！', 'clue');
+    }
+    if (hs.profText && hs.profText[S.bg.id]) pushBeat(hs.profText[S.bg.id], 'clue');
+    addClue('E01');
+    advanceTime(1);
+  } else if (hotspotId === 'sh_table') {
+    S.flags.hotspotsChecked[hotspotId] = true;
+    pushBeat(hs.text);
+    if (hs.profText && hs.profText[S.bg.id]) pushBeat(hs.profText[S.bg.id], 'clue');
+    addClue('E02');
+    advanceTime(1);
+  } else if (hotspotId === 'ws_ledger') {
+    S.flags.hotspotsChecked[hotspotId] = true;
+    pushBeat('你翻过前面几页早已字迹模糊的民国米粮账目，直到末页骤然触目惊心——原本工整的小楷突然中断，空白处用焦黑炭笔歪歪扭扭划着半行残字：“子时雾倒流，莫唤生人名，莫举明火灯。”');
+    pushBeat('最后那个“灯”字尾笔狠狠拖出半尺长，纸角还沾着发黑的指印，仿佛写字的人话音未落就被硬生生拖离了书案。', 'clue');
+    addClue('E04');
+    advanceTime(1);
+  } else if (hotspotId === 'ws_cabinet') {
+    S.flags.foundDeed = true;
+    S.flags.hotspotsChecked[hotspotId] = true;
+    if (act === 'chen_help' && isHere('chen')) {
+      S.npcs.chen.trust += 10;
+      pushBeat('你低声叫来一旁的陈默，指了指背板错位的暗榫。陈默眼睛一亮，抽出高频破拆改锥顺着木缝极轻一挑——“咔哒”一声微不可闻，夹层完整滑开！');
+      pushBeat('“嘿，还真藏着好东西！”你们从中抽出一张泛黄的《老宅地契》，背面朱砂清楚标明：后院枯井下连着一条 300 米排水暗渠，直通宅外溪涧！', 'dialogue', '陈默');
+      addClue('E07');
+      S.contrib.deed = 10;
+      advanceTime(0.5);
+    } else if (act === 'force') {
+      S.sound = clamp(S.sound + 15, 0, 100);
+      pushBeat(`你直接用${hasItem('knife') ? '户外折刀' : (hasItem('crowbar') ? '短撬棍' : '手边硬木')}狠狠撬开暗榫，“咔嚓”一声脆响在安静的西厢格外刺耳！好在夹层里藏着泛黄的《老宅地契》，标明了后院枯井下 300 米排水暗渠！`);
+      addClue('E07');
+      S.contrib.deed = 10;
+      advanceTime(0.5);
+    } else {
+      const bonus = hasItem('knife') ? 2 : (S.bg.id === 'arch' ? 2 : 0);
+      const ok = rollCheck(hasItem('knife') ? 'agi' : 'obs', 13, bonus, '无声起开暗榫');
+      if (ok) {
+        pushBeat('你顺着错位的榫卯一点点轻推卸力，毫无声响地起开了木柜夹层，抽出一张泛黄的《老宅地契》！背面朱砂清楚标明：后院枯井下连着 300 米排水暗渠，直通宅外溪涧！');
+      } else {
+        S.sound = clamp(S.sound + 12, 0, 100);
+        pushBeat('暗榫受潮胀死，你费了点劲才掰开木板发出一声闷响。好在夹层里藏着《老宅地契》，标明了后院枯井下通往宅外的 300 米排水暗渠！');
+      }
+      addClue('E07');
+      S.contrib.deed = 10;
+      advanceTime(1.5);
+    }
+  } else if (hotspotId === 'es_corpse') {
+    S.flags.hotspotsChecked[hotspotId] = true;
+    pushBeat('你屏住呼吸拨开干尸身前的焦黑碎柴——他的双眼位置空洞发黑，颧骨周围留着诡异的高温灼痕，怀里死死攥着那盏烧得变形的铜油灯。');
+    pushBeat('旁边碎裂的灯罩上还凝着未燃尽的灯油——这不是失火烧死的，而是举着明火招来了专门猎杀热源的东西！', 'clue');
+    addClue('E05');
+    if (S.stage !== 'exam_protect') S.sound = clamp(S.sound + 10, 0, 100);
+    advanceTime(1.5);
+  } else if (hotspotId === 'es_tools') {
+    S.flags.hotspotsChecked[hotspotId] = true;
+    if (act === 'quiet') {
+      pushBeat('你一根根轻轻挪开压在上面的干柴，几乎没发出什么声响，从底层摸出一根沉手的【生锈短撬棍】与半卷【浸油粗麻绳】。');
+      advanceTime(1.5);
+    } else {
+      S.sound = clamp(S.sound + 18, 0, 100);
+      pushBeat('你一把掀开碎木架抓起底下的【生锈短撬棍】与【浸油粗麻绳】，坍落的柴薪哗啦作响，在空屋里回荡了好几秒！', 'warn');
+      advanceTime(0.5);
+    }
+    addItem({ id: 'crowbar', name: '生锈短撬棍', desc: '关键时刻可独自强撬枯井锈死铁闸' });
+    addItem({ id: 'rope', name: '浸油粗麻绳', desc: '结实防滑，可加固木门或枯井垂降' });
+  } else if (hotspotId === 'hl_portrait') {
+    S.flags.hotspotsChecked[hotspotId] = true;
+    pushBeat(hs.text);
+    if (hs.profText && hs.profText[S.bg.id]) pushBeat(hs.profText[S.bg.id], 'clue');
+    if (isHere('shen')) {
+      S.npcs.shen.trust += 6;
+      pushBeat('站在一旁的沈岚瞥了你一眼，低声道：“你也看出来了？只挖双目、不毁耳口——这屋子里的东西没有视觉。”', 'dialogue', '沈岚');
+    }
+    addClue('E09');
+    advanceTime(1);
+  }
+  render();
+}
+
+// ======================== MULTI-TOPIC INTERACTIVE NPC DIALOGUES ========================
+function talkToNpcInRoom(npcId) {
+  if (S.stage === 'exam_protect' && !S.flags.nameChoiceDone) return;
+  const n = S.npcs[npcId];
+  if (!n || !n.alive || n.room !== S.location) return;
+  n.knownLevel = Math.max(n.knownLevel, 1);
+  S.activeHotspot = null;
+  S.activeTalk = npcId;
+
+  beginTurn(`交谈 · ${n.name}`);
+  const greetings = {
+    zhou: S.stage === 'exam_protect'
+      ? '周衡正半侧身守在前院大门附近，手里暗青短斧垂在腿侧，腰间那盏铜壳风灯火苗微微跳动。见你走近，他压低声音：“查得怎么样？有事直说。”'
+      : '周衡靠在门侧擦拭暗青破邪斧，听到脚步抬头看了你一眼，低声道：“别大声，有话压着嗓子说。”',
+    shen: S.stage === 'exam_protect'
+      ? '沈岚正举着一支冷白战术笔灯细细照过主厅墙面与断闩，见你进来头也不回：“主厅废了，门窗全是窟窿。你是来核对线索的，还是来问话的？”'
+      : '沈岚独自坐在桌角阴影里，指尖把玩着一管治疗喷雾，神情冷淡却极度清醒：“有新发现？”',
+    chen: S.stage === 'exam_protect'
+      ? '陈默正拿高频破拆改锥敲打西厢门后的熟铁门闩，回头冲你咧嘴一笑：“哟，你也摸到西厢来了？这破灶房看着阴森，门倒结实得离谱。”'
+      : '陈默把高频改锥别在腰间，搓了搓冻红的手指冲你小声打招呼：“哥们，这鬼天气真冷啊，找我啥事？”',
+    zhao: S.stage === 'exam_protect'
+      ? '赵川正双手背在身后踱步打量祠堂的灵位与厚门板，见你进来嗤笑一声：“小子，你也觉得祠堂最稳妥吧？听叔一句，今晚别乱跑。”'
+      : '赵川阴沉着脸缩在角落摩挲口袋里的黄符，见你凑过来冷哼了一声。',
+    su: S.stage === 'exam_protect'
+      ? '苏晓抱紧帆布包缩在廊檐角落，脸色依旧发白，看见你走近像是抓住救命稻草般轻轻拉住你的袖角：“你、你查到什么了吗？我总觉得门外有东西在看我们……”'
+      : '苏晓缩在墙角死死捂着嘴，眼睛红红地盯着你，生怕自己发出半点声音。',
+    lin: S.stage === 'exam_protect'
+      ? '林哲紧挨在赵川身后，手里还死死攥着黑屏手机，推了推歪掉的眼镜强装镇定：“别听他们吓唬人，哪有什么鬼神，肯定是某种高压电和干冰特效……”'
+      : '林哲抱膝缩在桌角浑身发抖，嘴里神经质地碎碎念着明早的项目汇报。'
+  };
+  pushBeat(greetings[npcId] || `${n.name}停下手头动作，低声看着你。`, 'dialogue', n.name);
+  render();
+}
+
+function npcTopicAction(npcId, topic) {
+  const n = S.npcs[npcId];
+  if (!n || !n.alive || n.room !== S.location) { S.activeTalk = null; render(); return; }
+  if (topic === 'leave') { closeInteraction(); return; }
+
+  const key = `${npcId}_${topic}`;
+  const firstTime = !S.flags.npcTopics[key];
+  S.flags.npcTopics[key] = true;
+  if (S.stage === 'exam_protect') S.flags.npcTalkedProtect[npcId] = true;
+  else S.flags.nightTalks[npcId] = true;
+
+  beginTurn(`与 ${n.name} 交谈`);
+
+  if (npcId === 'zhou') {
+    if (topic === 'intel') {
+      n.knownLevel = 2;
+      pushBeat('周衡拍了拍腰间泛着微弱青光的铜风灯，低声道：“这是我在空间换的【镇魂风灯】，阴气逼近火苗就会变绿。刚才我贴门听过，门外有极慢的拖沓脚步声，保护期一过绝不能硬闯院门。”', 'dialogue', '周衡');
+      pushBeat('你暗暗记下：周衡作为三场队长确实有破邪斧和风灯护身——但那盏风灯里面烧的终究是明火。', 'clue');
+    } else if (topic === 'past') {
+      if (firstTime) n.trust += 10;
+      pushBeat('周衡沉默了两秒，声音放得更轻：“上一场我们五个人，死了个不信邪的新人。死考空间什么都能换，但完美修复极贵，付不起扣成负分当场抹杀。你比大多数新人稳，别信老经验，只信现场物证。”', 'dialogue', '周衡');
+    } else if (topic === 'share_proof') {
+      if (firstTime) n.trust += 14;
+      pushBeat('你压低声音把刚查到的祠堂湿香灰/抓痕或西厢账本炭字透给了周衡。周衡眼神骤然一凝，伸手按住斧柄：“抓痕朝外……好险！幸亏你先去摸了一趟底。待会儿选房交锋，你把证据直接摆出来，我压住赵川！”', 'dialogue', '周衡');
+    }
+  } else if (npcId === 'shen') {
+    if (topic === 'intel') {
+      n.knownLevel = 2;
+      if (firstTime) n.trust += 12;
+      pushBeat('沈岚用冷光笔灯指了指正墙：“主厅门闩全断了，住不了。重点在这幅家主画像——双眼被极其平整地挖空，耳口完好。这宅子里的东西，多半没有视觉。”', 'dialogue', '沈岚');
+      addClue('E09');
+    } else if (topic === 'zhao_bias') {
+      n.knownLevel = 2;
+      if (firstTime) n.trust += 8;
+      pushBeat('沈岚冷笑一声，指尖轻敲袖口的镀银手术刀：“赵川上一场碰巧遇到低阶游魂，靠一张 D 级驱邪符混过关，就以为所有灵异都怕牌位和黄符。死考里死得最快的，往往就是刚活过一场、开始迷信经验的人。”', 'dialogue', '沈岚');
+    } else if (topic === 'share_proof') {
+      if (firstTime) n.trust += 16;
+      pushBeat('你把查到的物证简明扼要地跟沈岚交叉核对。她眼中闪过一丝难得的认可：“证据链很扎实。待会儿表决不管周衡怎么犹豫，我一定站西厢这边。”', 'dialogue', '沈岚');
+    }
+  } else if (npcId === 'chen') {
+    if (topic === 'intel') {
+      n.knownLevel = 2;
+      if (firstTime) n.trust += 10;
+      pushBeat('陈默敲了敲门后厚重的熟铁门闩：“这玩意儿结实得很，后墙还有扇木窗能通后院留退路。对了，墙角那口樟木立柜刚才我撞了一下，背板里头空荡荡的，准有暗格！”', 'dialogue', '陈默');
+      addClue('E03');
+    } else if (topic === 'gear') {
+      n.knownLevel = 2;
+      if (firstTime) n.trust += 8;
+      pushBeat('陈默把高频破拆改锥转了个花：“我以前修车的，没周队那种横练体魄，在空间就专换机械破拆和感应器。真要逃命撬锁叫我准没错——可要是撞上看不见的鬼东西，我这堆铁疙瘩就抓瞎了。”', 'dialogue', '陈默');
+    } else if (topic === 'help_cabinet') {
+      S.activeTalk = null;
+      hotspotAction('ws_cabinet', 'chen_help');
+      return;
+    }
+  } else if (npcId === 'zhao') {
+    if (topic === 'boast') {
+      n.knownLevel = 2;
+      pushBeat('赵川拍得祠堂厚木门砰砰作响：“听叔一句劝，今晚必须住祠堂！我上场靠空间换的【镇宅驱邪符】加上祖宗牌位稳稳熬到天亮，这门板比防盗门还厚，错不了！”', 'dialogue', '赵川');
+      pushBeat('【情报辨析】他连供桌底下和香炉都没细看，完全是在套用上一场的旧经验。', 'warn');
+    } else if (topic === 'confront') {
+      pushBeat('你冷冷指出祠堂香炉里的香灰潮湿结块、供桌内侧全是向外抠挠的断甲抓痕：“这根本不是避邪地，前人就是被堵死在里面的！”');
+      pushBeat('赵川脸色瞬间涨红，恼羞成怒地挥手：“放屁！南方老宅哪个不返潮？抓痕说不定是老鼠啃的！一个零场新人懂个屁，少在这儿妖言惑众！”', 'dialogue', '赵川');
+      pushBeat('你彻底看清了：光靠嘴讲道理绝不可能说服固执的赵川，必须把铁证摆到周衡和沈岚面前，或者直接做好分队退守西厢的准备。', 'clue');
+    }
+  } else if (npcId === 'su') {
+    if (topic === 'intel') {
+      if (firstTime) n.trust += 12;
+      pushBeat('苏晓声音发颤地贴近你耳边：“刚才白雾刚围上院墙的时候，我离大门最近……我听见外头有个很哑、像砂纸磨过一样的声音，在轻轻念一个人的名字……”', 'dialogue', '苏晓');
+      pushBeat('她吓得说不清具体念了谁，但你立刻捕捉到了致命关键词：雾里的东西会念活人的名字！', 'clue');
+    } else if (topic === 'calm') {
+      const ok = rollCheck('wil', 11, S.bg.id === 'medic' ? 3 : 0, '安抚稳态');
+      if (firstTime) n.trust += ok ? 16 : 6;
+      pushBeat(ok
+        ? '你轻声教苏晓调整呼吸，叮嘱她无论听见什么声音都绝不能应声、也别喊任何人的真名。她发抖的肩膀渐渐稳了下来，红着眼用力点头：“我记住了，今晚我一定跟着你！”'
+        : '你低声安抚了苏晓几句，她依旧吓得死死咬住袖口，但至少不再发抖尖叫。');
+    }
+  } else if (npcId === 'lin') {
+    if (topic === 'state') {
+      pushBeat('林哲死死盯着黑屏手机，语无伦次：“刚才我好像听见远处有警笛声！对，肯定是干冰和高压电搞的非法真人秀，咱们躲在祠堂里等警察找来就行了！”', 'dialogue', '林哲');
+      pushBeat('【情报辨析】极度恐慌下的自我麻痹，毫无有效信息。', 'warn');
+    } else if (topic === 'warn') {
+      pushBeat('你低声提醒林哲刚才被电击和黑霜推飞绝非特效，祠堂三面封死没有退路。');
+      pushBeat('林哲却像被踩了尾巴一样猛地拔高声音：“你别咒我行不行？！赵哥好歹活过一场，我不信他难道信你一个跟我一样的新人？！”', 'dialogue', '林哲');
+      pushBeat('你暗暗摇头——他此刻精神已经紧绷到随时可能崩溃的边缘。', 'warn');
+    }
+  }
+
+  advanceTime(firstTime ? (S.stage === 'exam_protect' ? 0.5 : 2) : 0);
+  render();
+}
+
 function moveToRoom(roomId) {
   if (S.stage !== 'exam_protect' && S.stage !== 'exam_night' && S.stage !== 'exam_late') return;
+  if (S.stage === 'exam_protect' && !S.flags.nameChoiceDone) return;
   if (S.location === roomId) return;
   const cur = ROOMS[S.location];
   if (!cur.neighbors.includes(roomId)) {
@@ -717,32 +1319,43 @@ function moveToRoom(roomId) {
   }
   if (roomId === 'well' && S.stage === 'exam_protect') {
     beginTurn();
-    pushBeat('后院通道被浓雾半掩，保护期只剩几分钟，先摸清备选房间更要紧。', 'warn');
+    pushBeat('后院通道被浓雾半掩，先摸清前院几间备选厢房更要紧。', 'warn');
     render(); return;
   }
+  S.activeTalk = null;
+  S.activeHotspot = null;
   S.location = roomId;
   beginTurn(`移步至 · ${ROOMS[roomId].name}`);
   const here = presentNpcs(roomId);
   const whoStr = here.length ? ` 此时房内有：${here.map(n => npcDisplayName(n)).join('、')}。` : ' 房内空无一人。';
   pushBeat(`你穿过湿冷回廊来到【${ROOMS[roomId].name}】。${ROOMS[roomId].desc}${whoStr}`);
-  if (S.stage === 'exam_night' && roomId !== S.baseRoom) {
-    S.sound = clamp(S.sound + 12, 0, 100);
-    pushBeat('保护期已过，你在浓雾回廊间穿行，腕表心率明显加快。', 'warn');
+  if ((S.stage === 'exam_night' || S.stage === 'exam_late') && roomId !== S.baseRoom) {
+    S.sound = clamp(S.sound + 15, 0, 100);
+    pushBeat('夜雾已深，你放轻脚步在回廊间穿行，腕表心率微微抬升。', 'warn');
+  } else if (S.stage === 'exam_protect' && S.timeMin >= S.protectEndMin) {
+    S.sound = clamp(S.sound + 8, 0, 100);
+    pushBeat('保护期已过，回廊里的白雾正缓缓增厚，鞋底踩在湿石板上带起轻微声响。', 'warn');
   }
-  advanceTime(S.stage === 'exam_protect' ? 2 : 5);
+  advanceTime(S.stage === 'exam_protect' ? 0.5 : 2);
   render();
 }
 
-// ======================== 20:50 VOTE & SPLIT-PARTY SYSTEM ========================
-function resolveProtectionEnd() {
+// ======================== VOTE & SPLIT-PARTY SYSTEM ========================
+function resolveProtectionEnd(forcedByFog = false) {
+  S.activeTalk = null;
+  S.activeHotspot = null;
   S.stage = 'exam_vote';
   S.location = 'courtyard';
   S.flags.voteStep = 1;
+  if (S.timeMin < S.protectEndMin) S.timeMin = S.protectEndMin;
+  playSfx('watch');
   Object.values(S.npcs).forEach(n => { n.room = 'courtyard'; n.knownLevel = Math.max(n.knownLevel, 1); });
-  beginTurn('20:50 · 保护期结束，七人选房交锋');
-  pushBeat('腕表蓝光骤灭！厚木院门发出一声沉闷冰裂，彻底被寒霜封死。七人迅速聚回前院屋檐下。');
+  beginTurn(`${fmtTime(S.timeMin)} · 七人聚首，选房交锋`);
+  pushBeat(forcedByFog
+    ? '白雾终于彻底合拢院落，厚木院门被寒霜完全封死，院墙外拖沓的脚步声越来越清晰！你顶着寒意急忙撤回前院屋檐下，七人被迫立刻定下今夜落脚点。'
+    : '你回到前院屋檐下，其余六人也陆续收拢过来。院门已渐渐挂满白霜，湿冷雾气正漫过青石板，必须立刻决定今晚的落脚房间。');
   pushBeat('“别磨蹭了，全员进祠堂！”赵川第一个拍板，“门板最厚，又有牌位和我这张空间换的驱邪符镇着，最稳妥！”林哲立刻附和：“对！西厢黑得像坟地，必须去祠堂！”', 'dialogue', '赵川');
-  pushBeat('周衡眉头微皱，和抱臂站在一旁的沈岚同时看向你：“时间到了，你查出什么没有？”', 'dialogue', '周衡');
+  pushBeat('周衡眉头微皱，和抱臂站在一旁的沈岚同时看向你：“都查得差不多了，你那边发现什么没有？”', 'dialogue', '周衡');
   render();
 }
 
@@ -798,8 +1411,10 @@ function finishRound1() {
   S.rounds.r1 = true;
   S.publishedRounds.r2 = true; // REDLINE #1: Round 2 dynamically published ONLY AFTER Round 1!
   S.stage = 'exam_night';
-  pushBeat('【第一轮·抉择 已完成】基础分 +20 已记入腕表。', 'system');
-  pushBeat('腕表再次冰冷震动，新题面缓缓浮现：\n【第二轮·洞悉】查明今夜古宅内“敲门声”的真实规律。（基础分：25）', 'system');
+  playSfx('watch');
+  pushBeat('【第一轮 · 抉择 已完成】基础分 +20 已记入腕表。', 'system');
+  pushBeat('厚木门合拢落闩的刹那，屋里骤然静得只剩几道粗重喘息。门缝底下贴着一层发白的寒霜，周衡腰间那盏镇魂风灯在潮冷空气里微微泛出一丝诡异的青绿。');
+  pushBeat('腕表再度冰冷震动，屏幕跳出第二轮残缺题面：\n【第二轮 · 补全】今夜叩门者无目，唯循【██】与【██】索命。（基础分：25）', 'system');
   advanceTime(8);
   render();
 }
@@ -807,40 +1422,52 @@ function finishRound1() {
 // ======================== 21:30 SHRINE FLOOD (OBJECTIVE EVENT) ========================
 function resolveShrineFlood() {
   S.flags.shrineResolved = true;
+  S.activeTalk = null;
+  S.activeHotspot = null;
   const inShrine = Object.values(S.npcs).filter(n => n.alive && n.room === 'shrine');
 
   // Case 1: Nobody in shrine -> safe!
-  if (inShrine.length === 0 && S.baseRoom !== 'shrine') return;
+  if (inShrine.length === 0 && S.baseRoom !== 'shrine') return false;
 
   // Case 2: Player is in shrine with everyone -> chaotic forced breakout to West Wing
   if (S.baseRoom === 'shrine') {
     S.baseRoom = 'west'; S.location = 'west';
     Object.values(S.npcs).forEach(n => { if (n.alive) n.room = 'west'; });
-    S.hp = clamp(S.hp - 12, 0, S.maxHp);
-    S.npcs.zhao.hp -= 35; S.npcs.zhou.hp -= 15;
+    S.npcs.zhao.hp = Math.max(20, S.npcs.zhao.hp - 35);
+    S.npcs.zhou.hp = Math.max(40, S.npcs.zhou.hp - 15);
     S.npcs.zhou.knownLevel = 2; S.npcs.zhao.knownLevel = 2;
-    pushBeat('21:30，祠堂潮湿供桌下突然倒灌出刺骨浓雾，灵位接连翻倒！赵川慌忙甩出空间换的【镇宅驱邪符】，黄符瞬间烧成黑灰毫无用处！', 'danger');
-    pushBeat('危急关头，周衡爆发出 C 级横练体魄，挥起暗青破邪消防斧硬生生劈开被寒霜封死的木门，掩护众人狼狈冲出祠堂退守西厢！赵川右臂冻伤发紫，彻底闭上了嘴。', 'danger');
-    return;
+    beginTurn('21:30 · 祠堂阴雾倒灌，全员破门溃退');
+    pushBeat('21:30，祠堂潮湿供桌下突然倒灌出刺骨浓雾，木架上的灵位接二连三砸落在地！赵川脸色煞白，慌忙甩出空间换的【镇宅驱邪符】——黄符刚触到寒雾便“嗤”地卷成黑灰，毫无用处！', 'danger');
+    pushBeat('危急关头，周衡爆发出 C 级横练体魄，抡起暗青破邪消防斧硬生生劈开被寒霜封死的门板，碎木混着冰渣四溅，掩护众人狼狈冲出祠堂退守西厢！赵川右臂冻伤发紫，蜷在灶角彻底闭上了嘴。', 'danger');
+    applyDamage(12, '祠堂阴雾倒灌瞬间冻裂了你的肺叶。腕表冰冷提示：【考生 CN-09471 已死亡】。');
+    return true;
   }
 
   // Case 3: Player split off to West Wing, while others are in Shrine!
   const zhouInShrine = S.npcs.zhou.alive && S.npcs.zhou.room === 'shrine';
   if (zhouInShrine) {
+    const wasAway = S.location !== 'west';
+    S.location = 'west';
     // Zhao's talisman fails -> Zhao & Lin die in the shrine/fog; Zhou & Chen break out wounded!
     S.npcs.zhao.alive = false; S.npcs.zhao.hp = 0;
     S.npcs.lin.alive = false; S.npcs.lin.hp = 0;
     S.npcs.zhou.hp = 65; S.npcs.chen.hp = 60;
     S.npcs.zhou.knownLevel = 2;
     S.flags.zhouKnockedHelp = true;
+    playSfx('danger');
     beginTurn('21:30 · 祠堂惨剧与拍门求救');
-    pushBeat('21:30，东侧祠堂突然爆出凄厉惨叫与沉闷的劈砍巨响！紧接着你的腕表接连两次冰冷震动：【考生赵川已死亡】【考生林哲已死亡】！', 'danger');
-    pushBeat('十秒后，西厢门外响起急促而沉重的拍门声——不是有节奏的诡异敲门，而是周衡嘶哑的喘息与低喝：“开门！是我！祠堂塌雾了，陈默受伤了，快开门！”', 'danger');
-    pushBeat('门外寒雾翻涌，你必须立刻决定：冒着放雾气与引来盲灵的风险开门放周衡、陈默进来，还是冷血闭门自保？');
+    if (wasAway) pushBeat('东侧祠堂骤然爆出凄厉惨叫与劈砍巨响，你立刻悄无声息退回西厢反锁木门！', 'danger');
+    pushBeat(`21:30，东侧祠堂突然爆出凄厉惨叫与沉闷的劈砍巨响！紧接着你的腕表接连两次冰冷震动：【考生 ${S.npcs.zhao.code} 已死亡】【考生 ${S.npcs.lin.code} 已死亡】！`, 'danger');
+    pushBeat('十秒后，西厢门外响起急促而沉重的拍门声——不是有节奏的诡异轻叩，而是周衡嘶哑的喘息与低喝：“开门！是我！祠堂塌雾了，陈默受伤了，快开门！”', 'danger');
+    pushBeat('门外寒雾翻涌，你必须立刻决定：拉开铁门闩放外面的幸存者进来，还是按死门闩闭门自保？');
+    return true;
   } else {
     // No Zhou in shrine -> everyone in shrine dies!
     inShrine.forEach(n => { n.alive = false; n.hp = 0; });
-    pushBeat(`21:32，东侧祠堂传来绝望的抓门声，很快归于死寂。腕表连续震动：${inShrine.map(n => `【考生${n.name}已死亡】`).join('')}。你暗自庆幸自己没有跟着进那座死瓮。`, 'danger');
+    playSfx('danger');
+    beginTurn('21:30 · 祠堂死寂');
+    pushBeat(`21:30，东侧祠堂传来绝望的抓门声，很快归于死寂。腕表连续冰冷震动：${inShrine.map(n => `【考生 ${n.code} 已死亡】`).join('')}。西厢内寒气彻骨，你暗自庆幸没有跟着进那座死瓮。`, 'danger');
+    return true;
   }
 }
 
@@ -852,12 +1479,16 @@ function respondZhouDoor(openIt) {
     shrineLeft.forEach(n => { n.room = 'west'; });
     S.npcs.zhou.trust += 25; S.npcs.chen.trust += 20;
     S.oilLampLit = true; // Zhou brings his spirit lamp in
-    pushBeat(`你咬牙拉开铁门闩，一把将满身霜血、拎着破邪斧的${shrineLeft.map(n=>n.name).join('、')}拽进西厢，迅速反锁！`);
-    pushBeat('周衡靠着墙大口喘气，眼里满是后怕与感激：“赵川那张驱邪符屁用没有，祠堂根本没退路……今天算我欠你一条命！”', 'dialogue', '周衡');
+    pushBeat(`你咬牙拉开铁门闩，一股夹着霜雪的冷风瞬间灌进屋里！你一把将满身霜血、拎着破邪斧的${shrineLeft.map(n=>n.name).join('、')}拽进西厢，反手死死落锁！`);
+    pushBeat('周衡靠着土墙大口喘气，呼出的白雾里带着血腥味，眼里满是后怕与感激：“赵川那张驱邪符屁用没有，祠堂根本没退路……今天算我欠你一条命！”', 'dialogue', '周衡');
+    if (hasItem('medkit')) {
+      pushBeat('周衡与陈默身上都有明显冻伤与擦裂，你包里的便携外伤急救包或许能派上用场。', 'clue');
+    }
   } else {
     shrineLeft.forEach(n => { n.alive = false; n.hp = 0; });
-    pushBeat('你死死按住冰冷的熟铁门闩，一动不动。门外的拍打与喘息在浓雾里撑了不到半分钟，伴随着斧刃劈空声彻底消失。');
-    pushBeat(`腕表连续冰冷震动：${shrineLeft.map(n=>`【考生${n.name}已死亡】`).join('')}。西厢内外彻底陷入死寂。`, 'danger');
+    playSfx('danger');
+    pushBeat('你死死按住冰冷的熟铁门闩，一动不动。门外的拍打与喘息在浓雾里撑了不到半分钟，伴随着斧刃劈空的沉闷响动彻底消失。');
+    pushBeat(`腕表连续冰冷震动：${shrineLeft.map(n=>`【考生 ${n.code} 已死亡】`).join('')}。西厢内外彻底陷入死寂。`, 'danger');
   }
   advanceTime(6);
   render();
@@ -889,11 +1520,11 @@ function toggleLamp() {
   if (!S.oilLampLit) {
     S.heat = 0;
     if (hasItem('led')) {
-      pushBeat('你压灭了明火风灯，改用自己的冷光 LED 笔灯——弱冷光毫无热源，压在窗纸外的白雾明显散开了些。', 'clue');
+      pushBeat('你压灭了明火风灯，改用自己的冷光 LED 笔灯——弱冷光毫无热源，压在窗纸外的白雾肉眼可见地松动了些。', 'clue');
     } else if (isHere('shen')) {
-      pushBeat('你说服大家熄灭了明火风灯，改用沈岚的战术冷光灯低档照明。屋内气温骤降，但窗外寒雾的压迫感减轻了许多。', 'clue');
+      pushBeat('你说服大家熄灭了明火风灯，改用沈岚的战术冷光灯低档照明。屋内气温骤降，可窗外贴着窗纸的寒雾明显散开了些。', 'clue');
     } else {
-      pushBeat('你彻底熄灭明火，西厢陷入伸手不见五指的沉暗。窗外的雾压明显松动。');
+      pushBeat('你彻底熄灭明火，西厢陷入伸手不见五指的沉暗，只剩腕表微光在黑暗里静静跳动。窗外的雾压明显松动。');
     }
   } else {
     S.heat = clamp(S.heat + 22, 0, 100);
@@ -903,42 +1534,183 @@ function toggleLamp() {
   render();
 }
 
+function triggerNightLampEvent() {
+  S.flags.nightLampEventDone = true;
+  S.flags.activeMidEvent = 'night_lamp';
+  S.activeTalk = null;
+  S.activeHotspot = null;
+  playSfx('frost_crack');
+  beginTurn('21:15 · 灯火与门缝的试探');
+  if (isHere('zhou') && S.oilLampLit) {
+    pushBeat('夜里九点一刻，屋里的湿冷骤然加重。桌心那盏铜壳镇魂风灯的火苗忽然发出一声细微爆响，原本暖黄的光晕肉眼可见地偏成了病态的青绿。', 'warn');
+    pushBeat('你下意识扫向门底——一缕极薄的冰白霜雾正顺着门缝往里探了足足两寸，它并没有四散飘开，而是像活物般笔直蜷曲着，朝风灯散发暖意的方向缓慢爬来。', 'clue');
+    pushBeat('“不是寒气乱钻。”沈岚压低嗓音，指节极轻地叩了叩桌面，“窗纸外面的湿雾正在对着灯芯的位置凝霜——外头那东西被热源钉住了。”', 'dialogue', '沈岚');
+    if (isHere('zhao')) {
+      pushBeat('“胡扯！”赵川喉头滚动，压着嗓子却满脸焦躁，“周队这灯是花积分换的镇魂器！把火灭了屋里伸手不见五指，真冲进来连斧子往哪挥都看不清！”', 'dialogue', '赵川');
+    }
+    pushBeat('周衡按在铜罩调节阀上的手指停顿了一瞬，抬眼看向你——显然，他想听你拿主意。');
+  } else {
+    pushBeat('夜里九点一刻，没有明火的屋子冷得像冰窖。木地板缝里透上来的寒气顺着裤脚往骨头缝里钻。', 'warn');
+    pushBeat('就在这时，檐下传来一阵极其缓慢、带着湿泥黏滞感的摩擦声——有什么修长而冰冷的东西正贴着外墙窗纸滑过，在窗格前停驻了整整十秒。因为屋内一片漆黑、毫无热源，它最终只是极轻地蹭了蹭木棂，缓缓漂向院子深处。', 'clue');
+  }
+}
+
+function triggerNightEchoEvent() {
+  S.flags.nightEchoEventDone = true;
+  S.flags.activeMidEvent = 'night_echo';
+  S.activeTalk = null;
+  S.activeHotspot = null;
+  playSfx('watch');
+  beginTurn('21:42 · 院外模仿音前兆');
+  pushBeat('九点四十二分，整座古宅连风声都彻底断绝。院心方向突然飘来一道干涩、扁平、音调略微跑偏的沙哑声响，像是一台卡带的旧录音机，生硬地重复着傍晚有人在院里说过的一句半截话。', 'danger');
+  if (isHere('chen')) {
+    pushBeat('桌角陈默那台巴掌大的震动感应器无声亮起两下暗黄警报灯——没有脚步震动，只有一股贴着墙根移动的低频共鸣。陈默脸色一沉，立刻反手捂住指示灯。', 'clue');
+  }
+  if (isHere('lin')) {
+    pushBeat('缩在墙角的林哲牙齿磕得咯咯作响，双手死死抱住膝盖，声音发颤地挤出气音：“刚才……外面是不是有走散的人在喊话？要不要……看看？”', 'dialogue', '林哲');
+  } else {
+    pushBeat('那道声音在浓雾里停顿三秒，又换了另一个生硬的语调重复了一遍——它正在一点点贴近你的房门，距离十点整只剩不到二十分钟。');
+  }
+}
+
+function triggerLateHuddleEvent() {
+  S.flags.lateHuddleDone = true;
+  S.flags.activeMidEvent = 'late_huddle';
+  S.activeTalk = null;
+  S.activeHotspot = null;
+  beginTurn('23:05 · 黑暗里的无声推演');
+  const allies = presentNpcs();
+  if (allies.length > 0) {
+    pushBeat('夜里十一点零五分，距十点那场撞门惊变已过去近一小时。彻底熄灯后的房间冻得像停尸房，窗棂内侧结出一层细密白霜。腕表上冰冷的考生编号死亡播报仍沉甸甸压在每个人心口。');
+    pushBeat('黑暗里没人敢开口说话。沈岚把冷光笔灯调到最弱一档贴地照亮灶台一角，周衡蹲下身，用指尖在冷掉的草木灰上缓缓划出一行字——' + (S.publishedRounds.r3 ? '【卯时前，离开白雾】' : '【怎么熬到天亮？】') + '。', 'clue');
+    if (isHere('chen')) {
+      pushBeat('陈默轻点了两下腕表表盘，又指了指窗纸裂缝——此刻外头的白雾仍像潮水般往里死压，屋里的氧气正一点点变得稀薄沉重。');
+    }
+  } else {
+    pushBeat('夜里十一点零五分，独自蜷缩在漆黑冰冷的屋子里，每一次呼气都在面前凝成白雾。窗纸裂缝外，浓雾正像沉重潮水般持续向内挤压，木框不时发出不堪重负的细响。');
+    pushBeat('你盯着腕表幽微的荧光，脑中把今晚所有碎片重新拼合——硬熬到天亮绝不是死考会白送的生路，必须盯紧子时前后的任何异常变化。', 'clue');
+  }
+}
+
+function midEventAction(eventId, opt) {
+  S.flags.activeMidEvent = null;
+  beginTurn();
+  if (eventId === 'night_lamp') {
+    if (opt === 'extinguish_now') {
+      S.oilLampLit = false; S.heat = 0; S.flags.lampDebateDone = true;
+      if (S.npcs.shen) S.npcs.shen.trust = clamp(S.npcs.shen.trust + 8, 0, 100);
+      if (S.npcs.zhou) S.npcs.zhou.trust = clamp(S.npcs.zhou.trust + 5, 0, 100);
+      if (S.npcs.zhao) S.npcs.zhao.trust = clamp(S.npcs.zhao.trust - 6, 0, 100);
+      pushBeat('你果断伸手按住周衡的铜罩调节阀：“热源正在替门外的东西指路——现在就灭灯，改用冷光笔灯。”');
+      pushBeat('周衡目光一凝，干脆利落地压灭灯芯。屋内瞬间沉入冷暗，赵川在暗处不满地闷哼一声，可门缝底下那道原本步步紧逼的白霜竟肉眼可见地停住了蔓延。', 'clue');
+    } else if (opt === 'shield_test') {
+      S.heat = clamp(S.heat + 6, 0, 100);
+      if (S.npcs.shen) S.npcs.shen.trust = clamp(S.npcs.shen.trust + 5, 0, 100);
+      pushBeat('你随手拿起桌边半个破铁盆，挡在风灯面向大门的一侧。不到十秒，门缝里渗进来的白霜竟真的顺着热气缺口拐了个弯，直扑铁盆漏光的方向！', 'clue');
+      pushBeat('周衡瞳孔微缩，立刻把灯芯拧到豆大一丝，神情凝重地压低声音：“……它真在找热源。你随时决定要不要彻底灭掉。”', 'dialogue', '周衡');
+    } else if (opt === 'keep_lit') {
+      S.heat = clamp(S.heat + 12, 0, 100);
+      if (S.npcs.zhao) S.npcs.zhao.trust = clamp(S.npcs.zhao.trust + 6, 0, 100);
+      pushBeat('你示意暂且留着这盏微火，先把赵川和林哲紧绷的神经稳住。火苗在屋里晃出拉长的暗影，窗纸外那层湿冷雾气压得更沉了。', 'warn');
+    } else if (opt === 'check_crack') {
+      S.sta = clamp(S.sta - 4, 0, 100);
+      pushBeat('你屏住呼吸贴近门缝默数节律——确认在屋内无火无声的状态下，门外游荡的盲灵最多停顿十秒就会滑走。你把这条时间规律牢牢记在心里。', 'clue');
+    } else {
+      S.sta = clamp(S.sta + 4, 0, 100);
+      pushBeat('你缩回灶台阴影里用衣领捂住口鼻，放缓呼吸节奏保存体温，静静听着那股寒意彻底远去。');
+    }
+  } else if (eventId === 'night_echo') {
+    if (opt === 'gag_warning') {
+      S.sound = clamp(S.sound - 10, 0, 100);
+      if (isHere('lin')) S.npcs.lin.trust = clamp(S.npcs.lin.trust + 5, 0, 100);
+      if (isHere('su')) S.npcs.su.trust = clamp(S.npcs.su.trust + 6, 0, 100);
+      pushBeat('你立刻竖起食指死死压在唇前，眼神冷厉地扫过每个人——尤其是牙齿打颤的林哲。');
+      pushBeat('苏晓眼眶通红，立刻双手死捂住嘴拼命点头；林哲僵了一下，也强行把喉咙里的颤音咽了回去。屋里重新坠入死寂，只等十点整的真正考验。', 'clue');
+    } else if (opt === 'check_sensor') {
+      pushBeat('你俯身盯着陈默桌上的感应器频率，结合门外那道跑偏的模仿音很快反应过来：它根本不是走散的活人，而是把傍晚在院里收集到的零碎人声拼成鱼饵，正在逐一试探各间厢房。', 'clue');
+    } else {
+      S.sta = clamp(S.sta - 5, 0, 100);
+      S.doorDurability = clamp(S.doorDurability + 10, 0, 100);
+      pushBeat('趁门外还在院里试探游荡，你无声挪到门侧阴影里踩实脚下发力点，顺手把备用木楔卡在伸手就能抓到的位置。', 'clue');
+    }
+  } else if (eventId === 'late_huddle') {
+    if (opt === 'ash_analyze') {
+      if (isHere('zhou')) S.npcs.zhou.trust = clamp(S.npcs.zhou.trust + 6, 0, 100);
+      if (isHere('shen')) S.npcs.shen.trust = clamp(S.npcs.shen.trust + 6, 0, 100);
+      pushBeat('你蹲到灶台旁，用指尖在冷灰里圈出【子时】与【后院】两个词，随后指了指窗缝里压进来的白雾，做了个“盯紧风向反转”的手势。');
+      pushBeat('沈岚微不可察地点了点头，迅速收起笔灯；周衡将短斧横在膝上，无声挪到了后窗边警戒。', 'clue');
+    } else if (opt === 'tend_quiet') {
+      S.sta = clamp(S.sta + 10, 0, 100);
+      pushBeat('你借着极弱的腕表微光重新系紧鞋带、检查随身物品，靠着冷土墙做了一组深慢调息，流失的体力恢复了些许。', 'clue');
+    } else {
+      S.contrib.well += 1;
+      pushBeat('你把耳朵贴在后墙木窗框上屏息细听——浓雾深处的后院枯井方向，隐约传来极低沉的闷响，仿佛地底深处有一条暗渠正在缓慢蓄水泄流。', 'clue');
+    }
+  }
+  advanceTime(4);
+  render();
+}
+
 function waitUntilKnock() {
-  const diff = Math.max(5, 22 * 60 - S.timeMin);
+  const anyoneInShrine = S.baseRoom === 'shrine' || Object.values(S.npcs).some(n => n.alive && n.room === 'shrine');
+  let nextMilestone = 22 * 60;
+  let waitMsg = '时间一分一秒爬向夜里十点，灶膛里最后一丝余温彻底散尽。屋里没人说话，只听见彼此压抑的呼吸和门外白雾摩擦窗纸的沙沙声。';
+  if (!S.flags.nightLampEventDone && S.timeMin < 21 * 60 + 15) {
+    nextMilestone = 21 * 60 + 15;
+    waitMsg = '夜色一点点沉下来，屋外白雾贴着瓦檐缓缓沉降。屋里暂时无人作声，只有冷空气顺着砖缝往衣领里钻……';
+  } else if (!S.flags.shrineResolved && anyoneInShrine && S.timeMin < 21 * 60 + 30) {
+    nextMilestone = 21 * 60 + 30;
+    waitMsg = '时间滑向夜里九点半，整座宅子静得反常，白雾正顺着门槛缝隙越积越厚，墙角木头发出细微的受潮崩响……';
+  } else if (!S.flags.nightEchoEventDone && S.timeMin < 21 * 60 + 42) {
+    nextMilestone = 21 * 60 + 42;
+    waitMsg = '九点半过后，院子里的雾色彻底凝成一片死白。远处的拖沓脚步声忽然停了，空气像拉满的弓弦般一点点绷紧……';
+  }
+  const diff = Math.max(4, nextMilestone - S.timeMin);
   beginTurn('静默守夜');
-  pushBeat('时间一分一秒爬向夜里十点，灶膛最后一丝余温散尽，院子里的白雾愈发沉重。');
+  pushBeat(waitMsg);
   advanceTime(diff);
   render();
 }
 
-// ======================== ACT 3: DYNAMIC 22:00 CRISIS (BASED ON presentNpcs!) ========================
+// ======================== ACT 3: DYNAMIC 22:00 CRISIS (BASED ON presentNpcs & oilLampLit!) ========================
 function trigger2200Crisis() {
+  S.activeTalk = null;
+  S.activeHotspot = null;
+  S.flags.activeMidEvent = null;
   S.stage = 'exam_crisis';
   S.location = S.baseRoom || 'west';
   S.timeMin = 22 * 60;
   S.flags.crisisStep = 1;
+  playSfx('knock');
+  FXDirector.trigger('shake');
   beginTurn('22:00 · 第一次敲门惊变');
 
   const linHere = isHere('lin');
   const suHere = isHere('su');
-  pushBeat('腕表屏幕无声泛红，心率曲线骤然拉高！窗纸外翻涌的白雾仿佛被某种庞然大物硬生生挤开。', 'danger');
+  pushBeat('22:00 整，腕表屏幕无声泛红，心率折线骤然拉高！屋里的空气仿佛瞬间凝固，窗纸外翻涌的白雾像是被某种修长而冰冷的庞然大物硬生生挤开。', 'danger');
 
   if (linHere && suHere) {
-    pushBeat('“笃、笃、笃。”门外响起极有节奏的三声轻叩，门缝外渗进一道模仿苏晓母亲的干涩声音：“苏晓……外面好冷……开门……”', 'danger');
-    pushBeat('苏晓浑身僵直，而缩在桌角的林哲精神彻底绷断——眼看就要失控尖叫！');
+    pushBeat('“笃、笃、笃。”门外响起极有节奏的三声轻叩，不急不缓。紧接着，门缝底下渗进一道干涩扭曲、却诡异模仿着苏晓母亲腔调的呼唤：“苏晓……外面好冷……开门……”', 'danger');
+    pushBeat('苏晓浑身僵直得像块石头，眼泪顺着下巴直往下掉；缩在桌角的林哲脸色惨白如纸，喉结剧烈滚动，整根神经眼看就要彻底绷断！');
   } else {
     // Solo or minority branch without Lin! Blind spirit calls YOUR real name directly!
     pushBeat(`“笃、笃、笃。”门外响起极有节奏的三声轻叩。紧接着，门缝底下渗进一道干涩扭曲、却精准念出你本名的诡异呼唤：“${S.realName}……${S.realName}……开门……”`, 'danger');
     if (S.aliasUsed) {
-      pushBeat(`你脊背瞬间窜起一股寒气——进宅后你明明一直用假名“${S.aliasUsed}”，门外的东西却能直接读出你的真名！`, 'clue');
+      pushBeat(`你脊背瞬间窜起一股寒气——进宅后你明明一直用代号“${S.aliasUsed}”，门外的东西却能直接读出你的真名！`, 'clue');
     }
     if (S.oilLampLit) {
-      pushBeat('更糟的是，屋里还亮着明火风灯，窗纸外猛地贴上一张没有眼睛、嘴角裂至耳根的苍白轮廓！', 'danger');
+      pushBeat('更糟的是，屋里还亮着明火风灯，窗纸外猛地贴上一张没有眼睛、嘴角裂至耳根的苍白轮廓，木门发出一声沉闷吱呀！', 'danger');
     } else {
-      pushBeat('屋里一片漆黑没有明火，那道无眼苍白轮廓只贴着窗纸左右缓缓偏头，像在等你开口应声！');
+      pushBeat('幸好屋里早已彻底熄灭明火、一片漆黑，那道无眼苍白轮廓只贴着窗纸左右缓缓偏头，像在死死等待你开口应声！', 'clue');
     }
   }
   render();
+}
+
+function postCrisisGuidance() {
+  return S.rounds.r2
+    ? '你早已补全【第二轮 · 补全】题面，现在只需熄灯静候子时异变，或补查后院逃生出路。'
+    : '劫后余生，屋里陷入死寂。请打开右上角「线索板」，整合证据补全【第二轮 · 补全】的残缺题面。';
 }
 
 function crisisAction(step, opt) {
@@ -949,57 +1721,78 @@ function crisisAction(step, opt) {
   if (linHere) {
     if (step === 1) {
       pushBeat(opt === 'cover_su' ? '你抢先按住僵直的苏晓肩膀，示意她千万别应声。' : '你贴近门侧阴影，死死盯住窗纸外晃动的无眼轮廓。');
-      pushBeat('可缩在桌角的林哲还是彻底崩溃了，脱口尖叫出一句：“苏晓你别看门缝！！”', 'dialogue', '林哲');
-      pushBeat('“苏晓”二字落地刹那，试探性的敲门瞬间化作震耳欲聋的狂暴撞击！窗纸外死死贴上一张无眼裂口的苍白面孔！', 'danger');
+      pushBeat('可缩在桌角的林哲还是彻底崩溃了，在极度窒息中脱口尖叫出一句：“苏晓你别看门缝！！”', 'dialogue', '林哲');
+      playSfx('danger');
+      pushBeat('“苏晓”二字落地刹那，试探性的轻叩瞬间化作震耳欲聋的狂暴撞击！门框震得簌簌掉灰，窗纸外死死贴上一张无眼裂口的苍白面孔！', 'danger');
+      if (!S.oilLampLit) {
+        pushBeat('好在你此前早已劝灭了明火风灯，黑暗中盲灵只能凭声音盲目猛撞，攻势明显偏斜！', 'clue');
+      }
       addClue('E06');
       S.flags.crisisStep = 2;
     } else if (step === 2) {
       if (opt === 'extinguish') {
         S.oilLampLit = false; S.heat = 0; S.contrib.door += 3;
-        pushBeat('电光火石间你一把拍灭周衡的镇魂风灯！火光熄灭刹那，疯狂撞门的盲灵攻势明显一滞！', 'clue');
+        pushBeat('电光火石间你一把拍灭周衡的镇魂风灯！火光熄灭刹那，疯狂撞门的盲灵攻势明显一滞，黑暗瞬间吞没了整间西厢！', 'clue');
+      } else if (opt === 'brace_dark') {
+        S.sta = clamp(S.sta - 10, 0, 100); S.contrib.door += 3;
+        pushBeat('屋里没有明火干扰，你借着门闩余势稳稳配合周衡顶死门板，震得肩胛发麻，却硬生生卸掉了盲灵最狂暴的一波冲撞！', 'clue');
+      } else if (opt === 'cover_su_dark') {
+        S.contrib.door += 3; S.npcs.su.trust += 15;
+        pushBeat('黑暗中你一把拉住僵直的苏晓退往灶台死角死死捂住她的嘴，避免二次尖叫引爆仇恨；周衡独自挥斧稳住了大门！', 'clue');
       } else {
         S.sta = clamp(S.sta - 15, 0, 100); S.doorDurability -= 25;
         pushBeat('你扑上去协助周衡硬顶木门，震得双臂发麻！明火仍在晃动，门板被撞得木屑纷飞！');
       }
       S.flags.crisisStep = 3;
     } else if (step === 3) {
-      const ok = rollCheck('agi', 12, S.bg.id === 'arch' ? 2 : 0, '卡死门闩');
+      const doorBonus = (S.bg.id === 'arch' ? 2 : 0) + (S.flags.reinforcedDoor ? 2 : 0);
+      const ok = rollCheck('agi', 12, doorBonus, '卡死门闩');
       if (ok) { S.contrib.door += 2; pushBeat('你抄起木楔死死卡进铁闩槽，顺手捂住苏晓退入灶台死角。'); }
-      else { S.hp = clamp(S.hp - 10, 0, S.maxHp); pushBeat('你强行卡死门闩，飞溅的木刺在手臂划开一道血口。'); }
-      pushBeat('就在木门堪堪顶住时，发疯的林哲竟推开后窗翻进浓雾大喊：“周衡救我！陈默救我！！”', 'danger');
-      pushBeat('门外撞击戛然而止。无眼白影化作寒风扑向后窗，十步外传来一声戛然而止的惨叫。腕表震动：【考生林哲已死亡】。', 'system');
+      else {
+        if (applyDamage(10, '木门碎裂飞溅的木刺刺穿了你的要害。腕表冰冷提示：【考生 CN-09471 已死亡】。')) return;
+        pushBeat('你强行卡死门闩，飞溅的木刺在手臂划开一道血口。');
+      }
+      pushBeat('就在木门堪堪顶住时，精神彻底崩溃的林哲竟一把推开后窗翻进浓雾，撕心裂肺地大喊：“周衡救我！陈默救我！！”', 'danger');
+      playSfx('danger');
+      pushBeat(`门外撞击戛然而止。无眼白影化作刺骨寒风扑向后窗，十步外传来一声骤然掐断的惨叫。三秒后，屋内所有人的腕表同时冰冷震动：【考生 ${S.npcs.lin.code} 已死亡】。`, 'system');
       S.npcs.lin.alive = false; S.npcs.lin.hp = 0;
       S.stage = 'exam_late';
       S.timeMin = 22 * 60 + 20;
-      pushBeat('劫后余生，屋里陷入死寂。请打开右上角「线索板」，整合证据并提交【第二轮·洞悉】结论。');
+      pushBeat(postCrisisGuidance());
     }
     render(); return;
   }
 
   // Branch B: Solo or Minority without Lin!
   if (step === 1) {
+    const wasLit = S.oilLampLit;
     if (opt === 'extinguish_silent') {
       S.oilLampLit = false; S.heat = 0; S.contrib.door += 4;
-      const ok = rollCheck('wil', 12, S.aliasUsed ? 2 : 0, '死寂屏息抗拒呼名');
+      const bonus = (S.aliasUsed ? 2 : 0) + (wasLit ? 0 : 2);
+      const ok = rollCheck('wil', 12, bonus, '死寂屏息抗拒呼名');
+      addClue('E06');
       if (ok) {
-        addClue('E06');
-        pushBeat('你迅速熄灭一切明火，死死咬住牙关绝不回应门外对真名的呼唤！那张无眼白脸贴着窗纸停了整整一分钟，终因捕捉不到明火与真名应答，缓缓退回浓雾深处！', 'clue');
+        pushBeat(wasLit
+          ? '你迅速拍灭明火，死死咬住牙关绝不回应门外对真名的呼唤！那张无眼白脸贴着窗纸停了整整一分钟，终因捕捉不到明火与真名应答，缓缓退回浓雾深处！'
+          : '黑暗中毫无热源，你死死咬住牙关绝不回应门外对真名的呼唤！那张无眼白脸贴着窗纸徘徊整整一分钟，终因抓不到任何锚点，缓缓退回浓雾深处！', 'clue');
       } else {
-        S.hp = clamp(S.hp - 12, 0, S.maxHp);
-        addClue('E06');
-        pushBeat('喉咙里险些溢出半声闷哼，门板猛地挨了一记重撞震碎窗格！你拼命捂嘴退入灶台暗影，直到熄火后的低温让它彻底失去目标。', 'danger');
+        if (applyDamage(12, '门板剧震崩飞的断木重创了你的胸口。腕表冰冷提示：【考生 CN-09471 已死亡】。')) return;
+        pushBeat('喉咙里险些溢出半声闷哼，门板猛地挨了一记试探重撞震碎窗格！你拼命捂嘴退入灶台暗影，直到彻底的死寂与低温让它失去目标。', 'danger');
       }
       S.stage = 'exam_late';
       S.timeMin = 22 * 60 + 18;
-      pushBeat('危机暂退。现在请打开右上角「线索板」，整合证据提交【第二轮·洞悉】结论！');
+      pushBeat(postCrisisGuidance());
     } else {
-      S.hp = clamp(S.hp - 18, 0, S.maxHp);
+      const dmg = wasLit ? 18 : 10;
+      if (applyDamage(dmg, '剧烈的撞门冲击震碎了你的内脏。腕表冰冷提示：【考生 CN-09471 已死亡】。')) return;
       S.oilLampLit = false; S.heat = 0;
       addClue('E06');
-      pushBeat('你试图硬顶木门却没有立刻熄灭热源，门板被撞得剧烈变形，震伤了你的肩背！直到灯火被撞翻熄灭，盲灵才失去锁定缓缓退去。', 'danger');
+      pushBeat(wasLit
+        ? '你试图硬顶木门却没有立刻熄灭热源，门板被撞得剧烈变形，震伤了你的肩背！直到灯火被撞翻熄灭，盲灵才失去锁定缓缓退去。'
+        : '你冲上前死死抵住门板，脚步声引来一记沉闷试探重撞，震得肩背生疼！好在屋内本就无火无声，盲灵很快失去目标退回雾中。', 'danger');
       S.stage = 'exam_late';
       S.timeMin = 22 * 60 + 20;
-      pushBeat('请尽快打开右上角「线索板」提交【第二轮·洞悉】结论。');
+      pushBeat(postCrisisGuidance());
     }
     render();
   }
@@ -1016,61 +1809,67 @@ function toggleClueSelect(id) {
 function publishRound3() {
   if (S.publishedRounds.r3) return;
   S.publishedRounds.r3 = true; // REDLINE #1: Round 3 published dynamically!
-  pushBeat('腕表再次震动，最终考题浮现：\n【第三轮·逃生】在卯时（天亮）前，不惊动宅主的前提下离开白雾范围。（基础分：35）', 'system');
+  playSfx('watch');
+  pushBeat('腕表再次冰冷震动，最终考题浮现：\n【第三轮 · 逃生】卯时前，离开白雾。（基础分：35）', 'system');
 }
 
 function submitDeduction(hypId) {
   if (S.rounds.r2) return;
   if (S.timeMin < S.deductionCooldownUntil) {
     beginTurn();
-    pushBeat(`腕表判定冷却中，还需等待 ${S.deductionCooldownUntil - S.timeMin} 分钟。`, 'warn');
+    pushBeat(`腕表判定冷却中，还需等待 ${Math.ceil(S.deductionCooldownUntil - S.timeMin)} 分钟。`, 'warn');
     render(); return;
   }
   const hyp = HYPOTHESES.find(h => h.id === hypId);
   const sel = S.selectedClues;
   const valid = hyp.correct && hyp.reqAny.some(req => req.every(c => sel.includes(c)));
   S.drawer = null;
-  beginTurn('提交规律洞悉结论');
+  beginTurn('提交第二轮补全答案');
   if (valid) {
     S.rounds.r2 = true;
     S.contrib.deduce = 6;
-    pushBeat('你用指尖蘸着冷灶灰写下九个字：【盲灵：循真名、循明火】。');
-    pushBeat('腕表震动判定：【第二轮·洞悉 已完成！基础分 +25，核心贡献已记录。】', 'system');
+    pushBeat('你在腕表上填入缺失词条：【生人真名】与【明火热源】。');
+    pushBeat('腕表震动判定：【第二轮 · 补全 已完成！基础分 +25，核心贡献已记录。】', 'system');
     publishRound3();
   } else {
     S.deductionCooldownUntil = S.timeMin + 15;
     pushBeat(hyp.correct
-      ? '方向正确，但勾选的证据链不足（需【残破账本炭字】或【无目画像/东厢油灯 + 喊名现场】支撑）。'
-      : '腕表闪过红光——推论与现场事实矛盾，15 分钟内无法再次提交。', 'warn');
+      ? '补全词条方向吻合，但你提交的支撑物证不足（需勾选【残破账本炭字】或【无目画像/东厢油灯 + 喊名现场】）。'
+      : '腕表闪过刺目红光——补全内容与现场事实矛盾，15 分钟内无法再次提交。', 'warn');
   }
   advanceTime(5);
   render();
 }
 
 function waitForMidnight() {
-  const diff = Math.max(5, 23 * 60 + 40 - S.timeMin);
-  beginTurn('静候子时 · 23:40');
-  pushBeat('熄灯后的西厢冷得刺骨。你在黑暗里死死盯着窗缝与腕表荧光指针，等待子夜到来。');
+  const nextMilestone = (!S.flags.lateHuddleDone && S.timeMin < 23 * 60 + 5) ? (23 * 60 + 5) : (23 * 60 + 40);
+  const diff = Math.max(5, nextMilestone - S.timeMin);
+  S.location = S.baseRoom || 'west';
+  beginTurn(nextMilestone === 23 * 60 + 5 ? '静默休整 · 23:05' : '静候子时 · 23:40');
+  pushBeat(nextMilestone === 23 * 60 + 5
+    ? '十点那场惊变过去后，屋里陷入死一般的寂静。黑暗里没人敢贸然走动，寒意一点点爬上脚背，腕表荧光缓缓跳向十一点……'
+    : '熄灯后的西厢伸手不见五指，寒意顺着土墙渗进骨缝。黑暗里没人敢开口，你只能听见自己胸腔里的心跳和窗纸外细微的气流声，死死盯着腕表荧光走近子夜。');
   advanceTime(diff);
   render();
 }
 
 function midnightDebate(step) {
-  beginTurn('23:44 · 识破题面陷阱');
-  const allies = presentNpcs();
+  S.location = S.baseRoom || 'west';
+  beginTurn('23:44 · 察觉雾气异变');
+  const allies = presentNpcs('west');
   if (step === 1) {
     S.flags.midnightDebateStep = 1;
     if (allies.length === 0) {
-      pushBeat('你盯着腕表第三轮原话【卯时前离开白雾范围】，再看着窗缝里开始倒吸回院外的白雾，瞬间毛骨悚然——熬到天亮根本不是生路，子时雾倒流这 15 分钟才是唯一逃生窗！', 'clue');
+      pushBeat('你盯着腕表第三轮短短七个字【卯时前，离开白雾】，再摸着窗缝里突然逆转往外倒吸的寒风，脊背发凉——熬到天亮根本不是生路，子时雾倒流这短短一刻钟才是唯一逃生窗！', 'clue');
       S.flags.midnightDebateStep = 2;
     } else {
-      pushBeat(`${allies.map(n=>n.name).join('、')}原本比划着想在屋里死守到天亮。你立刻指向窗缝倒吸的白雾，并在桌灰上划出【卯时前离开】五个字——拖到天亮全屋必成窒息死域！`, 'clue');
+      pushBeat(`黑暗中，${allies.map(n=>n.name).join('、')}原本打手势想在屋里死守到天亮。你立刻拉过他们的手按在窗缝边感受倒吸的寒流，再用指尖在冷灶灰上划出【卯时前】三个字——等天亮全屋必成窒息死域！`, 'clue');
     }
   } else {
     S.flags.midnightDebateStep = 2;
     pushBeat(S.clues.includes('E07')
-      ? '你摊开泛黄的《老宅地契》指向后院枯井下的三百米暗渠。众人立刻达成共识：趁现在雾压倒流，立刻从后窗突围！'
-      : '窗缝雾气倒流就是铁证！众人立刻点头达成共识：趁现在摸去后院寻找排水出路！');
+      ? '借着腕表微光，你摊开泛黄的《老宅地契》指向后院枯井下的三百米排水暗渠。众人无声点头：趁雾压倒流，拍肩为号，立刻从后窗突围！'
+      : '窗缝雾气倒流就是铁证！众人无声点头达成共识：趁现在摸去后院寻找排水出路！');
   }
   S.timeMin = Math.max(S.timeMin, 23 * 60 + 46);
   render();
@@ -1086,8 +1885,8 @@ function startWellEscape() {
   allies.forEach(n => { n.room = 'well'; });
   beginTurn('23:48 · 子时突围，潜入后院枯井');
   pushBeat(allies.length
-    ? `你与${allies.map(n=>n.name).join('、')}以拍肩传递信号，借着白雾倒流的短暂空窗无声翻出西厢后窗，摸向后院枯井！`
-    : '你独自一人深吸一口冰冷夜气，借着白雾倒流的短暂空窗翻出西厢后窗，如孤影般摸向后院枯井！');
+    ? `你与${allies.map(n=>n.name).join('、')}以拍肩传递信号，借着白雾倒流的短暂空窗无声推开后墙木窗。冻硬的枯草在鞋底发出极轻的脆响，众人压低身形摸向后院枯井！`
+    : '你独自一人深吸一口冰冷夜气，借着白雾倒流的短暂空窗无声翻出西厢后窗。冻硬的枯草在鞋底微响，你如孤影般摸向后院枯井！');
   render();
 }
 
@@ -1104,6 +1903,8 @@ function escapeStepAction(step, opt) {
     pushBeat('井底斜嵌着一扇沉重锈死的排水铁闸，背后隐约传来暗河水声——必须立刻打开它！');
   } else if (step === 2) {
     // REDLINE #6: 3+ Decoupled ways to open the rusted gate!
+    playSfx('gate_pry');
+    FXDirector.trigger('shake');
     if (opt === 'chen_open' && chenHere) {
       pushBeat('陈默亮出高频破拆改锥插进锈死铰链猛地一撬——“嘎吱！！”铁闸瞬间崩开，但刺耳的金属锐响还是在死寂夜空炸开！', 'danger');
     } else if (opt === 'zhou_axe' && zhouHere) {
@@ -1113,29 +1914,40 @@ function escapeStepAction(step, opt) {
       pushBeat(`你独自抽出【${tool}】狠狠卡进铁闸锈缝咬牙发力——“嘎吱！！”铁销崩断，刺耳锐响瞬间划破夜空！`, 'danger');
     } else {
       const ok = rollCheck('phy', 13, S.bg.id === 'climb' ? 2 : 0, '徒手硬撬铁闸');
-      if (!ok) S.hp = clamp(S.hp - 15, 0, S.maxHp);
+      if (!ok) {
+        if (applyDamage(15, '徒手猛砸铁闸导致失血昏迷，井口白雾瞬间吞没了你。腕表冰冷提示：【考生 CN-09471 已死亡】。')) return;
+      }
       pushBeat(ok ? '你拼尽全力用石块猛砸锈死插销，硬生生撞开了暗渠铁闸！' : '你砸得掌心血肉模糊，终于在最后关头撞开了铁闸，但巨响已引来杀机！', 'danger');
     }
+    playSfx('danger');
     S.flags.wellAlert = true;
     S.flags.escapeStep = 3;
     pushBeat('井口上方三米处的浓雾骤然炸开！那道无眼苍白的修长轮廓猛地转向枯井，冰冷雾爪直扑井口！', 'danger');
   } else if (step === 3) {
     if (opt === 'decoy') {
+      playSfx('brick_throw');
       S.contrib.well = 5;
       const itemName = hasItem('brick') ? '兜里的半块湿砖' : '井底一块碎青砖';
       if (hasItem('brick')) removeItem('brick');
       pushBeat(`${suHere ? '你一把捂死险些惊呼的苏晓，' : ''}电光火石间将${itemName}朝东侧假山远远抛去！“哐当——！！”盲目守夜人瞬间被假声源吸走，化作狂风扑向东侧！`, 'clue');
     } else {
-      S.hp = clamp(S.hp - 20, 0, S.maxHp);
+      FXDirector.trigger('shake');
+      if (applyDamage(20, '冰冷雾爪直接撕裂了你的脊背，你无力坠入暗渠冰水之中。腕表冰冷提示：【考生 CN-09471 已死亡】。')) return;
       pushBeat('你顾不上声东击西，直接纵身扑进漆黑暗渠，冰冷的雾爪擦着后背划出一道深红血痕！', 'danger');
     }
     S.flags.wellAlert = false;
     S.flags.escapeStep = 4;
     pushBeat('暗渠内齐腰深的暗河冰冷刺骨，三百米外透进微弱夜风——最后一段涉水冲刺！');
   } else if (step === 4) {
-    const ok = rollCheck('phy', 12, (S.bg.id === 'climb' || hasItem('rope')) ? 2 : 0, '暗渠涉水冲刺');
-    if (!ok) S.hp = clamp(S.hp - 8, 0, S.maxHp);
+    playSfx('water_wade');
+    const staPenalty = S.sta <= 20 ? -2 : 0;
+    const ok = rollCheck('phy', 12, (S.bg.id === 'climb' || hasItem('rope') ? 2 : 0) + staPenalty, '暗渠涉水冲刺');
+    S.sta = clamp(S.sta - (S.bg.id === 'climb' ? 18 : 25), 0, 100);
+    if (!ok) {
+      if (applyDamage(8, '三百米刺骨暗河彻底抽干了你的体温。腕表冰冷提示：【考生 CN-09471 已死亡】。')) return;
+    }
     S.rounds.r3 = true;
+    playSfx('watch');
     const survivors = Object.values(S.npcs).filter(n => n.alive && n.room === 'well');
     pushBeat(survivors.length
       ? `你与${survivors.map(n=>n.name).join('、')}相互架扶着冲出三百米暗渠豁口——一脚踏破白雾边界的刹那，刺目白光骤然吞没天地！`
@@ -1147,14 +1959,34 @@ function escapeStepAction(step, opt) {
 }
 
 function settleExam() {
+  const survivors = Object.values(S.npcs).filter(n => n.alive && n.room === 'well');
   const base = (S.rounds.r1 ? 20 : 0) + (S.rounds.r2 ? 25 : 0) + (S.rounds.r3 ? 35 : 0);
-  const soloBonus = (Object.values(S.npcs).filter(n => n.alive && n.room === 'well').length === 0) ? 8 : 0;
+  const soloBonus = (survivors.length === 0) ? 8 : 0;
   const bonus = S.contrib.west + S.contrib.deduce + S.contrib.door + S.contrib.well + S.contrib.deed + soloBonus;
   const fee = 60;
-  const repair = S.hp >= 95 ? 0 : (S.hp >= 75 ? 10 : 20);
-  const net = Math.max(10, base + bonus - fee - repair);
+  const repair = S.hp >= 90 ? 0 : (S.hp >= 70 ? 10 : (S.hp >= 41 ? 20 : 45));
+  const net = base + bonus - fee - repair;
+
+  if (net < 0) {
+    triggerEnding(false, `【结局 · 负分抹杀】你活着爬出了白雾古宅，却在纯白大厅的账单前凝固了呼吸：总收入 ${base + bonus} 分，扣除 60 分基础费与 ${repair} 分躯体修复费后，净积分跌至 ${net} 分。腕表亮起猩红处决光束——首场便死于死考空间的经济铁律。`);
+    return;
+  }
+
+  let rank = '标准通关';
+  let rankDesc = '稳扎稳打活过首场死考，正式开启 D 级商城权限。';
+  if (survivors.length === 0 && S.rounds.r1 && S.rounds.r2 && S.rounds.r3) {
+    rank = '孤狼破局';
+    rankDesc = '拒绝盲从、独自熬过白雾与暗渠，以极高的个人决断力单人生还。';
+  } else if (S.rounds.r1 && S.rounds.r2 && S.rounds.r3 && S.flags.foundDeed && S.hp >= 85 && survivors.length >= 4) {
+    rank = '完美破局';
+    rankDesc = '铁证服众、洞悉盲灵规则、挖出地契暗渠且全队低损突围，堪称教科书级首考。';
+  } else if (!S.rounds.r2 || net < 15) {
+    rank = '惨胜残存';
+    rankDesc = '虽侥幸付清空间账单活了下来，但余分捉襟见肘，下一场将举步维艰。';
+  }
+
   S.points = net;
-  S.settlement = { base, bonus, fee, repair, net, soloBonus };
+  S.settlement = { base, bonus, fee, repair, net, soloBonus, rank, rankDesc };
   S.hp = S.maxHp; S.sta = 100;
   S.stage = 'space'; S.drawer = null;
   render();
@@ -1162,6 +1994,7 @@ function settleExam() {
 
 function triggerEnding(victory, reason) {
   S.stage = 'dead';
+  playSfx('danger');
   beginTurn('考核终结');
   pushBeat(reason, 'danger');
   render();
@@ -1204,6 +2037,11 @@ function stopTitleCanvas() {
 }
 function toggleTitleModal(name) { S.titleModal = (S.titleModal === name) ? null : name; render(); }
 function toggleFx() { FX_ENABLED = !FX_ENABLED; render(); }
+function toggleSfx() {
+  SFX_ENABLED = !SFX_ENABLED;
+  if (!SFX_ENABLED) AudioDirector.stopBgm();
+  render();
+}
 function toggleDrawer(name) { S.drawer = (S.drawer === name) ? null : name; render(); }
 function setShopFilter(cat) { S.shopFilter = cat; render(); }
 function restartGame() { initState('char_select'); render(); }
@@ -1211,6 +2049,7 @@ function restartGame() { initState('char_select'); render(); }
 function render() {
   stopTitleCanvas();
   saveProgress();
+  AudioDirector.setBgm(getStageBgmKey());
   const root = document.getElementById('root');
   if (S.stage === 'title') {
     document.body.classList.remove('space-mode');
@@ -1284,12 +2123,14 @@ function renderTitleScreen() {
   const saved = loadSavedMeta();
   const savedLoc = saved && saved.location && ROOMS[saved.location] ? ROOMS[saved.location].name : (saved && saved.stage === 'space' ? '死考空间大厅' : '老街雨巷');
   const savedTime = saved ? fmtTime(saved.timeMin || 1230) : '';
+  const titleMedia = (window.AV_MANIFEST && window.AV_MANIFEST.scenes && window.AV_MANIFEST.scenes.title) || TITLE_VIDEO_URL || SCENE_IMGS.title;
+  const isTitleVideo = typeof titleMedia === 'string' && /\.(mp4|webm)(\?.*)?$/i.test(titleMedia);
 
   return `
   <div class="relative w-screen h-screen overflow-hidden bg-[#07090c] text-[#e6e1d6] select-none">
-    ${TITLE_VIDEO_URL
-      ? `<video id="title-bg-media" src="${TITLE_VIDEO_URL}" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover transition-transform duration-300 ease-out" style="transform:scale(1.05);"></video>`
-      : `<img id="title-bg-media" src="${SCENE_IMGS.title}" alt="全球死考主视觉" class="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-300 ease-out ${FX_ENABLED ? 'scene-bg-anim' : ''}" style="transform:scale(1.05);" />`
+    ${isTitleVideo
+      ? `<video id="title-bg-media" src="${titleMedia}" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover transition-transform duration-300 ease-out" style="transform:scale(1.05);"></video>`
+      : `<img id="title-bg-media" src="${titleMedia}" alt="全球死考主视觉" class="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-300 ease-out ${FX_ENABLED ? 'scene-bg-anim' : ''}" style="transform:scale(1.05);" />`
     }
     <canvas id="title-fx-canvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
     <div class="absolute inset-0 bg-gradient-to-r from-[#06080b]/94 via-[#06080b]/58 to-transparent pointer-events-none"></div>
@@ -1298,7 +2139,7 @@ function renderTitleScreen() {
     <div class="relative z-10 flex items-center justify-between px-8 lg:px-14 pt-7">
       <div class="flex items-center gap-3 font-mono-ui text-[11px] tracking-[0.24em] text-stone-400">
         <span class="w-2 h-2 rounded-full bg-red-600/90 animate-pulse"></span>
-        <span>DEATH EXAM TERMINAL // TRUTH ENGINE 0.4</span>
+        <span>DEATH EXAM TERMINAL // TRUTH ENGINE 0.9</span>
       </div>
       <div class="font-mono-ui text-[11px] tracking-[0.18em] text-stone-500 hidden sm:block">SEASON I · WHITE MIST MANOR</div>
     </div>
@@ -1350,11 +2191,12 @@ function renderTitleScreen() {
 
 function renderTitleModal() {
   const isCodex = S.titleModal === 'codex';
+  const hasSave = !!loadSavedMeta();
   return `
   <div class="fixed inset-0 z-40 bg-black/75 backdrop-blur-md flex items-center justify-center p-5" onclick="if(event.target===this) toggleTitleModal(null)">
     <div class="w-full max-w-lg bg-[#0d1015]/95 border border-white/15 rounded-2xl shadow-2xl overflow-hidden font-sans-ui">
       <div class="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-        <span class="text-sm font-medium tracking-[0.14em] text-stone-100">${isCodex ? '死考基础规则档案' : '画面与背景动效设置'}</span>
+        <span class="text-sm font-medium tracking-[0.14em] text-stone-100">${isCodex ? '死考基础规则档案' : '画面、音效与存档设置'}</span>
         <button onclick="toggleTitleModal(null)" class="text-xs text-stone-400 hover:text-stone-100 px-2 py-0.5 rounded bg-white/[0.05]">关闭 ✕</button>
       </div>
       <div class="p-6 space-y-3.5 text-xs leading-6 text-stone-300">
@@ -1370,8 +2212,19 @@ function renderTitleModal() {
           </div>
           <button onclick="toggleFx()" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${FX_ENABLED ? 'bg-red-600/80 text-white' : 'bg-white/10 text-stone-400'}">${FX_ENABLED ? '已开启' : '已关闭'}</button>
         </div>
-        <div class="p-3.5 rounded-xl bg-white/[0.025] border border-white/10 text-[11px] text-stone-400 leading-5">
-          预留视频背景槽位：<code class="text-amber-300">TITLE_VIDEO_URL</code>。
+        <div class="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/10">
+          <div>
+            <div class="text-stone-100 font-medium">界面与危机提示音效</div>
+            <div class="text-[11px] text-stone-400 mt-0.5">腕表推送音、线索提示与 22:00 敲门声效</div>
+          </div>
+          <button onclick="toggleSfx()" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${SFX_ENABLED ? 'bg-red-600/80 text-white' : 'bg-white/10 text-stone-400'}">${SFX_ENABLED ? '已开启' : '已关闭'}</button>
+        </div>
+        <div class="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.025] border border-white/10">
+          <div>
+            <div class="text-stone-200 font-medium">本地考核存档</div>
+            <div class="text-[11px] text-stone-400 mt-0.5">${hasSave ? '当前检测到本地进度存档' : '暂无本地存档'}</div>
+          </div>
+          <button onclick="clearSaveData()" ${hasSave ? '' : 'disabled'} class="px-3 py-1.5 rounded-lg text-xs transition ${hasSave ? 'bg-white/10 hover:bg-red-900/50 text-stone-200' : 'bg-white/5 text-stone-600 cursor-not-allowed'}">清除存档</button>
         </div>`}
       </div>
     </div>
@@ -1383,13 +2236,19 @@ function renderExamMode() {
   const ecgColor = danger === 'critical' ? '#ef4444' : (danger === 'tense' ? '#f59e0b' : '#94a3b8');
   const ecgSpeed = danger === 'critical' ? '0.9s' : (danger === 'tense' ? '1.6s' : '2.7s');
   const artSrc = getActiveArtwork();
+  const isArtVideo = typeof artSrc === 'string' && /\.(mp4|webm)(\?.*)?$/i.test(artSrc);
   const inHouse = S.stage.startsWith('exam');
   const locTitle = inHouse ? ROOMS[S.location].name : (S.stage === 'char_select' ? '现实 · 接入前夕' : '老街雨巷');
-  const canInspectHotspots = (S.stage === 'exam_protect' || S.stage === 'exam_night' || S.stage === 'exam_late') && !S.flags.zhouKnockedHelp;
+  const freeRoamUnlocked = (S.stage !== 'exam_protect') || S.flags.nameChoiceDone;
+  const eventLocked = !!(S.flags.zhouKnockedHelp || S.flags.activeMidEvent);
+  const canInspectHotspots = (S.stage === 'exam_protect' || S.stage === 'exam_night' || S.stage === 'exam_late') && freeRoamUnlocked && !eventLocked;
   const hotspots = canInspectHotspots ? (ROOM_HOTSPOTS[S.location] || []) : [];
-  const roomNpcs = (S.stage === 'exam_protect' || S.stage === 'exam_night') && !S.flags.zhouKnockedHelp ? presentNpcs() : [];
+  const roomNpcs = (S.stage === 'exam_protect' || S.stage === 'exam_night') && freeRoamUnlocked && !eventLocked ? presentNpcs() : [];
   const pubCount = [S.publishedRounds.r1, S.publishedRounds.r2, S.publishedRounds.r3].filter(Boolean).length;
   const doneCount = [S.rounds.r1, S.rounds.r2, S.rounds.r3].filter(Boolean).length;
+  const shakeCls = FXDirector.consumeShakeClass();
+  const showLampGlow = FX_ENABLED && inHouse && S.oilLampLit && S.baseRoom && S.location === S.baseRoom && isHere('zhou');
+  const mistReverseCls = (FX_ENABLED && S.timeMin >= 23 * 60 + 40) ? 'mist-reverse' : 'mist-a';
 
   const stageTitleMap = {
     char_select: '序幕 · 身份锚定',
@@ -1406,11 +2265,15 @@ function renderExamMode() {
   return `
   <div class="w-screen h-screen overflow-hidden flex flex-col lg:flex-row bg-[#090b0e] text-[#e6e1d6]">
     <!-- LEFT 58%: SCENE ARTWORK + INTERACTIVE HOTSPOTS + TOPOLOGY + WATCH -->
-    <div class="relative w-full lg:w-[58%] h-[42vh] lg:h-full overflow-hidden border-b lg:border-b-0 lg:border-r border-white/10 bg-black shrink-0">
-      <img src="${artSrc}" alt="场景氛围图" class="scene-bg-anim absolute inset-0 w-full h-full object-cover object-center opacity-90 select-none pointer-events-none" />
+    <div id="scene-stage" class="${shakeCls} relative w-full lg:w-[58%] h-[42vh] lg:h-full overflow-hidden border-b lg:border-b-0 lg:border-r border-white/10 bg-black shrink-0">
+      ${isArtVideo
+        ? `<video src="${artSrc}" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover object-center opacity-90 select-none pointer-events-none"></video>`
+        : `<img src="${artSrc}" alt="场景氛围图" class="${FX_ENABLED ? 'scene-bg-anim' : ''} absolute inset-0 w-full h-full object-cover object-center opacity-90 select-none pointer-events-none" />`
+      }
       <div class="absolute inset-0 bg-gradient-to-t from-[#07090c] via-black/20 to-[#07090c]/60 pointer-events-none"></div>
       <div class="absolute inset-0 bg-gradient-to-r from-black/35 via-transparent to-[#090b0e]/80 pointer-events-none"></div>
-      <div class="mist-a absolute -inset-x-12 bottom-0 h-56 pointer-events-none" style="background:radial-gradient(ellipse at 35% 100%, rgba(203,213,225,0.20), transparent 68%);"></div>
+      ${showLampGlow ? `<div class="fx-lamp-glow absolute inset-0 pointer-events-none" style="background:radial-gradient(circle at 52% 62%, rgba(217,119,6,0.22), rgba(52,211,153,0.06) 45%, transparent 72%);"></div>` : ''}
+      <div class="${mistReverseCls} absolute -inset-x-12 bottom-0 h-56 pointer-events-none" style="background:radial-gradient(ellipse at 35% 100%, rgba(203,213,225,0.22), transparent 68%);"></div>
       ${danger === 'critical' ? `<div class="danger-vignette absolute inset-0 pointer-events-none" style="box-shadow: inset 0 0 110px 24px rgba(185,28,28,0.58);"></div>` : ''}
 
       <!-- INTERACTIVE SCENE HOTSPOTS OVERLAY -->
@@ -1425,7 +2288,7 @@ function renderExamMode() {
           }">
           <span class="w-1.5 h-1.5 rounded-full ${checked ? 'bg-emerald-400/70' : 'bg-amber-400 animate-pulse'}"></span>
           <span>${hs.label}</span>
-          <span class="font-mono-ui text-[9.5px] opacity-70">${checked ? '✓' : hs.mins + 'm'}</span>
+          <span class="font-mono-ui text-[9.5px] opacity-70">${checked ? '✓' : fmtDurShort(hs.mins)}</span>
         </button>`;
       }).join('')}
 
@@ -1453,14 +2316,21 @@ function renderExamMode() {
           <div class="text-xs text-stone-300 mt-1 leading-relaxed">现实世界 · ${fmtTime(S.timeMin)} · 局部异常白雾正在形成</div>
         </div>`}
 
-        <div class="pointer-events-auto w-[218px] bg-[#0b0d11]/90 backdrop-blur-xl border ${danger === 'critical' ? 'border-red-500/50' : 'border-white/12'} rounded-2xl p-3.5 shadow-2xl">
+        <div class="pointer-events-auto w-[224px] bg-[#0b0d11]/90 backdrop-blur-xl border ${danger === 'critical' ? 'border-red-500/50' : 'border-white/12'} rounded-2xl p-3.5 shadow-2xl">
           <div class="flex items-center justify-between">
             <span class="font-mono-ui text-[10px] tracking-[0.18em] text-stone-400">CN-09471 · W-01</span>
-            <span class="w-2 h-2 rounded-full ${danger === 'critical' ? 'bg-red-500 animate-pulse' : (danger === 'tense' ? 'bg-amber-400' : 'bg-emerald-400/70')}"></span>
+            <div class="flex items-center gap-1.5">
+              ${inHouse && S.heat >= 35 ? `<span class="font-sans-ui text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">热源</span>` : ''}
+              ${inHouse && S.sound >= 35 ? `<span class="font-sans-ui text-[9px] px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 border border-red-400/30">异响</span>` : ''}
+              <span class="w-2 h-2 rounded-full ${danger === 'critical' ? 'bg-red-500 animate-pulse' : (danger === 'tense' ? 'bg-amber-400' : 'bg-emerald-400/70')}"></span>
+            </div>
           </div>
           <div class="flex items-baseline justify-between mt-1">
             <div class="font-mono-ui text-2xl font-semibold tracking-wider text-stone-100">${fmtTime(S.timeMin)}</div>
-            <div class="font-mono-ui text-[11px] text-stone-400">HP ${S.hp}</div>
+            <div class="font-mono-ui text-[10.5px] text-stone-400 flex items-center gap-2">
+              <span class="${S.hp <= 40 ? 'text-red-400 font-semibold' : ''}">HP ${S.hp}</span>
+              <span class="${S.sta <= 20 ? 'text-amber-300' : 'text-stone-500'}">STA ${S.sta}</span>
+            </div>
           </div>
           <div class="mt-2 h-8 w-full rounded bg-black/50 border border-white/5 overflow-hidden px-1 flex items-center">
             <svg viewBox="0 0 180 28" class="w-full h-6">
@@ -1492,13 +2362,30 @@ function renderExamMode() {
       ${roomNpcs.length > 0 ? `
       <div class="shrink-0 px-5 py-2 border-b border-white/8 bg-[#12161d] flex items-center gap-2 overflow-x-auto font-sans-ui">
         <span class="text-[10px] text-stone-500 shrink-0">同房在场：</span>
-        ${roomNpcs.map(n => `
-        <button onclick="talkToNpcInRoom('${n.id}')" class="shrink-0 px-2.5 py-1 rounded-full text-[11px] bg-white/[0.05] hover:bg-amber-500/20 border border-white/10 hover:border-amber-400/50 text-stone-200 transition">
-          💬 ${npcDisplayName(n)}
-        </button>`).join('')}
+        ${roomNpcs.map(n => {
+          const talked = S.stage === 'exam_protect' ? !!S.flags.npcTalkedProtect[n.id] : !!S.flags.nightTalks[n.id];
+          const pUrl = getNpcPortrait(n.id);
+          return `
+        <button onclick="talkToNpcInRoom('${n.id}')" class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] border transition ${
+          talked
+          ? 'bg-white/[0.02] border-white/8 text-stone-400 hover:bg-white/[0.06]'
+          : 'bg-white/[0.06] hover:bg-amber-500/20 border-white/12 hover:border-amber-400/50 text-stone-200'
+        }">
+          ${pUrl ? `<img src="${pUrl}" alt="${npcDisplayName(n)}" class="w-4 h-4 rounded-full object-cover border border-white/20" />` : `<span>${talked ? '✓' : '💬'}</span>`}
+          <span>${npcDisplayName(n)}</span>
+        </button>`;
+        }).join('')}
       </div>` : ''}
 
       <div id="narrative-scroll" class="flex-1 min-h-0 overflow-y-auto scroll-thin px-6 py-5">
+        ${S.activeTalk && getNpcPortrait(S.activeTalk) ? `
+        <div class="mb-4 flex items-center gap-3.5 p-3 rounded-xl bg-white/[0.03] border border-white/10">
+          <img src="${getNpcPortrait(S.activeTalk)}" alt="${npcDisplayName(S.npcs[S.activeTalk])}" class="w-14 h-14 rounded-lg object-cover border border-amber-400/30 shrink-0" />
+          <div class="min-w-0">
+            <div class="font-sans-ui text-xs font-medium text-amber-200">${npcDisplayName(S.npcs[S.activeTalk])} <span class="font-mono-ui text-[10px] text-stone-500 ml-1">${S.npcs[S.activeTalk].code}</span></div>
+            <div class="text-[11.5px] text-stone-400 mt-0.5 truncate">${S.npcs[S.activeTalk].knownLevel >= 1 ? S.npcs[S.activeTalk].role : S.npcs[S.activeTalk].anonDesc}</div>
+          </div>
+        </div>` : ''}
         ${S.stage === 'char_select' ? renderCharSelect() : renderFocusedBeats()}
       </div>
 
@@ -1522,11 +2409,13 @@ function renderTopologyHUD() {
     ['east','hall'], ['west','well'], ['hall','well']
   ];
   const curNeighbors = ROOMS[S.location].neighbors;
+  const freeRoamUnlocked = (S.stage !== 'exam_protect') || S.flags.nameChoiceDone;
+  const eventLocked = !!(S.flags.zhouKnockedHelp || S.flags.activeMidEvent);
 
   return `
   <div class="pointer-events-auto hidden sm:block bg-[#0a0c10]/85 backdrop-blur-xl border border-white/12 rounded-2xl p-3 shadow-2xl w-[232px]">
     <div class="flex items-center justify-between mb-1 px-0.5">
-      <span class="font-sans-ui text-[10px] tracking-[0.12em] text-stone-400">拓扑移动(2m) · 青点=在场人数</span>
+      <span class="font-sans-ui text-[10px] tracking-[0.12em] text-stone-400">拓扑移动(${S.stage === 'exam_protect' ? '30秒' : '2分钟'}) · 青点=在场</span>
       <span class="font-mono-ui text-[10px] text-amber-300/80">${filled}/${segs}</span>
     </div>
     <svg viewBox="0 0 220 192" class="w-full h-[150px] select-none">
@@ -1547,7 +2436,7 @@ function renderTopologyHUD() {
       }).join('')}
       ${Object.values(ROOMS).map(r => {
         const isCur = r.id === S.location;
-        const canGo = curNeighbors.includes(r.id) && (S.stage === 'exam_protect' || S.stage === 'exam_night' || S.stage === 'exam_late') && !S.flags.zhouKnockedHelp;
+        const canGo = curNeighbors.includes(r.id) && freeRoamUnlocked && (S.stage === 'exam_protect' || S.stage === 'exam_night' || S.stage === 'exam_late') && !eventLocked;
         const cnt = presentNpcs(r.id).length;
         return `
         <g onclick="${canGo ? `moveToRoom('${r.id}')` : ''}" class="${canGo ? 'cursor-pointer' : ''}">
@@ -1617,72 +2506,192 @@ function choiceBtn(label, sub, onclick, crisis = false) {
   </button>`;
 }
 
+function renderHotspotChoices() {
+  const id = S.activeHotspot;
+  const btns = [];
+  if (id === 'gt_chain') {
+    btns.push(choiceBtn('屏住呼吸将耳朵贴近门缝，细听雾外脚步的节律', '1 分钟', "hotspotAction('gt_chain','listen')"));
+    btns.push(choiceBtn('用指背极轻地试探门缝渗出的黑霜边界', '30 秒', "hotspotAction('gt_chain','touch')"));
+  } else if (id === 'sh_censer') {
+    btns.push(choiceBtn('伸指深捻炉底香灰，顺手用纸巾包一撮湿灰留作实证', '1 分钟', "hotspotAction('sh_censer','sample')"));
+    btns.push(choiceBtn('只捻一下香灰确认干湿程度', '1 分钟', "hotspotAction('sh_censer','check')"));
+  } else if (id === 'sh_table') {
+    btns.push(choiceBtn('掀开霉布钻到供桌底下，细查木柱内侧抓痕与血渍', '1 分钟', "hotspotAction('sh_table','check')"));
+  } else if (id === 'ws_ledger') {
+    btns.push(choiceBtn('迅速翻阅泛黄账本直至末页，辨认炭笔残字', '1 分钟', "hotspotAction('ws_ledger','read')"));
+  } else if (id === 'ws_cabinet') {
+    if (isHere('chen')) btns.push(choiceBtn('低声叫一旁的陈默用高频改锥顺缝挑开暗格', '30 秒 · 协作', "hotspotAction('ws_cabinet','chen_help')"));
+    btns.push(choiceBtn('自己摸索错位暗榫，尽量不发声地起开背板', '1.5 分钟 · 静默', "hotspotAction('ws_cabinet','quiet')"));
+    btns.push(choiceBtn(`直接用${hasItem('knife') ? '户外折刀' : (hasItem('crowbar') ? '短撬棍' : '硬木')}强行撬开夹层`, '30 秒 · 有声响', "hotspotAction('ws_cabinet','force')"));
+  } else if (id === 'es_corpse') {
+    btns.push(choiceBtn('强忍尸臭拨开焦黑碎柴，细查干尸眼眶与手中油灯', '1.5 分钟', "hotspotAction('es_corpse','inspect')"));
+  } else if (id === 'es_tools') {
+    btns.push(choiceBtn('一根根轻挪干柴，无声取出底层的短撬棍与粗麻绳', '1.5 分钟 · 静默', "hotspotAction('es_tools','quiet')"));
+    btns.push(choiceBtn('一把掀开木架直接抓起撬棍和麻绳就走', '30 秒 · 异响大', "hotspotAction('es_tools','fast')"));
+  } else if (id === 'hl_portrait') {
+    btns.push(choiceBtn('垫脚凑近细看画像被挖空的眼眶与笔触细节', '1 分钟', "hotspotAction('hl_portrait','inspect')"));
+  }
+  btns.push(choiceBtn('暂不动手，退开继续环顾房间', '0 秒', "hotspotAction('','leave')"));
+  return btns.join('');
+}
+
+function renderNpcTalkChoices() {
+  const id = S.activeTalk;
+  const n = S.npcs[id];
+  if (!n || !n.alive || n.room !== S.location) return '';
+  const hasAnyProof = S.clues.includes('E01') || S.clues.includes('E02') || S.clues.includes('E04');
+  const asked = (t) => !!S.flags.npcTopics[`${id}_${t}`];
+  const btns = [];
+
+  if (id === 'zhou') {
+    btns.push(choiceBtn('询问大门外的动静与他腰间那盏泛青的铜风灯', asked('intel') ? '已问过' : '30 秒', "npcTopicAction('zhou','intel')"));
+    btns.push(choiceBtn('打听他历过三场的经验与死考空间的底线', asked('past') ? '已问过' : '30 秒', "npcTopicAction('zhou','past')"));
+    if (hasAnyProof) btns.push(choiceBtn('私下把你查到的祠堂/西厢情况提前透给周衡', asked('share_proof') ? '已同步' : '30 秒', "npcTopicAction('zhou','share_proof')"));
+  } else if (id === 'shen') {
+    btns.push(choiceBtn('询问她对主厅和墙上无面家主画像的判断', asked('intel') ? '已问过' : '30 秒', "npcTopicAction('shen','intel')"));
+    btns.push(choiceBtn('问她为什么如此反感赵川的“祠堂经验”', asked('zhao_bias') ? '已问过' : '30 秒', "npcTopicAction('shen','zhao_bias')"));
+    if (hasAnyProof) btns.push(choiceBtn('拿出你查到的情况与沈岚交叉核对', asked('share_proof') ? '已同步' : '30 秒', "npcTopicAction('shen','share_proof')"));
+  } else if (id === 'chen') {
+    btns.push(choiceBtn('问他对西厢门闩、灶房和墙角立柜的观察', asked('intel') ? '已问过' : '30 秒', "npcTopicAction('chen','intel')"));
+    btns.push(choiceBtn('打听他手里的机械装备与普通人的活法', asked('gear') ? '已问过' : '30 秒', "npcTopicAction('chen','gear')"));
+    if (S.location === 'west' && !S.flags.foundDeed) btns.push(choiceBtn('请陈默用高频改锥帮着无声挑开樟木立柜暗格', '30 秒 · 协作', "npcTopicAction('chen','help_cabinet')"));
+  } else if (id === 'zhao') {
+    btns.push(choiceBtn('听他讲上一场的驱邪经历和那张【镇宅驱邪符】', asked('boast') ? '已问过' : '30 秒', "npcTopicAction('zhao','boast')"));
+    if (S.clues.includes('E01') || S.clues.includes('E02')) btns.push(choiceBtn('当面拿出祠堂湿香灰与向外抓痕反驳赵川', '30 秒', "npcTopicAction('zhao','confront')"));
+  } else if (id === 'su') {
+    btns.push(choiceBtn('追问她刚才白雾围院时在门边听见了什么', asked('intel') ? '已问过' : '30 秒', "npcTopicAction('su','intel')"));
+    btns.push(choiceBtn('稳住她的情绪，叮嘱她千万别应声也别乱喊', asked('calm') ? '已安抚' : '30 秒', "npcTopicAction('su','calm')"));
+  } else if (id === 'lin') {
+    btns.push(choiceBtn('试探林哲现在的精神状态和想法', asked('state') ? '已问过' : '30 秒', "npcTopicAction('lin','state')"));
+    btns.push(choiceBtn('泼盆冷水点醒他：刚才的电击不是特效，祠堂没有退路', asked('warn') ? '已劝过' : '30 秒', "npcTopicAction('lin','warn')"));
+  }
+  btns.push(choiceBtn(`结束与${n.name}的交谈，返回房间自由探索`, '0 秒', "npcTopicAction('','leave')"));
+  return btns.join('');
+}
+
 function renderChoices() {
   if (S.stage === 'prologue') {
     if (S.flags.prologueStep === 1) {
       return [
-        choiceBtn(`凭【${S.bg.tag}】本能仔细观察眼前的异常白雾`, '职业专属', "prologueStepAction('prof')"),
-        choiceBtn('掏出手机检查信号并试图拨打报警电话', '现实核实', "prologueStepAction('phone')"),
-        choiceBtn('加快脚步朝巷口反方向快步冲出去', '脱身尝试', "prologueStepAction('run')")
+        choiceBtn(`凭【${S.bg.tag}】本能仔细观察眼前的异常白雾`, '职业直觉', "prologueStepAction('prof')"),
+        choiceBtn('掏出手机检查信号并试图拨打报警电话', '核实通信', "prologueStepAction('phone')"),
+        choiceBtn('加快脚步朝巷口反方向快步冲出去', '尝试脱身', "prologueStepAction('run')")
       ].join('');
     }
     if (S.flags.prologueStep === 2) {
       return [
         choiceBtn('用力扯下这块死扣在手腕上的诡异黑表', '本能反抗', "prologueStepAction('pull')"),
-        choiceBtn('强迫自己稳住呼吸，记下腕表只显编号不显真名', '意志 +1', "prologueStepAction('check')"),
-        choiceBtn('迅速从墙根抄起半块沉手的湿砖揣进兜里', '额外携带物', "prologueStepAction('grab')")
+        choiceBtn('强迫自己稳住呼吸，细看表盘上的编号、时间与读数', '冷静观察', "prologueStepAction('check')"),
+        choiceBtn('迅速从墙根抄起半块沉手的湿砖揣进兜里', '随手防身', "prologueStepAction('grab')")
       ].join('');
     }
     return choiceBtn('60 秒倒计时归零，白雾合拢——坠入首场死考', '进入《白雾古宅》', 'enterExam()');
   }
 
+  // Active tactile hotspot or multi-topic NPC dialogue takes focus cleanly
+  if ((S.stage === 'exam_protect' || S.stage === 'exam_night' || S.stage === 'exam_late') && !S.flags.zhouKnockedHelp && !S.flags.activeMidEvent) {
+    if (S.activeHotspot) return renderHotspotChoices();
+    if (S.activeTalk) return renderNpcTalkChoices();
+  }
+
   if (S.stage === 'exam_protect') {
     if (!S.flags.nameChoiceDone) {
+      if (S.flags.introStep === 1) {
+        return [
+          choiceBtn('同样满腹怀疑，快步跟到朱漆院门旁想亲眼验证机关', '上前查门', "introStepAction('check_gate')"),
+          choiceBtn('先扶住发抖的女生退后半步，冷静扫视那四个陌生人的装备', '暗中观察', "introStepAction('observe_vets')"),
+          choiceBtn(`强压惊悸，凭【${S.bg.tag}】本能审视整座院落与气温异常`, '职业视角', "introStepAction('prof_read')")
+        ].join('');
+      }
+      if (S.flags.introStep === 2) {
+        return [
+          choiceBtn('压低声音追问陈默：周队的斧子和你的改锥，都是“空间”里换的？', '追问细节', "introStepAction('ask_gear')"),
+          choiceBtn('直视周衡发问：我们凭什么信你们不会拿新人当探路炮灰？', '直面队长', "introStepAction('challenge_zhou')"),
+          choiceBtn('蹲下来先安抚吓僵的女生，顺带旁听老队员的动向', S.bg.id === 'medic' ? '护工安抚' : '安抚同行', "introStepAction('comfort_su')")
+        ].join('');
+      }
       return [
-        choiceBtn('听拎斧男人说完规则，警觉地报一个假名代号（“陈七”）', '2 分钟 · 防身策略', 'chooseNamePolicy(true)'),
-        choiceBtn(`听拎斧男人说完规则，如实报出真名（“${S.realName}”）`, '2 分钟 · 坦诚报号', 'chooseNamePolicy(false)')
+        choiceBtn('对着一群陌生人留个心眼，随口报个代号（“陈七”）', '报代号', 'chooseNamePolicy(true)'),
+        choiceBtn(`配合众人照面，如实报出自己的名字（“${S.realName}”）`, '报本名', 'chooseNamePolicy(false)')
       ].join('');
     }
     const btns = [];
     const r = S.location;
-    if (r !== 'shrine' && ROOMS[r].neighbors.includes('shrine')) btns.push(choiceBtn('前往【祠堂】自由搜证 / 找赵川与林哲套话', '移动 2 分钟', "moveToRoom('shrine')"));
-    if (r !== 'west' && ROOMS[r].neighbors.includes('west')) btns.push(choiceBtn('前往【西厢】自由搜证 / 找陈默了解情况', '移动 2 分钟', "moveToRoom('west')"));
-    if (r !== 'hall' && ROOMS[r].neighbors.includes('hall')) btns.push(choiceBtn('前往【主厅】找沈岚交换情报 / 查看画像', '移动 2 分钟', "moveToRoom('hall')"));
-    if (r !== 'courtyard' && ROOMS[r].neighbors.includes('courtyard')) btns.push(choiceBtn('返回【前院】', '移动 2 分钟', "moveToRoom('courtyard')"));
-    btns.push(choiceBtn('结束保护期，直接进入 20:50 七人选房交锋', '推进至 20:50', 'resolveProtectionEnd()'));
-    return btns.slice(0, 4).join('');
+    const afterSafe = S.timeMin >= S.protectEndMin;
+    if (afterSafe) {
+      btns.push(choiceBtn('趁白雾尚未彻底封院，立刻回前院参与七人选房交锋', '建议集合', 'resolveProtectionEnd(false)', true));
+    }
+    if (r !== 'shrine' && ROOMS[r].neighbors.includes('shrine')) btns.push(choiceBtn('前往【祠堂】查探 / 找赵川与林哲聊聊', '30 秒', "moveToRoom('shrine')"));
+    if (r !== 'west' && ROOMS[r].neighbors.includes('west')) btns.push(choiceBtn('前往【西厢】查探 / 找陈默了解情况', '30 秒', "moveToRoom('west')"));
+    if (r !== 'hall' && ROOMS[r].neighbors.includes('hall')) btns.push(choiceBtn('前往【主厅】查探 / 找沈岚交换看法', '30 秒', "moveToRoom('hall')"));
+    if (r !== 'east' && ROOMS[r].neighbors.includes('east')) btns.push(choiceBtn('前往【东厢】查探破柴房', '30 秒', "moveToRoom('east')"));
+    if (r !== 'courtyard' && ROOMS[r].neighbors.includes('courtyard')) btns.push(choiceBtn('返回【前院】', '30 秒', "moveToRoom('courtyard')"));
+    if (!afterSafe) {
+      btns.push(choiceBtn('侦察完毕，提前回前院进入七人选房交锋', '集合选房', 'resolveProtectionEnd(false)'));
+    }
+    return btns.slice(0, 5).join('');
   }
 
   if (S.stage === 'exam_vote') {
     const hasStrongProof = (S.clues.includes('E01') || S.clues.includes('E02')) && (S.clues.includes('E03') || S.clues.includes('E04'));
     const btns = [];
     if (hasStrongProof) {
-      btns.push(choiceBtn('亮出祠堂湿香灰/抓痕与西厢实证，说服周衡与全员改驻西厢！', '铁证压服全场', "voteDecision('convince_all')"));
+      btns.push(choiceBtn('把查到的祠堂异常与西厢情况摆上台面，说服周衡与全员改驻西厢', '摆证说服', "voteDecision('convince_all')"));
     }
-    btns.push(choiceBtn('拒绝跟赵川去祠堂送死！强行分队退守西厢（孤狼 / 少数派线）', '自由分队', "voteDecision('split_west')"));
-    btns.push(choiceBtn('暂不撕破脸，随大流跟着赵川进祠堂避雾', '传统误导', "voteDecision('shrine')"));
+    btns.push(choiceBtn('拒绝跟赵川进祠堂，自行退守西厢（哪怕分队或独行）', '坚持西厢', "voteDecision('split_west')"));
+    btns.push(choiceBtn('暂不撕破脸，随大流跟着赵川进祠堂避雾', '随队进祠堂', "voteDecision('shrine')"));
     return btns.join('');
   }
 
   if (S.flags.zhouKnockedHelp) {
     return [
-      choiceBtn('立刻拉开铁门闩，放满身霜血的周衡与陈默进西厢！', '救下强力队友', 'respondZhouDoor(true)', true),
-      choiceBtn('冷血按死铁门闩绝不开门——决不放浓雾进屋！', '彻底孤狼化', 'respondZhouDoor(false)', true)
+      choiceBtn('立刻拉开铁门闩，放满身霜血的周衡与陈默进西厢！', '开门放人', 'respondZhouDoor(true)', true),
+      choiceBtn('死死按住铁门闩绝不开门——决不放浓雾进屋！', '闭门自保', 'respondZhouDoor(false)', true)
+    ].join('');
+  }
+
+  if (S.flags.activeMidEvent === 'night_lamp') {
+    if (isHere('zhou') && S.oilLampLit) {
+      return [
+        choiceBtn('按住周衡的铜罩：“热源在给门外的东西指路——现在就灭灯！”', '立即熄灯', "midEventAction('night_lamp','extinguish_now')"),
+        choiceBtn('拿破铁盆半挡风灯一侧，亲眼验证白霜是否跟着热气转向', '遮光试探', "midEventAction('night_lamp','shield_test')"),
+        choiceBtn('暂不灭灯，先稳住赵川与林哲紧绷的神经', '保留微火', "midEventAction('night_lamp','keep_lit')")
+      ].join('');
+    }
+    return [
+      choiceBtn('屏息贴近门缝，默数那道湿冷摩擦声停驻的时间节律', '细听节律', "midEventAction('night_lamp','check_crack')"),
+      choiceBtn('缩回灶台阴影里用衣领捂住口鼻，放慢呼吸保存体温', '静默保体', "midEventAction('night_lamp','steady_breath')")
+    ].join('');
+  }
+
+  if (S.flags.activeMidEvent === 'night_echo') {
+    return [
+      choiceBtn('立刻竖起食指压在唇前，冷眼示意全员绝不准发出半点应答', '禁声稳控', "midEventAction('night_echo','gag_warning')", true),
+      choiceBtn(isHere('chen') ? '俯身对照陈默感应器的余震间隔，辨认模仿音的移动方向' : '屏息辨认那道跑偏模仿音的移动方向与停顿间隔', '暗中辨声', "midEventAction('night_echo','check_sensor')"),
+      choiceBtn('趁门外还在院里试探，提前摸黑卡好门侧发力位置与木楔', '提前戒备', "midEventAction('night_echo','brace_position')")
+    ].join('');
+  }
+
+  if (S.flags.activeMidEvent === 'late_huddle') {
+    return [
+      choiceBtn('用指尖在冷灶灰里圈出“子时”与“后院”，示意盯紧窗缝风向变化', '灰盘推演', "midEventAction('late_huddle','ash_analyze')"),
+      choiceBtn('借腕表微光检查装备并做深慢调息，恢复刚才消耗的体力', '调息回体', "midEventAction('late_huddle','tend_quiet')"),
+      choiceBtn('贴着后墙木窗静听后院枯井方向的水声与雾流变化', '细听后院', "midEventAction('late_huddle','listen_well')")
     ].join('');
   }
 
   if (S.stage === 'exam_night') {
     const btns = [];
     if (S.location === S.baseRoom && !S.flags.reinforcedDoor) {
-      btns.push(choiceBtn(`加固木门门闩${hasItem('rope') ? '（使用浸油粗麻绳）' : ''}`, '8 分钟 · 防线提升', 'reinforceDoor()'));
+      btns.push(choiceBtn(`加固木门门闩${hasItem('rope') ? '（使用浸油粗麻绳）' : ''}`, '8 分钟', 'reinforceDoor()'));
     }
     if (S.location === S.baseRoom && (isHere('zhou') || S.oilLampLit)) {
-      btns.push(choiceBtn(S.oilLampLit ? '熄灭明火风灯，彻底断绝室内热源' : '重新点亮明火风灯', '5 分钟 · 热源管理', 'toggleLamp()'));
+      btns.push(choiceBtn(S.oilLampLit ? '熄灭明火风灯，改用冷光或摸黑守夜' : '重新点亮明火风灯', '5 分钟', 'toggleLamp()'));
     }
     if (S.location !== S.baseRoom) {
-      btns.push(choiceBtn(`潜回驻地【${ROOMS[S.baseRoom].name}】`, '5 分钟', `moveToRoom('${S.baseRoom}')`));
+      btns.push(choiceBtn(`潜回驻地【${ROOMS[S.baseRoom].name}】`, '2 分钟', `moveToRoom('${S.baseRoom}')`));
     }
-    btns.push(choiceBtn('保持静默守夜，等待夜色加深（直接推进）', '推进时间', 'waitUntilKnock()'));
+    btns.push(choiceBtn('保持静默守夜，等待夜色加深', '推进时间', 'waitUntilKnock()'));
     return btns.slice(0, 4).join('');
   }
 
@@ -1691,55 +2700,64 @@ function renderChoices() {
     if (linHere) {
       if (S.flags.crisisStep === 1) {
         return [
-          choiceBtn('抢先按住僵直的苏晓肩膀，示意她千万别应声', '稳控队友', 'crisisAction(1,"cover_su")', true),
-          choiceBtn('贴近门侧阴影，死死观察窗纸外晃动的无眼轮廓', '冷静侦察', 'crisisAction(1,"watch")', true)
+          choiceBtn('抢先按住僵直的苏晓肩膀，示意她千万别应声', '稳控队友', "crisisAction(1,'cover_su')", true),
+          choiceBtn('贴近门侧阴影，死死观察窗纸外晃动的无眼轮廓', '观察门外', "crisisAction(1,'watch')", true)
         ].join('');
       }
       if (S.flags.crisisStep === 2) {
+        if (S.oilLampLit) {
+          return [
+            choiceBtn('电光火石间一把拍灭周衡的明火镇魂风灯！', '扑灭明火', "crisisAction(2,'extinguish')", true),
+            choiceBtn('扑上去协助周衡一起硬顶颤抖的木门', '协助顶门', "crisisAction(2,'brace')", true)
+          ].join('');
+        }
         return [
-          choiceBtn('电光火石间一把拍灭周衡的明火镇魂风灯！', '秒级反应 · 断热源', 'crisisAction(2,"extinguish")', true),
-          choiceBtn('扑上去协助周衡一起硬顶颤抖的木门', '硬扛撞击', 'crisisAction(2,"brace")', true)
+          choiceBtn('趁屋里已无明火，立刻借势抵紧门闩配合周衡顶住大门！', '配合顶门', "crisisAction(2,'brace_dark')", true),
+          choiceBtn('趁黑暗拉住僵直的苏晓退往灶台死角并死死捂住她的嘴！', '护住苏晓', "crisisAction(2,'cover_su_dark')", true)
         ].join('');
       }
-      return choiceBtn('抄起木楔死死卡进松动的铁门闩槽，护住苏晓退入死角！', '敏捷检定', 'crisisAction(3,"wedge")', true);
+      return choiceBtn('抄起木楔死死卡进松动的铁门闩槽，护住苏晓退入死角！', '敏捷检定', "crisisAction(3,'wedge')", true);
     } else {
       return [
-        choiceBtn('彻底熄灭一切明火，死咬牙关绝不回应门外对真名的呼唤！', '意志检定 · 瞒天过海', 'crisisAction(1,"extinguish_silent")', true),
-        choiceBtn('冲上去死死抵住门板硬扛撞击', '硬扛受伤', 'crisisAction(1,"brace")', true)
+        choiceBtn(S.oilLampLit ? '立刻拍灭明火，死咬牙关绝不回应门外对真名的呼唤！' : '趁屋内漆黑无火，屏息死咬牙关绝不回应真名呼唤！', '意志检定', "crisisAction(1,'extinguish_silent')", true),
+        choiceBtn('冲上去死死抵住门板硬扛撞击', '硬顶木门', "crisisAction(1,'brace')", true)
       ].join('');
     }
   }
 
   if (S.stage === 'exam_late') {
     const btns = [];
-    if (!S.rounds.r2) btns.push(choiceBtn('打开右上角「线索板」，整合证据提交第二轮规律洞悉', '解锁第三轮考题', "toggleDrawer('clues')"));
+    if (S.baseRoom && S.location !== S.baseRoom) {
+      btns.push(choiceBtn(`潜回驻地【${ROOMS[S.baseRoom].name}】`, '2 分钟', `moveToRoom('${S.baseRoom}')`));
+    }
+    if (!S.rounds.r2) btns.push(choiceBtn('打开右上角「线索板」，整合证据补全第二轮题面', '提交补全', "toggleDrawer('clues')"));
     if (S.timeMin < 23 * 60 + 40) {
       btns.push(choiceBtn('熄灯静默观察窗缝雾气变化，静候子时（23:40）', '推进至子时', 'waitForMidnight()'));
     } else if (S.flags.midnightDebateStep < 2) {
-      btns.push(choiceBtn(S.flags.midnightDebateStep === 0 ? '识破第三轮题面陷阱：指出窗缝白雾正在倒流！' : '敲定后院枯井突围路线，立刻出发！', '破局关键', `midnightDebate(${S.flags.midnightDebateStep + 1})`));
+      btns.push(choiceBtn(S.flags.midnightDebateStep === 0 ? '指向窗缝倒吸的白雾，核对第三轮“卯时前”字眼' : '敲定后院枯井突围路线，立刻出发！', '商议突围', `midnightDebate(${S.flags.midnightDebateStep + 1})`));
     } else {
-      btns.push(choiceBtn('趁子时 15 分钟雾倒流窗口，摸黑潜入后院枯井！', '最终逃生阶段', 'startWellEscape()', true));
+      btns.push(choiceBtn('趁子时 15 分钟雾倒流窗口，摸黑潜入后院枯井！', '潜入后院', 'startWellEscape()', true));
     }
     return btns.slice(0, 4).join('');
   }
 
   if (S.stage === 'exam_escape') {
-    if (S.flags.escapeStep === 1) return choiceBtn('踩着青石边缘屏息潜行，摸向后院枯井井底', '敏捷潜行检定', 'escapeStepAction(1,"sneak")', true);
+    if (S.flags.escapeStep === 1) return choiceBtn('踩着青石边缘屏息潜行，摸向后院枯井井底', '敏捷检定', "escapeStepAction(1,'sneak')", true);
     if (S.flags.escapeStep === 2) {
       const btns = [];
-      if (isHere('chen')) btns.push(choiceBtn('让陈默用高频破拆改锥直接撬开锈死铁闸！', '队友职能解', 'escapeStepAction(2,"chen_open")', true));
-      if (isHere('zhou')) btns.push(choiceBtn('让周衡用破邪消防斧硬劈断锈死铁销！', '队友职能解', 'escapeStepAction(2,"zhou_axe")', true));
-      if (hasItem('crowbar') || hasItem('knife')) btns.push(choiceBtn(`独自用【${hasItem('crowbar') ? '生锈短撬棍' : '户外折刀'}】强撬暗渠铁闸！`, '工具独立解', 'escapeStepAction(2,"tool_open")', true));
-      btns.push(choiceBtn('抓起石块拼尽全力徒手硬砸锈死插销！', '体魄保底解', 'escapeStepAction(2,"brute")', true));
+      if (isHere('chen')) btns.push(choiceBtn('让陈默用高频破拆改锥直接撬开锈死铁闸！', '陈默破拆', "escapeStepAction(2,'chen_open')", true));
+      if (isHere('zhou')) btns.push(choiceBtn('让周衡用破邪消防斧硬劈断锈死铁销！', '周衡破门', "escapeStepAction(2,'zhou_axe')", true));
+      if (hasItem('crowbar') || hasItem('knife')) btns.push(choiceBtn(`独自用【${hasItem('crowbar') ? '生锈短撬棍' : '户外折刀'}】强撬暗渠铁闸！`, '随身工具', "escapeStepAction(2,'tool_open')", true));
+      btns.push(choiceBtn('抓起石块拼尽全力徒手硬砸锈死插销！', '体魄检定', "escapeStepAction(2,'brute')", true));
       return btns.slice(0, 4).join('');
     }
     if (S.flags.escapeStep === 3) {
       return [
-        choiceBtn(`将${hasItem('brick') ? '兜里的半块湿砖' : '井底碎青砖'}远远抛向东侧假山，声东击西！`, '秒级反应 · 零伤逃脱', 'escapeStepAction(3,"decoy")', true),
-        choiceBtn('顾不上诱饵，直接纵身扑进漆黑暗渠！', '负伤硬闯', 'escapeStepAction(3,"jump")', true)
+        choiceBtn(`将${hasItem('brick') ? '兜里的半块湿砖' : '井底碎青砖'}远远抛向东侧假山，声东击西！`, '抛石引开', "escapeStepAction(3,'decoy')", true),
+        choiceBtn('顾不上诱饵，直接纵身扑进漆黑暗渠！', '强行下渠', "escapeStepAction(3,'jump')", true)
       ].join('');
     }
-    return choiceBtn('咬紧牙关顶着刺骨暗流，涉水冲出三百米排水暗渠！', '体魄耐寒检定', 'escapeStepAction(4,"sprint")', true);
+    return choiceBtn('咬紧牙关顶着刺骨暗流，涉水冲出三百米排水暗渠！', '体魄检定', "escapeStepAction(4,'sprint')", true);
   }
 
   if (S.stage === 'dead') return choiceBtn('重新开始第一场《白雾古宅》', '重开', 'restartGame()');
@@ -1756,26 +2774,26 @@ function renderDrawer() {
       ${S.publishedRounds.r1 ? `
       <div class="p-3.5 rounded-lg border ${S.rounds.r1 ? 'border-emerald-500/35 bg-emerald-950/20' : 'border-white/10 bg-white/[0.02]'}">
         <div class="flex justify-between text-stone-200 font-medium"><span>第一轮 · 抉择（20分）</span><span>${S.rounds.r1 ? '✓ 已完成' : '进行中'}</span></div>
-        <div class="text-stone-400 mt-1">白雾将于保护期后封死院门，全员选定今夜落脚房间：主厅／祠堂／西厢。</div>
-      </div>` : ''}
+        <div class="text-stone-400 mt-1">白雾封院，择室安身：主厅／祠堂／西厢。</div>
+      </div>` : `<div class="p-3 rounded-lg border border-white/5 bg-white/[0.01] text-stone-500 text-[11px]">考题尚未下发……</div>`}
       ${S.publishedRounds.r2 ? `
       <div class="p-3.5 rounded-lg border ${S.rounds.r2 ? 'border-emerald-500/35 bg-emerald-950/20' : 'border-white/10 bg-white/[0.02]'}">
-        <div class="flex justify-between text-stone-200 font-medium"><span>第二轮 · 洞悉（25分）</span><span>${S.rounds.r2 ? '✓ 已完成' : '进行中'}</span></div>
-        <div class="text-stone-400 mt-1">查明今夜古宅内“敲门声”的真实规律。</div>
-      </div>` : `<div class="p-3 rounded-lg border border-white/5 bg-white/[0.01] text-stone-500 text-[11px]">后续考核轮次尚未发布……</div>`}
+        <div class="flex justify-between text-stone-200 font-medium"><span>第二轮 · 补全（25分）</span><span>${S.rounds.r2 ? '✓ 已完成' : '进行中'}</span></div>
+        <div class="text-stone-400 mt-1">今夜叩门者无目，唯循【██】与【██】索命。</div>
+      </div>` : (S.publishedRounds.r1 ? `<div class="p-3 rounded-lg border border-white/5 bg-white/[0.01] text-stone-500 text-[11px]">后续考核轮次尚未发布……</div>` : '')}
       ${S.publishedRounds.r3 ? `
       <div class="p-3.5 rounded-lg border ${S.rounds.r3 ? 'border-emerald-500/35 bg-emerald-950/20' : 'border-white/10 bg-white/[0.02]'}">
         <div class="flex justify-between text-stone-200 font-medium"><span>第三轮 · 逃生（35分）</span><span>${S.rounds.r3 ? '✓ 已完成' : '进行中'}</span></div>
-        <div class="text-stone-400 mt-1">在卯时（天亮）前，不惊动宅主的前提下离开白雾范围。</div>
+        <div class="text-stone-400 mt-1">卯时前，离开白雾。</div>
       </div>` : ''}
     </div>`;
   } else if (S.drawer === 'clues') {
-    title = '推理板 · 证据链与规律提交';
+    title = '线索板 · 物证整理与题面补全';
     body = `
     <div class="space-y-4 font-sans-ui">
-      <div class="text-xs text-stone-400">已收集 ${S.clues.length} 条物证。勾选关键证据（最多 3 条）后，在下方提交第二轮规律结论。</div>
+      <div class="text-xs text-stone-400">已记录 ${S.clues.length} 条现场物证。勾选支撑物证（最多 3 条）后，在下方补全第二轮残缺词条。</div>
       <div class="space-y-2">
-        ${S.clues.length === 0 ? `<div class="text-xs text-stone-500 py-6 text-center">尚未收集到有效线索，请点击左侧场景热点或找队友套话。</div>` :
+        ${S.clues.length === 0 ? `<div class="text-xs text-stone-500 py-6 text-center">尚未记录有效物证，请点击左侧场景物件或与同行者交谈。</div>` :
           S.clues.map(id => {
             const c = CLUES[id];
             const sel = S.selectedClues.includes(id);
@@ -1788,19 +2806,19 @@ function renderDrawer() {
       </div>
       ${S.publishedRounds.r2 && !S.rounds.r2 ? `
       <div class="pt-3 border-t border-white/10 space-y-2">
-        <div class="text-xs text-amber-300/90 font-medium">提交【第二轮·洞悉】结论</div>
+        <div class="text-xs text-amber-300/90 font-medium">补全【第二轮 · 补全】：今夜叩门者无目，唯循【██】与【██】索命</div>
         ${HYPOTHESES.map(h => `<button onclick="submitDeduction('${h.id}')" class="w-full text-left px-3.5 py-2.5 rounded-lg border border-white/10 hover:border-amber-400/50 bg-white/[0.03] hover:bg-white/[0.06] text-xs text-stone-200 transition">${h.label}</button>`).join('')}
-      </div>` : (S.rounds.r2 ? `<div class="p-3 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-300">✓ 已完成第二轮规律洞悉。</div>` : `<div class="text-xs text-stone-500">第二轮考题尚未发布。</div>`)}
+      </div>` : (S.rounds.r2 ? `<div class="p-3 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-300">✓ 已完成第二轮题面补全。</div>` : `<div class="text-xs text-stone-500">第二轮考题尚未发布。</div>`)}
     </div>`;
   } else if (S.drawer === 'npcs') {
-    title = '同行者 · 信息迷雾观察档';
+    title = '同行者 · 观察档案';
     body = `
     <div class="space-y-2.5 font-sans-ui">
-      <div class="text-[11px] text-stone-400">随交谈与实战逐步解锁对方真实姓名、位置与超凡装备底细。</div>
+      <div class="text-[11px] text-stone-400">随交谈与实战逐步解锁对方身份、编号与装备底细。</div>
       ${Object.values(S.npcs).map(n => `
       <div class="p-3.5 rounded-lg border ${n.alive ? 'border-white/10 bg-white/[0.025]' : 'border-red-900/40 bg-red-950/20 opacity-65'}">
         <div class="flex items-center justify-between">
-          <div class="text-xs font-medium text-stone-100">${npcDisplayName(n)}</div>
+          <div class="text-xs font-medium text-stone-100">${npcDisplayName(n)} <span class="font-mono-ui text-[10px] text-stone-500 ml-1">${n.code}</span></div>
           <span class="text-[10px] px-2 py-0.5 rounded ${n.alive ? 'bg-white/[0.06] text-stone-300' : 'bg-red-900/50 text-red-300'}">${n.alive ? (n.knownLevel >= 1 ? `${n.role} · ${ROOMS[n.room]?.short || ''}` : `身份不明 · ${ROOMS[n.room]?.short || ''}`) : '已死亡'}</span>
         </div>
         <div class="text-[11.5px] text-stone-400 mt-1.5 leading-relaxed">${n.knownLevel >= 1 ? n.note : n.anonDesc}</div>
@@ -1809,6 +2827,7 @@ function renderDrawer() {
     </div>`;
   } else if (S.drawer === 'pack') {
     title = '个人档案与随身物';
+    const woundedHere = presentNpcs().filter(n => n.hp < n.maxHp);
     body = `
     <div class="space-y-4 font-sans-ui text-xs">
       <div class="p-3 rounded-lg bg-white/[0.03] border border-white/10 flex justify-between">
@@ -1827,6 +2846,11 @@ function renderDrawer() {
         <div class="p-3 rounded-lg bg-white/[0.025] border border-white/10">
           <div class="flex justify-between text-stone-100 font-medium"><span>${it.name}</span>${it.uses !== undefined ? `<span class="text-amber-300 font-mono-ui">余 ${it.uses} 次</span>` : ''}</div>
           <div class="text-stone-400 text-[11px] mt-0.5">${it.desc}</div>
+          ${it.id === 'medkit' && it.uses > 0 ? `
+          <div class="mt-2.5 flex flex-wrap gap-1.5">
+            <button onclick="useMedkit('self')" ${S.hp >= S.maxHp ? 'disabled' : ''} class="px-2.5 py-1 rounded text-[11px] border transition ${S.hp < S.maxHp ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-200 hover:bg-emerald-900/60' : 'bg-white/[0.02] border-white/5 text-stone-500 cursor-not-allowed'}">包扎自己 (${S.hp}/${S.maxHp})</button>
+            ${woundedHere.map(w => `<button onclick="useMedkit('${w.id}')" class="px-2.5 py-1 rounded text-[11px] bg-amber-950/50 border border-amber-500/40 text-amber-200 hover:bg-amber-900/60 transition">救治${w.name} (${w.hp}/${w.maxHp})</button>`).join('')}
+          </div>` : ''}
         </div>`).join('')}
       </div>
     </div>`;
@@ -1868,15 +2892,19 @@ function renderSpaceMode() {
       <div class="bg-white/78 backdrop-blur-xl border border-slate-200/90 rounded-2xl p-5 shadow-lg">
         <div class="flex items-center justify-between">
           <div>
-            <div class="text-[10px] tracking-[0.22em] text-slate-400 uppercase">Death Exam Space · 回归大厅</div>
-            <h2 class="text-xl font-semibold text-slate-900 mt-0.5">${survivors.length === 0 ? '孤狼通关 · D 级权限开启' : '第一场已通关 · D 级权限开启'}</h2>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] tracking-[0.22em] text-slate-400 uppercase">Death Exam Space · 回归大厅</span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-amber-300">${st.rank || '标准通关'}</span>
+            </div>
+            <h2 class="text-xl font-semibold text-slate-900 mt-1">${survivors.length === 0 ? '孤狼生还 · D 级权限开启' : '第一场已通关 · D 级权限开启'}</h2>
           </div>
           <div class="text-right">
             <div class="text-[10px] text-slate-400">距下场强制传召</div>
             <div class="font-mono-ui text-lg font-semibold text-slate-800">${S.spaceEnded ? '00:00:00' : '72:00:00'}</div>
           </div>
         </div>
-        <div class="mt-2 text-xs text-slate-500">本场共同生还者：${survivors.length ? survivors.map(n => n.name).join('、') : '仅你一人独活'}</div>
+        ${st.rankDesc ? `<div class="mt-2 text-xs text-slate-600 leading-5">${st.rankDesc}</div>` : ''}
+        <div class="mt-1.5 text-xs text-slate-500">本场共同生还者：${survivors.length ? survivors.map(n => n.name).join('、') : '仅你一人独活'}</div>
         <div class="mt-3 pt-3 border-t border-slate-200/80 grid grid-cols-2 gap-y-1.5 text-xs">
           <span class="text-slate-500">轮次基础分（抉择/洞悉/逃生）</span><span class="text-right font-mono-ui text-slate-800">+${st.base}</span>
           <span class="text-slate-500">破局贡献${st.soloBonus ? '（含孤狼独活）' : ''}与地契暗线</span><span class="text-right font-mono-ui text-emerald-700">+${st.bonus}</span>
