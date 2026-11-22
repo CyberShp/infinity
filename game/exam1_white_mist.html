@@ -75,6 +75,12 @@
     }
     .text-reveal { animation: textReveal 0.32s ease-out; }
 
+    @keyframes beatEnter {
+      from { opacity: 0; transform: translateY(7px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .beat-enter { animation: beatEnter 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
     @keyframes screenShake {
       0%, 100% { transform: translate3d(0, 0, 0); }
       20% { transform: translate3d(-5px, 2px, 0); }
@@ -287,26 +293,29 @@ function saveAvSwitch(key, enabled) {
 }
 let FX_ENABLED = readAvSwitch('fx');
 let SFX_ENABLED = readAvSwitch('audio');
+let PACE_ENABLED = readAvSwitch('pace');
 let titleRafId = null;
 let audioCtx = null;
+let noiseBuf = null;
 
 // ======================== CODEX VISUAL / AUDIO / FX MANIFEST ========================
-// 供美术/视听协作（Codex）直接挂载静态图、动态背景视频、角色立绘、BGM与音效。
-// 任何字段留 null 时，引擎会自动无报错回退到内嵌 Base64 场景图 / Web Audio 合成音效。
+// 场景与三态角色立绘已完整接入 Codex 美术资产；
+// 注意：音频槽位仅用于挂载「真实实录拟音 / 采样级音频 (.mp3/.m4a)」，严禁挂载数学脚本合成的电子噪音文件。
+// 当音频槽位为 null 时，由下方物理木石共鸣器与极低频空间残响引擎提供克制、自然的拟音反馈。
 window.AV_MANIFEST = {
   scenes: {
-    title: null,          // e.g. 'assets/scenes/title_main.webp' or '.mp4'
-    alley: null,          // 现实老街雨巷
-    courtyard: null,      // 白雾古宅·前院
-    gate: 'assets/scenes/exam1_gate.webp',           // 厚木院门·结霜铁链
-    hall: 'assets/scenes/exam1_hall.webp',           // 主厅·无目画像
-    shrine: null,         // 东侧祠堂
-    west: null,           // 西厢·旧灶账房
-    east: 'assets/scenes/exam1_east.webp',           // 东厢·破柴房
-    well: null,           // 后院枯井
-    crisis_window: 'assets/scenes/exam1_crisis_window.webp',  // 22:00 敲门惊变·窗外苍白无目轮廓
-    canal: 'assets/scenes/exam1_canal.webp',          // 00:00 地下排水暗渠
-    space: null           // 纯白死考空间
+    title: 'assets/title_main_keyart.jpg',
+    alley: 'assets/exam1_alley.jpg',
+    courtyard: 'assets/exam1_courtyard.jpg',
+    gate: 'assets/scenes/exam1_gate.webp',
+    hall: 'assets/scenes/exam1_hall.webp',
+    shrine: 'assets/exam1_shrine.jpg',
+    west: 'assets/exam1_west.jpg',
+    east: 'assets/scenes/exam1_east.webp',
+    well: 'assets/exam1_well.jpg',
+    crisis_window: 'assets/scenes/exam1_crisis_window.webp',
+    canal: 'assets/scenes/exam1_canal.webp',
+    space: 'assets/exam1_space.jpg'
   },
   portraits: {
     zhou: { calm: 'assets/portraits/zhou_calm.webp', tense: 'assets/portraits/zhou_tense.webp', injured: 'assets/portraits/zhou_injured.webp' },
@@ -317,41 +326,106 @@ window.AV_MANIFEST = {
     su:   { calm: 'assets/portraits/su_calm.webp', tense: 'assets/portraits/su_tense.webp', injured: 'assets/portraits/su_injured.webp' }
   },
   bgm: {
-    title: 'assets/audio/bgm/title_rain.ogg',          // 标题雨夜
-    alley: 'assets/audio/bgm/alley_mist.ogg',          // 雨巷低频环境音
-    protect: 'assets/audio/bgm/manor_protect.ogg',        // 保护期阴冷静谧
-    night: 'assets/audio/bgm/manor_night.ogg',          // 雾夜压迫潜伏
-    crisis: 'assets/audio/bgm/crisis_tension.ogg',         // 22:00 敲门惊变/逃生高危
-    space: 'assets/audio/bgm/white_space.ogg'           // 纯白空间空灵白噪
+    title: null, alley: null, protect: null, night: null, crisis: null, space: null
   },
   sfx: {
-    watch: 'assets/audio/sfx/watch_beep.ogg',          // 腕表提示音
-    clue: 'assets/audio/sfx/clue_chime.ogg',           // 线索发现音
-    knock: 'assets/audio/sfx/door_knock_3x.ogg',          // 22:00 三声慢叩
-    danger: 'assets/audio/sfx/danger_hit.ogg',         // 危机重击/死亡播报
-    door_slam: 'assets/audio/sfx/door_slam.ogg',      // 狂暴撞门
-    frost_crack: 'assets/audio/sfx/frost_crack.ogg',    // 院门结霜冰裂
-    gate_pry: 'assets/audio/sfx/gate_pry.ogg',       // 枯井铁闸撬动
-    brick_throw: 'assets/audio/sfx/brick_throw.ogg',    // 抛砖声东击西
-    water_wade: 'assets/audio/sfx/water_wade.ogg'      // 暗渠涉水冲刺
+    watch: null, clue: null, knock: null, danger: null, door_slam: null,
+    frost_crack: null, gate_pry: null, brick_throw: null, water_wade: null
   }
 };
 
 const AudioDirector = {
   currentBgmKey: null,
   bgmEl: null,
+  roomBus: null,
+  droneGain: null,
+  userInteracted: false,
   missing: new Set(),
   playingSfx: new Set(),
+  ensureCtx() {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    if (!audioCtx) {
+      audioCtx = new Ctx();
+      // Warm diffuse room bus (low-passed reflection, zero harsh high-end electronic ring)
+      const master = audioCtx.createGain();
+      master.gain.value = 0.85;
+      master.connect(audioCtx.destination);
+
+      const delay = audioCtx.createDelay(0.8);
+      delay.delayTime.value = 0.36;
+      const damp = audioCtx.createBiquadFilter();
+      damp.type = 'lowpass';
+      damp.frequency.value = 310;
+      const wet = audioCtx.createGain();
+      wet.gain.value = 0.22;
+      delay.connect(damp); damp.connect(wet); wet.connect(master);
+
+      const bus = audioCtx.createGain();
+      bus.connect(master);
+      bus.connect(delay);
+      this.roomBus = bus;
+
+      // Brownian/pink organic texture buffer for wood, cloth, stone & water transients
+      const len = audioCtx.sampleRate * 1.5;
+      noiseBuf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+      const data = noiseBuf.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < len; i++) {
+        const white = Math.random() * 2 - 1;
+        last = (last + 0.045 * white) / 1.045;
+        data[i] = last * 2.8;
+      }
+    }
+    if (audioCtx.state === 'suspended' && this.userInteracted) {
+      audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+  },
+  ensureSubtleRoomAir(trackKey) {
+    try {
+      if (!SFX_ENABLED || !this.userInteracted) return;
+      const ctx = this.ensureCtx();
+      if (!ctx || !this.roomBus) return;
+      if (!this.droneGain) {
+        const g = ctx.createGain();
+        g.gain.value = 0;
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 180;
+        g.connect(lp); lp.connect(this.roomBus);
+        for (const [freq, amp, lfoHz] of [[54, 0.05, 0], [81.2, 0.04, 0.06], [121.5, 0.014, 0.04]]) {
+          const o = ctx.createOscillator(), og = ctx.createGain();
+          o.type = 'sine'; o.frequency.value = freq; og.gain.value = amp;
+          if (lfoHz) {
+            const lfo = ctx.createOscillator(), lg = ctx.createGain();
+            lfo.frequency.value = lfoHz; lg.gain.value = amp * 0.65;
+            lfo.connect(lg); lg.connect(og.gain); lfo.start();
+          }
+          o.connect(og); og.connect(g); o.start();
+        }
+        this.droneGain = g;
+      }
+      const target = trackKey === 'crisis' ? 0.34 : (trackKey === 'space' ? 0.12 : 0.22);
+      if (this.droneGain.gain.setTargetAtTime) this.droneGain.gain.setTargetAtTime(target, ctx.currentTime, 0.6);
+      else this.droneGain.gain.value = target;
+    } catch (e) {}
+  },
   setBgm(trackKey) {
     if (!SFX_ENABLED) { this.stopBgm(); return; }
     const src = window.AV_MANIFEST && window.AV_MANIFEST.bgm && window.AV_MANIFEST.bgm[trackKey];
-    if (!src || this.missing.has(src)) { this.stopBgm(); return; }
+    if (!src || this.missing.has(src)) {
+      if (this.bgmEl) this.stopBgm();
+      this.currentBgmKey = trackKey;
+      this.ensureSubtleRoomAir(trackKey);
+      return;
+    }
     if (this.currentBgmKey === trackKey && this.bgmEl) return;
     this.stopBgm();
     try {
       const el = new Audio(src);
       el.loop = true;
-      el.volume = 0.35;
+      el.volume = 0.24;
       el.addEventListener('error', () => this.missing.add(src), { once: true });
       el.play().catch(() => {});
       this.bgmEl = el;
@@ -361,6 +435,7 @@ const AudioDirector = {
   stopBgm() {
     try {
       if (this.bgmEl) { this.bgmEl.pause(); this.bgmEl.currentTime = 0; }
+      if (this.droneGain && audioCtx) this.droneGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.08);
     } catch (e) {}
     this.bgmEl = null;
     this.currentBgmKey = null;
@@ -372,20 +447,21 @@ const AudioDirector = {
     if (audioCtx) {
       audioCtx.close().catch(() => {});
       audioCtx = null;
+      this.roomBus = null;
+      this.droneGain = null;
     }
   },
   playSfx(type) {
     if (!SFX_ENABLED) return;
-    // The existing name-call branch uses the generic danger cue for the door impact.
     if (type === 'danger' && S.stage === 'exam_crisis' && S.flags.crisisStep === 1 && isHere('lin')) type = 'door_slam';
     const customSrc = window.AV_MANIFEST && window.AV_MANIFEST.sfx && window.AV_MANIFEST.sfx[type];
     if (customSrc && !this.missing.has(customSrc)) {
       try {
         const el = new Audio(customSrc);
-        el.volume = 0.65;
+        el.volume = 0.55;
         const onFailure = error => {
           if (!this.playingSfx.delete(el)) return;
-          if (error.name === 'NotSupportedError' || el.error) this.missing.add(customSrc);
+          if (error?.name === 'NotSupportedError' || el.error) this.missing.add(customSrc);
           if (SFX_ENABLED) this.synthesize(type);
         };
         this.playingSfx.add(el);
@@ -397,65 +473,92 @@ const AudioDirector = {
     }
     this.synthesize(type);
   },
+  noiseShot(ctx, startTime, dur, filterType, freq, q, peakGain) {
+    if (!noiseBuf || !this.roomBus) return;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.playbackRate.value = 0.85 + Math.random() * 0.3;
+    const f = ctx.createBiquadFilter();
+    f.type = filterType; f.frequency.setValueAtTime(freq, startTime); f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, startTime);
+    g.gain.linearRampToValueAtTime(peakGain, startTime + Math.min(0.008, dur * 0.2));
+    g.gain.exponentialRampToValueAtTime(0.0005, startTime + dur);
+    src.connect(f); f.connect(g); g.connect(this.roomBus);
+    src.start(startTime, Math.random() * 0.6, dur + 0.02);
+  },
+  bodyThud(ctx, startTime, fStart, fEnd, dur, peakGain) {
+    if (!this.roomBus) return;
+    const osc = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(fStart, startTime);
+    osc.frequency.exponentialRampToValueAtTime(fEnd, startTime + dur);
+    lp.type = 'lowpass'; lp.frequency.value = 220;
+    g.gain.setValueAtTime(peakGain, startTime);
+    g.gain.exponentialRampToValueAtTime(0.0006, startTime + dur);
+    osc.connect(lp); lp.connect(g); g.connect(this.roomBus);
+    osc.start(startTime); osc.stop(startTime + dur + 0.02);
+  },
   synthesize(type) {
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      if (!audioCtx) audioCtx = new Ctx();
-      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-      const now = audioCtx.currentTime;
-      if (type === 'watch') {
-        [880, 1174].forEach((freq, idx) => {
-          const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-          osc.type = 'sine'; osc.frequency.setValueAtTime(freq, now + idx * 0.08);
-          g.gain.setValueAtTime(0.035, now + idx * 0.08);
-          g.gain.exponentialRampToValueAtTime(0.0008, now + idx * 0.08 + 0.14);
-          osc.connect(g); g.connect(audioCtx.destination);
-          osc.start(now + idx * 0.08); osc.stop(now + idx * 0.08 + 0.15);
-        });
+      this.userInteracted = true;
+      const ctx = this.ensureCtx();
+      if (!ctx || !this.roomBus) return;
+      const now = ctx.currentTime;
+      if (type === 'page') {
+        // Soft paper/cloth micro-brush when advancing a paragraph
+        this.noiseShot(ctx, now, 0.045, 'bandpass', 380, 0.9, 0.032);
+      } else if (type === 'watch') {
+        // Tactile wrist-haptic micro-pulse (bone conduction feel, ZERO high-pitched beep!)
+        this.bodyThud(ctx, now, 148, 64, 0.055, 0.065);
+        this.bodyThud(ctx, now + 0.085, 162, 72, 0.05, 0.048);
       } else if (type === 'clue') {
-        const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-        osc.type = 'triangle'; osc.frequency.setValueAtTime(660, now);
-        osc.frequency.exponentialRampToValueAtTime(990, now + 0.18);
-        g.gain.setValueAtTime(0.04, now); g.gain.exponentialRampToValueAtTime(0.0008, now + 0.22);
-        osc.connect(g); g.connect(audioCtx.destination);
-        osc.start(now); osc.stop(now + 0.23);
+        // Soft old-ledger page turn + warm low wooden resonance
+        this.noiseShot(ctx, now, 0.09, 'bandpass', 460, 1.1, 0.045);
+        this.bodyThud(ctx, now + 0.015, 196, 130, 0.22, 0.035);
       } else if (type === 'knock') {
-        [0, 0.36, 0.72].forEach(dt => {
-          const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-          osc.type = 'sine'; osc.frequency.setValueAtTime(145, now + dt);
-          osc.frequency.exponentialRampToValueAtTime(52, now + dt + 0.11);
-          g.gain.setValueAtTime(0.14, now + dt); g.gain.exponentialRampToValueAtTime(0.001, now + dt + 0.13);
-          osc.connect(g); g.connect(audioCtx.destination);
-          osc.start(now + dt); osc.stop(now + dt + 0.14);
+        // Three slow, damp knuckles on thick aged timber (笃…笃…笃)
+        [0, 0.52, 1.06].forEach((dt, idx) => {
+          const t = now + dt;
+          const v = idx === 2 ? 1.15 : 0.95;
+          this.noiseShot(ctx, t, 0.065, 'bandpass', 240, 2.6, 0.14 * v);
+          this.bodyThud(ctx, t, 128, 48, 0.14, 0.12 * v);
         });
-      } else if (type === 'door_slam' || type === 'danger') {
-        const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(type === 'door_slam' ? 115 : 92, now);
-        osc.frequency.exponentialRampToValueAtTime(36, now + 0.36);
-        g.gain.setValueAtTime(type === 'door_slam' ? 0.085 : 0.055, now);
-        g.gain.exponentialRampToValueAtTime(0.001, now + 0.39);
-        osc.connect(g); g.connect(audioCtx.destination);
-        osc.start(now); osc.stop(now + 0.4);
-      } else if (type === 'frost_crack' || type === 'gate_pry' || type === 'brick_throw' || type === 'water_wade') {
-        const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-        osc.type = type === 'water_wade' ? 'sine' : 'triangle';
-        const f0 = type === 'frost_crack' ? 520 : (type === 'gate_pry' ? 310 : (type === 'brick_throw' ? 210 : 180));
-        osc.frequency.setValueAtTime(f0, now);
-        osc.frequency.exponentialRampToValueAtTime(f0 * 0.45, now + 0.22);
-        g.gain.setValueAtTime(0.045, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
-        osc.connect(g); g.connect(audioCtx.destination);
-        osc.start(now); osc.stop(now + 0.25);
+      } else if (type === 'door_slam') {
+        // Heavy timber impact + iron bolt rattle
+        this.noiseShot(ctx, now, 0.22, 'lowpass', 290, 1.2, 0.26);
+        this.bodyThud(ctx, now, 108, 32, 0.34, 0.22);
+      } else if (type === 'danger') {
+        // Deep air-pressure drop thud
+        this.noiseShot(ctx, now, 0.26, 'lowpass', 210, 0.8, 0.16);
+        this.bodyThud(ctx, now, 86, 30, 0.38, 0.16);
+      } else if (type === 'frost_crack') {
+        this.noiseShot(ctx, now, 0.07, 'bandpass', 920, 3.2, 0.055);
+        this.noiseShot(ctx, now + 0.05, 0.09, 'bandpass', 640, 2.4, 0.045);
+      } else if (type === 'gate_pry') {
+        this.noiseShot(ctx, now, 0.24, 'bandpass', 340, 3.5, 0.14);
+        this.bodyThud(ctx, now + 0.04, 140, 52, 0.22, 0.11);
+      } else if (type === 'brick_throw') {
+        this.noiseShot(ctx, now + 0.14, 0.09, 'bandpass', 520, 2.8, 0.11);
+        this.bodyThud(ctx, now + 0.14, 175, 78, 0.12, 0.08);
+      } else if (type === 'water_wade') {
+        [0, 0.24, 0.48].forEach(dt => {
+          this.noiseShot(ctx, now + dt, 0.18, 'bandpass', 280, 1.1, 0.09);
+        });
       }
     } catch (e) {}
   }
 };
 
-// Browsers can defer the first track until a player gesture (including keyboard clicks).
-document.addEventListener('click', () => {
+document.addEventListener('pointerdown', () => {
+  AudioDirector.userInteracted = true;
   const el = AudioDirector.bgmEl;
   if (SFX_ENABLED && el && el.paused && !el.error) el.play().catch(() => {});
+  else if (SFX_ENABLED) AudioDirector.ensureSubtleRoomAir(getStageBgmKey());
 }, true);
+
+let pendingBeatSfx = null;
+let pendingBeatShake = false;
 
 const FXDirector = {
   pendingShake: false,
@@ -465,7 +568,13 @@ const FXDirector = {
   sceneStarted: 0,
   trigger(effectName) {
     if (!FX_ENABLED) return;
-    if (effectName === 'shake') this.pendingShake = true;
+    if (effectName === 'shake') {
+      if (PACE_ENABLED && typeof S !== 'undefined' && S && S.stage !== 'title' && S.stage !== 'space' && S.stage !== 'char_select') {
+        pendingBeatShake = true;
+      } else {
+        this.pendingShake = true;
+      }
+    }
   },
   consumeShakeClass() {
     if (!FX_ENABLED || !this.pendingShake) return '';
@@ -583,7 +692,7 @@ function drawLampEmbers(ctx, w, h, t) {
 }
 
 function drawWindowTremor(ctx, art, w, h, t) {
-  if (!art?.naturalWidth || art.getAttribute('src').startsWith('data:')) return;
+  if (!art?.naturalWidth || art.getAttribute('src') === SCENE_IMGS.well) return;
   // Three damped pulses displace only the backlit paper inside the fixed window frame.
   const beat = t % 7.6;
   const pulse = beat < 2.28 ? Math.exp(-(beat % 0.76) * 6) : 0;
@@ -633,7 +742,19 @@ function refreshSceneMotion() {
 document.addEventListener('visibilitychange', refreshSceneMotion);
 sceneMotionPreference.addEventListener?.('change', refreshSceneMotion);
 
-function playSfx(type) { AudioDirector.playSfx(type); }
+const SFX_PRIORITY = { door_slam: 6, knock: 6, danger: 5, gate_pry: 5, frost_crack: 4, brick_throw: 4, water_wade: 4, watch: 3, clue: 2, page: 1 };
+function playSfx(type) {
+  if (!PACE_ENABLED || typeof S === 'undefined' || !S || S.stage === 'title' || S.stage === 'space' || S.stage === 'char_select') {
+    AudioDirector.playSfx(type);
+    return;
+  }
+  // In progressive pacing mode, 'watch' & 'clue' fire automatically when their 'system'/'clue' beat reveals;
+  // physical scene SFX attach to the beat being pushed so sound & text stay strictly synchronized.
+  if (type === 'watch' || type === 'clue') return;
+  if (!pendingBeatSfx || (SFX_PRIORITY[type] || 1) >= (SFX_PRIORITY[pendingBeatSfx] || 1)) {
+    pendingBeatSfx = type;
+  }
+}
 
 function saveProgress() {
   try {
@@ -792,6 +913,9 @@ function initState(startStage = 'title') {
     },
     prevCue: '',
     currentBeats: [],
+    visibleBeats: 1,
+    animatedUpTo: 0,
+    playedUpTo: 0,
     history: []
   };
 }
@@ -896,10 +1020,19 @@ function beginTurn(cueText = '') {
     S.prevCue = cueText || (last.text.length > 42 ? last.text.slice(0, 42) + '…' : last.text);
   }
   S.currentBeats = [];
+  S.visibleBeats = 1;
+  S.animatedUpTo = 0;
+  S.playedUpTo = 0;
 }
 function pushBeat(text, type = 'normal', speaker = null) {
   const entry = { time: fmtTime(S.timeMin), text, type, speaker };
+  if (pendingBeatSfx) { entry.sfx = pendingBeatSfx; pendingBeatSfx = null; }
+  if (pendingBeatShake) { entry.shake = true; pendingBeatShake = false; }
   S.currentBeats.push(entry);
+  // Pair a compact dice-check badge with its immediate narrative consequence on the initial beat
+  if (S.currentBeats.length === 2 && S.visibleBeats === 1 && (S.currentBeats[0].type === 'check_ok' || S.currentBeats[0].type === 'check_fail')) {
+    S.visibleBeats = 2;
+  }
   S.history.push(entry);
 }
 
@@ -938,6 +1071,20 @@ function activeSceneKey() {
   return ROOMS[S.location]?.id || 'courtyard';
 }
 
+function speakerToNpcId(speaker) {
+  if (!speaker || !S || !S.npcs) return null;
+  for (const n of Object.values(S.npcs)) {
+    if (speaker === n.name || speaker === n.anonName) return n.id;
+  }
+  if (speaker.includes('周衡') || speaker.includes('短斧')) return 'zhou';
+  if (speaker.includes('沈岚') || speaker.includes('冲锋衣')) return 'shen';
+  if (speaker.includes('陈默') || speaker.includes('工装')) return 'chen';
+  if (speaker.includes('赵川') || speaker.includes('胡茬')) return 'zhao';
+  if (speaker.includes('林哲') || speaker.includes('西装')) return 'lin';
+  if (speaker.includes('苏晓') || speaker.includes('帆布包')) return 'su';
+  return null;
+}
+
 function getNpcPortrait(npcId) {
   const p = window.AV_MANIFEST && window.AV_MANIFEST.portraits && window.AV_MANIFEST.portraits[npcId];
   if (!p) return null;
@@ -968,7 +1115,8 @@ document.getElementById('root').addEventListener('error', event => {
     const alternative = getNpcPortrait(portrait);
     if (alternative) el.src = alternative;
     else if (el.hasAttribute('data-badge')) el.replaceWith(document.createTextNode(el.dataset.badge));
-    else el.parentElement.remove();
+    else if (el.closest && el.closest('[data-portrait-card]')) el.closest('[data-portrait-card]').remove();
+    else el.remove();
   }
 }, true);
 
@@ -2475,51 +2623,147 @@ function spaceRestAction(act) {
 function stopTitleCanvas() {
   if (titleRafId) { cancelAnimationFrame(titleRafId); titleRafId = null; }
 }
-function toggleTitleModal(name) { S.titleModal = (S.titleModal === name) ? null : name; render(); }
+function toggleTitleModal(name) { S.titleModal = (S.titleModal === name) ? null : name; render({ preserveScroll: true }); }
 function toggleFx() {
   FX_ENABLED = !FX_ENABLED;
   saveAvSwitch('fx', FX_ENABLED);
-  render();
+  render({ preserveScroll: true });
   document.querySelector('button[onclick="toggleFx()"]')?.focus({ preventScroll: true });
 }
 function toggleSfx() {
   SFX_ENABLED = !SFX_ENABLED;
   saveAvSwitch('audio', SFX_ENABLED);
   if (!SFX_ENABLED) AudioDirector.mute();
-  render();
+  render({ preserveScroll: true });
   document.querySelector('button[onclick="toggleSfx()"]')?.focus({ preventScroll: true });
 }
+function togglePace() {
+  PACE_ENABLED = !PACE_ENABLED;
+  saveAvSwitch('pace', PACE_ENABLED);
+  if (!PACE_ENABLED && S && Array.isArray(S.currentBeats)) {
+    S.visibleBeats = S.currentBeats.length;
+    S.playedUpTo = S.currentBeats.length;
+  }
+  render({ preserveScroll: true });
+  document.querySelector('button[onclick="togglePace()"]')?.focus({ preventScroll: true });
+}
+function isPacingActive() {
+  if (!PACE_ENABLED || !S || !Array.isArray(S.currentBeats)) return false;
+  if (S.stage === 'title' || S.stage === 'char_select' || S.stage === 'space' || S.drawer) return false;
+  if (S.visibleBeats == null) {
+    S.visibleBeats = S.currentBeats.length;
+    S.animatedUpTo = S.visibleBeats;
+    S.playedUpTo = S.visibleBeats;
+  }
+  return S.visibleBeats < S.currentBeats.length;
+}
+function advanceBeat(ev) {
+  if (ev && typeof window !== 'undefined' && window.getSelection) {
+    const sel = String(window.getSelection() || '');
+    if (sel.length > 0) return;
+  }
+  if (!isPacingActive()) return;
+  S.visibleBeats = Math.min(S.currentBeats.length, (S.visibleBeats || 1) + 1);
+  render({ scrollNewBeat: true, fromAdvance: true });
+}
+function flushBeats() {
+  if (!S || !Array.isArray(S.currentBeats)) return;
+  S.visibleBeats = S.currentBeats.length;
+  render({ scrollNewBeat: true, fromAdvance: true });
+}
+document.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.code === 'Space' && isPacingActive()) {
+    const tag = document.activeElement?.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+      e.preventDefault();
+      advanceBeat();
+    }
+  }
+});
+function syncBeatPresentation(fromAdvance = false) {
+  if (!PACE_ENABLED || !S || !Array.isArray(S.currentBeats) || S.stage === 'title' || S.stage === 'space' || S.stage === 'char_select') {
+    pendingBeatSfx = null;
+    pendingBeatShake = false;
+    return;
+  }
+  if (S.currentBeats.length > 0) {
+    const last = S.currentBeats[S.currentBeats.length - 1];
+    if (pendingBeatSfx) {
+      if (!last.sfx || (SFX_PRIORITY[pendingBeatSfx] || 1) >= (SFX_PRIORITY[last.sfx] || 1)) last.sfx = pendingBeatSfx;
+      pendingBeatSfx = null;
+    }
+    if (pendingBeatShake) { last.shake = true; pendingBeatShake = false; }
+  } else {
+    pendingBeatSfx = null;
+    pendingBeatShake = false;
+  }
+  if (S.visibleBeats == null) {
+    S.visibleBeats = S.currentBeats.length;
+    if (S.playedUpTo == null) S.playedUpTo = S.visibleBeats;
+    if (S.animatedUpTo == null) S.animatedUpTo = S.visibleBeats;
+  }
+  const limit = isPacingActive() ? clamp(S.visibleBeats || 1, 1, S.currentBeats.length) : S.currentBeats.length;
+  const prev = S.playedUpTo || 0;
+  if (limit <= prev) return;
+  const newlyRevealed = S.currentBeats.slice(prev, limit);
+  S.playedUpTo = limit;
+  let bestSfx = null;
+  let wantShake = false;
+  for (const b of newlyRevealed) {
+    const candidate = b.sfx || (b.type === 'danger' ? 'danger' : (b.type === 'system' ? 'watch' : (b.type === 'clue' ? 'clue' : null)));
+    if (candidate && (!bestSfx || (SFX_PRIORITY[candidate] || 1) >= (SFX_PRIORITY[bestSfx] || 1))) {
+      bestSfx = candidate;
+    }
+    if (b.shake || b.type === 'danger') wantShake = true;
+  }
+  if (bestSfx) AudioDirector.playSfx(bestSfx);
+  else if (fromAdvance) AudioDirector.playSfx('page');
+  if (wantShake && FX_ENABLED) FXDirector.pendingShake = true;
+}
 function renderAvControls() {
-  return `<div class="av-switches" role="group" aria-label="考场视听">
+  return `<div class="av-switches pointer-events-auto" role="group" aria-label="考场视听与叙事">
+    ${S.stage !== 'space' && S.stage !== 'title' ? `<button type="button" onclick="togglePace()" aria-label="叙事节奏" aria-pressed="${PACE_ENABLED}">叙事 ${PACE_ENABLED ? '逐段' : '速读'}</button>` : ''}
     <button type="button" onclick="toggleSfx()" aria-label="声音" aria-pressed="${SFX_ENABLED}">声音 ${SFX_ENABLED ? '开' : '关'}</button>
     ${S.stage !== 'space' ? `<button type="button" onclick="toggleFx()" aria-label="动效" aria-pressed="${FX_ENABLED}">动效 ${FX_ENABLED ? '开' : '关'}</button>` : ''}
   </div>`;
 }
-function toggleDrawer(name) { S.drawer = (S.drawer === name) ? null : name; render(); }
+function toggleDrawer(name) { S.drawer = (S.drawer === name) ? null : name; render({ preserveScroll: true }); }
 function setShopFilter(cat) { S.shopFilter = cat; render(); }
 function restartGame() { initState('char_select'); render(); }
 
-function render() {
-  stopTitleCanvas();
-  FXDirector.stopScene();
+function render(opts = {}) {
   saveProgress();
   AudioDirector.setBgm(getStageBgmKey());
   const root = document.getElementById('root');
   if (S.stage === 'title') {
+    stopTitleCanvas();
+    FXDirector.stopScene();
     document.body.classList.remove('space-mode');
     root.innerHTML = renderTitleScreen();
     if (FX_ENABLED) startTitleCanvas();
     bindTitleParallax();
   } else if (S.stage === 'space') {
+    stopTitleCanvas();
+    FXDirector.stopScene();
     document.body.classList.add('space-mode');
     root.innerHTML = renderSpaceMode();
   } else {
+    stopTitleCanvas();
     document.body.classList.remove('space-mode');
-    root.innerHTML = renderExamMode();
-    const narrative = document.getElementById('narrative-scroll');
-    if (narrative) narrative.scrollTop = 0;
+    syncBeatPresentation(!!(opts && opts.fromAdvance));
+    const vm = computeExamViewModel();
+    const existingExam = document.getElementById('exam-root');
+    if (existingExam && existingExam.isConnected) {
+      patchExamDom(vm, opts);
+    } else {
+      FXDirector.stopScene();
+      root.innerHTML = renderExamMode(vm);
+      const narrative = document.getElementById('narrative-scroll');
+      if (narrative) narrative.scrollTop = 0;
+      FXDirector.startScene();
+    }
   }
-  FXDirector.startScene();
 }
 
 function bindTitleParallax() {
@@ -2652,7 +2896,7 @@ function renderTitleModal() {
   <div class="fixed inset-0 z-40 bg-black/75 backdrop-blur-md flex items-center justify-center p-5" onclick="if(event.target===this) toggleTitleModal(null)">
     <div class="w-full max-w-lg bg-[#0d1015]/95 border border-white/15 rounded-2xl shadow-2xl overflow-hidden font-sans-ui">
       <div class="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-        <span class="text-sm font-medium tracking-[0.14em] text-stone-100">${isCodex ? '死考基础规则档案' : '画面、音效与存档设置'}</span>
+        <span class="text-sm font-medium tracking-[0.14em] text-stone-100">${isCodex ? '死考基础规则档案' : '画面、音效与叙事设置'}</span>
         <button onclick="toggleTitleModal(null)" class="text-xs text-stone-400 hover:text-stone-100 px-2 py-0.5 rounded bg-white/[0.05]">关闭 ✕</button>
       </div>
       <div class="p-6 space-y-3.5 text-xs leading-6 text-stone-300">
@@ -2663,15 +2907,22 @@ function renderTitleModal() {
         ` : `
         <div class="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/10">
           <div>
+            <div class="text-stone-100 font-medium">逐段沉浸叙事节奏</div>
+            <div class="text-[11px] text-stone-400 mt-0.5">点击正文或按空格逐段展开文本，音画随段落同步触发</div>
+          </div>
+          <button onclick="togglePace()" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${PACE_ENABLED ? 'bg-red-600/80 text-white' : 'bg-white/10 text-stone-400'}">${PACE_ENABLED ? '逐段' : '速读'}</button>
+        </div>
+        <div class="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/10">
+          <div>
             <div class="text-stone-100 font-medium">实时雨雾粒子与视差动效</div>
-            <div class="text-[11px] text-stone-400 mt-0.5">Canvas 动态冷雨、漂浮体积雾与微距视差</div>
+            <div class="text-[11px] text-stone-400 mt-0.5">Canvas 动态寒霜、风灯余烬与窗纸微颤</div>
           </div>
           <button onclick="toggleFx()" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${FX_ENABLED ? 'bg-red-600/80 text-white' : 'bg-white/10 text-stone-400'}">${FX_ENABLED ? '已开启' : '已关闭'}</button>
         </div>
         <div class="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/10">
           <div>
-            <div class="text-stone-100 font-medium">界面与危机提示音效</div>
-            <div class="text-[11px] text-stone-400 mt-0.5">腕表推送音、线索提示与 22:00 敲门声效</div>
+            <div class="text-stone-100 font-medium">物理空间环境与事件声效</div>
+            <div class="text-[11px] text-stone-400 mt-0.5">低频建筑气压、腕表触觉脉冲与厚木叩门声效</div>
           </div>
           <button onclick="toggleSfx()" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${SFX_ENABLED ? 'bg-red-600/80 text-white' : 'bg-white/10 text-stone-400'}">${SFX_ENABLED ? '已开启' : '已关闭'}</button>
         </div>
@@ -2687,7 +2938,19 @@ function renderTitleModal() {
   </div>`;
 }
 
-function renderExamMode() {
+const STAGE_TITLE_MAP = {
+  char_select: '序幕 · 身份锚定',
+  prologue: '序幕 · 异常接入',
+  exam_protect: '保护期 · 自由勘察与套话',
+  exam_vote: '第一轮 · 选房与分队抉择',
+  exam_night: '雾夜潜伏 · 防线与暗流',
+  exam_crisis: '22:00 · 敲门惊变',
+  exam_late: '静默推理 · 洞悉与生路',
+  exam_escape: '子时窗口 · 枯井暗渠逃生',
+  dead: '考核终结'
+};
+
+function computeExamViewModel() {
   const danger = getDangerLevel();
   const ecgColor = danger === 'critical' ? '#ef4444' : (danger === 'tense' ? '#f59e0b' : '#94a3b8');
   const ecgSpeed = danger === 'critical' ? '0.9s' : (danger === 'tense' ? '1.6s' : '2.7s');
@@ -2707,156 +2970,239 @@ function renderExamMode() {
   const showLampGlow = FX_ENABLED && inHouse && S.oilLampLit && S.baseRoom && S.location === S.baseRoom && isHere('zhou');
   const sceneEffects = FXDirector.sceneEffects(sceneKey, danger, showLampGlow);
   const mistReverseCls = FX_ENABLED ? (S.timeMin >= 23 * 60 + 40 ? 'mist-reverse' : 'mist-a') : 'opacity-25';
-
-  const stageTitleMap = {
-    char_select: '序幕 · 身份锚定',
-    prologue: '序幕 · 异常接入',
-    exam_protect: '保护期 · 自由勘察与套话',
-    exam_vote: '第一轮 · 选房与分队抉择',
-    exam_night: '雾夜潜伏 · 防线与暗流',
-    exam_crisis: '22:00 · 敲门惊变',
-    exam_late: '静默推理 · 洞悉与生路',
-    exam_escape: '子时窗口 · 枯井暗渠逃生',
-    dead: '考核终结'
+  const artSig = `${sceneKey}|${artSrc}|${FX_ENABLED ? 1 : 0}|${sceneEffects}`;
+  return {
+    danger, ecgColor, ecgSpeed, sceneKey, artSrc, isArtVideo, inHouse, locTitle,
+    canInspectHotspots, hotspots, roomNpcs, pubCount, doneCount, shakeCls,
+    showLampGlow, sceneEffects, mistReverseCls, artSig,
+    stageTitle: STAGE_TITLE_MAP[S.stage] || '白雾古宅'
   };
+}
 
+function renderSceneCanvasHostInner(vm) {
   return `
-  <div class="w-screen h-screen overflow-hidden flex flex-col lg:flex-row bg-[#090b0e] text-[#e6e1d6]">
-    <!-- LEFT 58%: SCENE ARTWORK + INTERACTIVE HOTSPOTS + TOPOLOGY + WATCH -->
-    <div id="scene-stage" class="${shakeCls} relative w-full lg:w-[58%] h-[42vh] lg:h-full overflow-hidden border-b lg:border-b-0 lg:border-r border-white/10 bg-black shrink-0">
-      ${isArtVideo
-        ? `<video data-scene-key="${sceneKey}" src="${artSrc}" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover object-center opacity-90 select-none pointer-events-none"></video>`
-        : `<img data-scene-key="${sceneKey}" src="${artSrc}" alt="场景氛围图" class="${FX_ENABLED && sceneKey !== 'crisis_window' ? 'scene-bg-anim' : ''} absolute inset-0 w-full h-full object-cover object-center opacity-90 select-none pointer-events-none" />`
-      }
-      ${sceneEffects ? `<canvas id="scene-fx-canvas" data-effects="${sceneEffects}" aria-hidden="true"></canvas>` : ''}
-      <div class="absolute inset-0 bg-gradient-to-t from-[#07090c] via-black/20 to-[#07090c]/60 pointer-events-none"></div>
-      <div class="absolute inset-0 bg-gradient-to-r from-black/35 via-transparent to-[#090b0e]/80 pointer-events-none"></div>
-      ${showLampGlow ? `<div class="fx-lamp-glow absolute inset-0 pointer-events-none" style="background:radial-gradient(circle at 52% 62%, rgba(217,119,6,0.22), rgba(52,211,153,0.06) 45%, transparent 72%);"></div>` : ''}
-      <div class="${mistReverseCls} absolute -inset-x-12 bottom-0 h-56 pointer-events-none" style="background:radial-gradient(ellipse at 35% 100%, rgba(203,213,225,0.22), transparent 68%);"></div>
-      ${danger === 'critical' ? `<div class="${FX_ENABLED ? 'danger-vignette' : 'opacity-50'} absolute inset-0 pointer-events-none" style="box-shadow: inset 0 0 110px 24px rgba(185,28,28,0.58);"></div>` : ''}
+    ${vm.isArtVideo
+      ? `<video data-scene-key="${vm.sceneKey}" src="${vm.artSrc}" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover object-center opacity-90 select-none pointer-events-none"></video>`
+      : `<img data-scene-key="${vm.sceneKey}" src="${vm.artSrc}" alt="场景氛围图" class="${FX_ENABLED && vm.sceneKey !== 'crisis_window' ? 'scene-bg-anim' : ''} absolute inset-0 w-full h-full object-cover object-center opacity-90 select-none pointer-events-none" />`
+    }
+    ${vm.sceneEffects ? `<canvas id="scene-fx-canvas" data-effects="${vm.sceneEffects}" aria-hidden="true"></canvas>` : ''}
+    <div class="absolute inset-0 bg-gradient-to-t from-[#07090c] via-black/20 to-[#07090c]/60 pointer-events-none"></div>
+    <div class="absolute inset-0 bg-gradient-to-r from-black/35 via-transparent to-[#090b0e]/80 pointer-events-none"></div>`;
+}
 
-      <!-- INTERACTIVE SCENE HOTSPOTS OVERLAY -->
-      ${hotspots.map(hs => {
-        const checked = !!S.flags.hotspotsChecked[hs.id];
-        return `
-        <button onclick="clickHotspot('${hs.id}')" style="left:${hs.x}%; top:${hs.y}%;"
-          class="absolute -translate-x-1/2 -translate-y-1/2 z-20 group flex items-center gap-1.5 px-2.5 py-1 rounded-full font-sans-ui text-[11px] backdrop-blur-md border transition shadow-lg ${
-            checked
-            ? 'bg-black/45 border-white/15 text-stone-400 hover:bg-black/70'
-            : 'bg-[#0c1017]/80 border-amber-400/60 text-amber-100 hover:bg-amber-950/80 hover:scale-105'
-          }">
-          <span class="w-1.5 h-1.5 rounded-full ${checked ? 'bg-emerald-400/70' : 'bg-amber-400 animate-pulse'}"></span>
-          <span>${hs.label}</span>
-          <span class="font-mono-ui text-[9.5px] opacity-70">${checked ? '✓' : fmtDurShort(hs.mins)}</span>
-        </button>`;
-      }).join('')}
+function renderSceneHudInner(vm) {
+  return `
+    ${vm.showLampGlow ? `<div class="fx-lamp-glow absolute inset-0 pointer-events-none" style="background:radial-gradient(circle at 52% 62%, rgba(217,119,6,0.22), rgba(52,211,153,0.06) 45%, transparent 72%);"></div>` : ''}
+    <div class="${vm.mistReverseCls} absolute -inset-x-12 bottom-0 h-56 pointer-events-none" style="background:radial-gradient(ellipse at 35% 100%, rgba(203,213,225,0.22), transparent 68%);"></div>
+    ${vm.danger === 'critical' ? `<div class="${FX_ENABLED ? 'danger-vignette' : 'opacity-50'} absolute inset-0 pointer-events-none" style="box-shadow: inset 0 0 110px 24px rgba(185,28,28,0.58);"></div>` : ''}
 
-      <!-- Top-left location & dynamic round badge -->
-      <div class="absolute top-4 left-5 right-5 flex items-start justify-between pointer-events-none z-20">
-        <div class="pointer-events-auto bg-black/60 backdrop-blur-md border border-white/12 rounded-lg px-3.5 py-2">
-          <div class="font-sans-ui text-[10px] tracking-[0.22em] text-stone-400 uppercase">第一场 · 白雾古宅 ${S.aliasUsed ? `· 化名 ${S.aliasUsed}` : ''}</div>
-          <div class="flex items-center gap-2 mt-0.5">
-            <span class="w-1.5 h-1.5 rounded-full ${danger === 'critical' ? 'bg-red-500 animate-ping' : (danger === 'tense' ? 'bg-amber-400' : 'bg-stone-300')}"></span>
-            <span class="text-sm font-medium text-stone-100 tracking-wide">${locTitle}</span>
-            ${canInspectHotspots ? `<span class="font-sans-ui text-[10px] text-amber-300/80 ml-1">· 点击画面热点调查</span>` : ''}
-          </div>
-        </div>
-        <div class="flex flex-col items-end gap-1.5">
-        ${inHouse ? `
-        <button onclick="toggleDrawer('brief')" class="pointer-events-auto font-sans-ui text-[11px] px-3 py-1.5 rounded-lg bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/12 text-stone-200 transition flex items-center gap-1.5">
-          <span>已发考题</span>
-          <span class="font-mono-ui text-[10px] text-amber-300">${doneCount}/${pubCount}</span>
-        </button>` : ''}
-        ${renderAvControls()}
+    ${vm.hotspots.map(hs => {
+      const checked = !!S.flags.hotspotsChecked[hs.id];
+      return `
+      <button onclick="clickHotspot('${hs.id}')" style="left:${hs.x}%; top:${hs.y}%;"
+        class="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 z-20 group flex items-center gap-1.5 px-2.5 py-1 rounded-full font-sans-ui text-[11px] backdrop-blur-md border transition shadow-lg ${
+          checked
+          ? 'bg-black/45 border-white/15 text-stone-400 hover:bg-black/70'
+          : 'bg-[#0c1017]/80 border-amber-400/60 text-amber-100 hover:bg-amber-950/80 hover:scale-105'
+        }">
+        <span class="w-1.5 h-1.5 rounded-full ${checked ? 'bg-emerald-400/70' : 'bg-amber-400 animate-pulse'}"></span>
+        <span>${hs.label}</span>
+        <span class="font-mono-ui text-[9.5px] opacity-70">${checked ? '✓' : fmtDurShort(hs.mins)}</span>
+      </button>`;
+    }).join('')}
+
+    <div class="absolute top-4 left-5 right-5 flex items-start justify-between pointer-events-none z-20">
+      <div class="pointer-events-auto bg-black/60 backdrop-blur-md border border-white/12 rounded-lg px-3.5 py-2">
+        <div class="font-sans-ui text-[10px] tracking-[0.22em] text-stone-400 uppercase">第一场 · 白雾古宅 ${S.aliasUsed ? `· 化名 ${S.aliasUsed}` : ''}</div>
+        <div class="flex items-center gap-2 mt-0.5">
+          <span class="w-1.5 h-1.5 rounded-full ${vm.danger === 'critical' ? 'bg-red-500 animate-ping' : (vm.danger === 'tense' ? 'bg-amber-400' : 'bg-stone-300')}"></span>
+          <span class="text-sm font-medium text-stone-100 tracking-wide">${vm.locTitle}</span>
+          ${vm.canInspectHotspots ? `<span class="font-sans-ui text-[10px] text-amber-300/80 ml-1">· 点击画面热点调查</span>` : ''}
         </div>
       </div>
+      <div class="flex flex-col items-end gap-1.5 pointer-events-auto">
+      ${vm.inHouse ? `
+      <button onclick="toggleDrawer('brief')" class="font-sans-ui text-[11px] px-3 py-1.5 rounded-lg bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/12 text-stone-200 transition flex items-center gap-1.5">
+        <span>已发考题</span>
+        <span class="font-mono-ui text-[10px] text-amber-300">${vm.doneCount}/${vm.pubCount}</span>
+      </button>` : ''}
+      ${renderAvControls()}
+      </div>
+    </div>
 
-      <!-- Bottom HUD: Topology + Matte Watch -->
-      <div class="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3 z-20 pointer-events-none">
-        ${inHouse ? renderTopologyHUD() : `<div class="hidden lg:block bg-black/45 backdrop-blur-md border border-white/10 rounded-xl px-4 py-2.5 max-w-xs">
-          <div class="font-sans-ui text-[10px] tracking-[0.18em] text-stone-400">环境读数</div>
-          <div class="text-xs text-stone-300 mt-1 leading-relaxed">现实世界 · ${fmtTime(S.timeMin)} · 局部异常白雾正在形成</div>
-        </div>`}
+    <div class="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3 z-20 pointer-events-none">
+      ${vm.inHouse ? renderTopologyHUD() : `<div class="hidden lg:block bg-black/45 backdrop-blur-md border border-white/10 rounded-xl px-4 py-2.5 max-w-xs">
+        <div class="font-sans-ui text-[10px] tracking-[0.18em] text-stone-400">环境读数</div>
+        <div class="text-xs text-stone-300 mt-1 leading-relaxed">现实世界 · ${fmtTime(S.timeMin)} · 局部异常白雾正在形成</div>
+      </div>`}
 
-        <div class="pointer-events-auto w-[224px] bg-[#0b0d11]/90 backdrop-blur-xl border ${danger === 'critical' ? 'border-red-500/50' : 'border-white/12'} rounded-2xl p-3.5 shadow-2xl">
-          <div class="flex items-center justify-between">
-            <span class="font-mono-ui text-[10px] tracking-[0.18em] text-stone-400">CN-09471 · W-01</span>
-            <div class="flex items-center gap-1.5">
-              ${inHouse && S.heat >= 35 ? `<span class="font-sans-ui text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">热源</span>` : ''}
-              ${inHouse && S.sound >= 35 ? `<span class="font-sans-ui text-[9px] px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 border border-red-400/30">异响</span>` : ''}
-              <span class="w-2 h-2 rounded-full ${danger === 'critical' ? 'bg-red-500 animate-pulse' : (danger === 'tense' ? 'bg-amber-400' : 'bg-emerald-400/70')}"></span>
-            </div>
+      <div class="pointer-events-auto w-[224px] bg-[#0b0d11]/90 backdrop-blur-xl border ${vm.danger === 'critical' ? 'border-red-500/50' : 'border-white/12'} rounded-2xl p-3.5 shadow-2xl">
+        <div class="flex items-center justify-between">
+          <span class="font-mono-ui text-[10px] tracking-[0.18em] text-stone-400">CN-09471 · W-01</span>
+          <div class="flex items-center gap-1.5">
+            ${vm.inHouse && S.heat >= 35 ? `<span class="font-sans-ui text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">热源</span>` : ''}
+            ${vm.inHouse && S.sound >= 35 ? `<span class="font-sans-ui text-[9px] px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 border border-red-400/30">异响</span>` : ''}
+            <span class="w-2 h-2 rounded-full ${vm.danger === 'critical' ? 'bg-red-500 animate-pulse' : (vm.danger === 'tense' ? 'bg-amber-400' : 'bg-emerald-400/70')}"></span>
           </div>
-          <div class="flex items-baseline justify-between mt-1">
-            <div class="font-mono-ui text-2xl font-semibold tracking-wider text-stone-100">${fmtTime(S.timeMin)}</div>
-            <div class="font-mono-ui text-[10.5px] text-stone-400 flex items-center gap-2">
-              <span class="${S.hp <= 40 ? 'text-red-400 font-semibold' : ''}">HP ${S.hp}</span>
-              <span class="${S.sta <= 20 ? 'text-amber-300' : 'text-stone-500'}">STA ${S.sta}</span>
-            </div>
-          </div>
-          <div class="mt-2 h-8 w-full rounded bg-black/50 border border-white/5 overflow-hidden px-1 flex items-center">
-            <svg viewBox="0 0 180 28" class="w-full h-6">
-              <path d="M0,15 L36,15 L44,15 L49,6 L55,24 L61,3 L67,20 L73,15 L112,15 L118,8 L124,22 L130,5 L136,19 L142,15 L180,15"
-                fill="none" stroke="${ecgColor}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
-                class="ecg-path" style="--ecg-speed:${ecgSpeed};" />
-            </svg>
-          </div>
-          <div class="font-sans-ui text-[11px] mt-2 truncate ${danger === 'critical' ? 'text-red-400 font-medium' : (danger === 'tense' ? 'text-amber-300/90' : 'text-stone-400')}">${getWatchOmen()}</div>
         </div>
+        <div class="flex items-baseline justify-between mt-1">
+          <div class="font-mono-ui text-2xl font-semibold tracking-wider text-stone-100">${fmtTime(S.timeMin)}</div>
+          <div class="font-mono-ui text-[10.5px] text-stone-400 flex items-center gap-2">
+            <span class="${S.hp <= 40 ? 'text-red-400 font-semibold' : ''}">HP ${S.hp}</span>
+            <span class="${S.sta <= 20 ? 'text-amber-300' : 'text-stone-500'}">STA ${S.sta}</span>
+          </div>
+        </div>
+        <div class="mt-2 h-8 w-full rounded bg-black/50 border border-white/5 overflow-hidden px-1 flex items-center">
+          <svg viewBox="0 0 180 28" class="w-full h-6">
+            <path d="M0,15 L36,15 L44,15 L49,6 L55,24 L61,3 L67,20 L73,15 L112,15 L118,8 L124,22 L130,5 L136,19 L142,15 L180,15"
+              fill="none" stroke="${vm.ecgColor}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+              class="ecg-path" style="--ecg-speed:${vm.ecgSpeed};" />
+          </svg>
+        </div>
+        <div class="font-sans-ui text-[11px] mt-2 truncate ${vm.danger === 'critical' ? 'text-red-400 font-medium' : (vm.danger === 'tense' ? 'text-amber-300/90' : 'text-stone-400')}">${getWatchOmen()}</div>
+      </div>
+    </div>`;
+}
+
+function renderRightHeaderInner(vm) {
+  return `
+    <div class="font-sans-ui text-xs tracking-[0.14em] text-stone-300 font-medium truncate">${vm.stageTitle}</div>
+    <div class="flex items-center gap-1.5 font-sans-ui text-[11px]">
+      ${vm.inHouse ? `
+      <button onclick="toggleDrawer('clues')" class="px-2.5 py-1 rounded border transition ${S.drawer==='clues' ? 'bg-amber-500/20 border-amber-400/50 text-amber-200' : 'bg-white/[0.03] border-white/10 text-stone-300 hover:bg-white/[0.08]'}">线索${S.clues.length ? `·${S.clues.length}` : ''}</button>
+      <button onclick="toggleDrawer('npcs')" class="px-2.5 py-1 rounded border transition ${S.drawer==='npcs' ? 'bg-amber-500/20 border-amber-400/50 text-amber-200' : 'bg-white/[0.03] border-white/10 text-stone-300 hover:bg-white/[0.08]'}">同行·${Object.values(S.npcs).filter(n=>n.alive).length}</button>
+      <button onclick="toggleDrawer('pack')" class="px-2.5 py-1 rounded border transition ${S.drawer==='pack' ? 'bg-amber-500/20 border-amber-400/50 text-amber-200' : 'bg-white/[0.03] border-white/10 text-stone-300 hover:bg-white/[0.08]'}">随身</button>` : ''}
+      ${S.history.length > 0 ? `<button onclick="toggleDrawer('history')" class="px-2.5 py-1 rounded border transition ${S.drawer==='history' ? 'bg-amber-500/20 border-amber-400/50 text-amber-200' : 'bg-white/[0.03] border-white/10 text-stone-400 hover:bg-white/[0.08]'}">记录</button>` : ''}
+      <button onclick="returnToTitle()" class="px-2 py-1 rounded border border-white/8 bg-white/[0.02] text-stone-500 hover:text-stone-200 hover:bg-white/[0.07] transition">菜单</button>
+    </div>`;
+}
+
+function renderRoomNpcsBar(vm) {
+  if (!vm.roomNpcs.length) return '';
+  return `
+  <div class="px-5 py-2 border-b border-white/8 bg-[#12161d] flex items-center gap-2 overflow-x-auto font-sans-ui">
+    <span class="text-[10px] text-stone-500 shrink-0">同房在场：</span>
+    ${vm.roomNpcs.map(n => {
+      const talked = S.stage === 'exam_protect' ? !!S.flags.npcTalkedProtect[n.id] : !!S.flags.nightTalks[n.id];
+      const pUrl = getNpcPortrait(n.id);
+      return `
+    <button onclick="talkToNpcInRoom('${n.id}')" class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] border transition ${
+      talked
+      ? 'bg-white/[0.02] border-white/8 text-stone-400 hover:bg-white/[0.06]'
+      : 'bg-white/[0.06] hover:bg-amber-500/20 border-white/12 hover:border-amber-400/50 text-stone-200'
+    }">
+      ${pUrl ? `<img data-portrait="${n.id}" data-badge="${talked ? '✓' : '💬'}" src="${pUrl}" alt="${npcDisplayName(n)}" class="w-5 h-5 rounded-full object-cover object-top border border-white/20" />` : `<span>${talked ? '✓' : '💬'}</span>`}
+      <span>${npcDisplayName(n)}</span>
+    </button>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderNarrativeInner() {
+  return `
+    ${S.activeTalk && getNpcPortrait(S.activeTalk) ? `
+    <div data-portrait-card class="mb-4 flex items-center gap-3.5 p-3 rounded-xl bg-white/[0.03] border border-white/10">
+      <img data-portrait="${S.activeTalk}" src="${getNpcPortrait(S.activeTalk)}" alt="${npcDisplayName(S.npcs[S.activeTalk])}" class="w-14 h-14 rounded-lg object-cover object-top border border-amber-400/30 shrink-0" />
+      <div class="min-w-0">
+        <div class="font-sans-ui text-xs font-medium text-amber-200">${npcDisplayName(S.npcs[S.activeTalk])} <span class="font-mono-ui text-[10px] text-stone-500 ml-1">${S.npcs[S.activeTalk].code}</span></div>
+        <div class="text-[11.5px] text-stone-400 mt-0.5 truncate">${S.npcs[S.activeTalk].knownLevel >= 1 ? S.npcs[S.activeTalk].role : S.npcs[S.activeTalk].anonDesc}</div>
+      </div>
+    </div>` : ''}
+    ${S.stage === 'char_select' ? renderCharSelect() : renderFocusedBeats()}`;
+}
+
+function renderPacingControls() {
+  const cur = clamp(S.visibleBeats || 1, 1, S.currentBeats.length);
+  const total = S.currentBeats.length;
+  return `
+  <div class="beat-enter flex items-center gap-2 font-sans-ui">
+    <button type="button" onclick="advanceBeat()"
+      class="flex-1 text-left px-4 py-2.5 rounded-lg border border-amber-400/40 bg-amber-950/25 hover:bg-amber-900/35 hover:border-amber-300/65 text-stone-100 transition flex items-center justify-between gap-3">
+      <span class="text-[13.5px] font-medium tracking-wide text-amber-100">继续阅读 ▸</span>
+      <span class="font-mono-ui text-[11px] text-amber-300/80">${cur}/${total} · 点击正文或按空格</span>
+    </button>
+    <button type="button" onclick="flushBeats()"
+      class="shrink-0 px-3 py-2.5 rounded-lg border border-white/10 bg-white/[0.03] hover:bg-white/[0.08] text-xs text-stone-400 hover:text-stone-200 transition">全显 ▸▸</button>
+  </div>`;
+}
+
+function renderChoicesContainer() {
+  if (S.stage === 'char_select') return '';
+  return `
+  <div class="border-t border-white/10 bg-[#0b0d11]/95 px-5 py-3.5">
+    <div class="flex flex-col gap-2">${isPacingActive() ? renderPacingControls() : renderChoices()}</div>
+  </div>`;
+}
+
+function patchExamDom(vm, opts = {}) {
+  const canvasHost = document.getElementById('scene-canvas-host');
+  if (canvasHost && canvasHost.dataset.artSig !== vm.artSig) {
+    FXDirector.stopScene();
+    canvasHost.dataset.artSig = vm.artSig;
+    canvasHost.innerHTML = renderSceneCanvasHostInner(vm);
+    FXDirector.startScene();
+  }
+  if (vm.shakeCls) {
+    const stageEl = document.getElementById('scene-stage');
+    if (stageEl && stageEl.classList) {
+      stageEl.classList.remove('fx-shake');
+      void stageEl.offsetWidth;
+      stageEl.classList.add('fx-shake');
+    }
+  }
+  const hudEl = document.getElementById('scene-hud-layer');
+  if (hudEl) hudEl.innerHTML = renderSceneHudInner(vm);
+  const headerEl = document.getElementById('right-header-slot');
+  if (headerEl) headerEl.innerHTML = renderRightHeaderInner(vm);
+  const roomBarEl = document.getElementById('room-npcs-slot');
+  if (roomBarEl) roomBarEl.innerHTML = renderRoomNpcsBar(vm);
+  const narrative = document.getElementById('narrative-scroll');
+  if (narrative) {
+    if (narrative.classList) narrative.classList.toggle('cursor-pointer', isPacingActive());
+    narrative.innerHTML = renderNarrativeInner();
+    if (opts && opts.scrollNewBeat) {
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => {
+          if (narrative.scrollTo) narrative.scrollTo({ top: narrative.scrollHeight, behavior: 'smooth' });
+          else narrative.scrollTop = narrative.scrollHeight;
+        });
+      } else {
+        narrative.scrollTop = narrative.scrollHeight;
+      }
+    } else if (!opts || !opts.preserveScroll) {
+      narrative.scrollTop = 0;
+    }
+  }
+  const choicesEl = document.getElementById('choices-slot');
+  if (choicesEl) choicesEl.innerHTML = renderChoicesContainer();
+  const drawerEl = document.getElementById('drawer-slot');
+  if (drawerEl) drawerEl.innerHTML = S.drawer ? renderDrawer() : '';
+}
+
+function renderExamMode(vm = computeExamViewModel()) {
+  return `
+  <div id="exam-root" class="w-screen h-screen overflow-hidden flex flex-col lg:flex-row bg-[#090b0e] text-[#e6e1d6]">
+    <!-- LEFT 58%: SCENE ARTWORK + INTERACTIVE HOTSPOTS + TOPOLOGY + WATCH -->
+    <div id="scene-stage" class="${vm.shakeCls} relative w-full lg:w-[58%] h-[42vh] lg:h-full overflow-hidden border-b lg:border-b-0 lg:border-r border-white/10 bg-black shrink-0">
+      <div id="scene-canvas-host" data-art-sig="${vm.artSig}" class="absolute inset-0 pointer-events-none">
+        ${renderSceneCanvasHostInner(vm)}
+      </div>
+      <div id="scene-hud-layer" class="absolute inset-0 pointer-events-none">
+        ${renderSceneHudInner(vm)}
       </div>
     </div>
 
     <!-- RIGHT 42%: FIXED-HEIGHT EDITORIAL READING COLUMN -->
     <div class="relative w-full lg:w-[42%] h-[58vh] lg:h-full flex flex-col bg-[#0e1014] overflow-hidden">
-      <div class="shrink-0 h-[52px] px-5 border-b border-white/8 flex items-center justify-between bg-[#111419]/90">
-        <div class="font-sans-ui text-xs tracking-[0.14em] text-stone-300 font-medium truncate">${stageTitleMap[S.stage] || '白雾古宅'}</div>
-        <div class="flex items-center gap-1.5 font-sans-ui text-[11px]">
-          ${inHouse ? `
-          <button onclick="toggleDrawer('clues')" class="px-2.5 py-1 rounded border transition ${S.drawer==='clues' ? 'bg-amber-500/20 border-amber-400/50 text-amber-200' : 'bg-white/[0.03] border-white/10 text-stone-300 hover:bg-white/[0.08]'}">线索${S.clues.length ? `·${S.clues.length}` : ''}</button>
-          <button onclick="toggleDrawer('npcs')" class="px-2.5 py-1 rounded border transition ${S.drawer==='npcs' ? 'bg-amber-500/20 border-amber-400/50 text-amber-200' : 'bg-white/[0.03] border-white/10 text-stone-300 hover:bg-white/[0.08]'}">同行·${Object.values(S.npcs).filter(n=>n.alive).length}</button>
-          <button onclick="toggleDrawer('pack')" class="px-2.5 py-1 rounded border transition ${S.drawer==='pack' ? 'bg-amber-500/20 border-amber-400/50 text-amber-200' : 'bg-white/[0.03] border-white/10 text-stone-300 hover:bg-white/[0.08]'}">随身</button>` : ''}
-          ${S.history.length > 0 ? `<button onclick="toggleDrawer('history')" class="px-2.5 py-1 rounded border transition ${S.drawer==='history' ? 'bg-amber-500/20 border-amber-400/50 text-amber-200' : 'bg-white/[0.03] border-white/10 text-stone-400 hover:bg-white/[0.08]'}">记录</button>` : ''}
-          <button onclick="returnToTitle()" class="px-2 py-1 rounded border border-white/8 bg-white/[0.02] text-stone-500 hover:text-stone-200 hover:bg-white/[0.07] transition">菜单</button>
-        </div>
+      <div id="right-header-slot" class="shrink-0 h-[52px] px-5 border-b border-white/8 flex items-center justify-between bg-[#111419]/90">
+        ${renderRightHeaderInner(vm)}
       </div>
-
-      <!-- LIVE PRESENT NPCs TALK BAR (Interact with whoever is in your room!) -->
-      ${roomNpcs.length > 0 ? `
-      <div class="shrink-0 px-5 py-2 border-b border-white/8 bg-[#12161d] flex items-center gap-2 overflow-x-auto font-sans-ui">
-        <span class="text-[10px] text-stone-500 shrink-0">同房在场：</span>
-        ${roomNpcs.map(n => {
-          const talked = S.stage === 'exam_protect' ? !!S.flags.npcTalkedProtect[n.id] : !!S.flags.nightTalks[n.id];
-          const pUrl = getNpcPortrait(n.id);
-          return `
-        <button onclick="talkToNpcInRoom('${n.id}')" class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] border transition ${
-          talked
-          ? 'bg-white/[0.02] border-white/8 text-stone-400 hover:bg-white/[0.06]'
-          : 'bg-white/[0.06] hover:bg-amber-500/20 border-white/12 hover:border-amber-400/50 text-stone-200'
-        }">
-          ${pUrl ? `<img data-portrait="${n.id}" data-badge="${talked ? '✓' : '💬'}" src="${pUrl}" alt="${npcDisplayName(n)}" class="w-4 h-4 rounded-full object-cover border border-white/20" />` : `<span>${talked ? '✓' : '💬'}</span>`}
-          <span>${npcDisplayName(n)}</span>
-        </button>`;
-        }).join('')}
-      </div>` : ''}
-
-      <div id="narrative-scroll" class="flex-1 min-h-0 overflow-y-auto scroll-thin px-6 py-5">
-        ${S.activeTalk && getNpcPortrait(S.activeTalk) ? `
-        <div class="mb-4 flex items-center gap-3.5 p-3 rounded-xl bg-white/[0.03] border border-white/10">
-          <img data-portrait="${S.activeTalk}" src="${getNpcPortrait(S.activeTalk)}" alt="${npcDisplayName(S.npcs[S.activeTalk])}" class="w-14 h-14 rounded-lg object-cover border border-amber-400/30 shrink-0" />
-          <div class="min-w-0">
-            <div class="font-sans-ui text-xs font-medium text-amber-200">${npcDisplayName(S.npcs[S.activeTalk])} <span class="font-mono-ui text-[10px] text-stone-500 ml-1">${S.npcs[S.activeTalk].code}</span></div>
-            <div class="text-[11.5px] text-stone-400 mt-0.5 truncate">${S.npcs[S.activeTalk].knownLevel >= 1 ? S.npcs[S.activeTalk].role : S.npcs[S.activeTalk].anonDesc}</div>
-          </div>
-        </div>` : ''}
-        ${S.stage === 'char_select' ? renderCharSelect() : renderFocusedBeats()}
+      <div id="room-npcs-slot" class="shrink-0">${renderRoomNpcsBar(vm)}</div>
+      <div id="narrative-scroll" onclick="if(isPacingActive()) advanceBeat(event)" class="flex-1 min-h-0 overflow-y-auto scroll-thin px-6 py-5 ${isPacingActive() ? 'cursor-pointer' : ''}">
+        ${renderNarrativeInner()}
       </div>
-
-      ${S.stage !== 'char_select' ? `
-      <div class="shrink-0 border-t border-white/10 bg-[#0b0d11]/95 px-5 py-3.5">
-        <div class="flex flex-col gap-2">${renderChoices()}</div>
-      </div>` : ''}
-
-      ${S.drawer ? renderDrawer() : ''}
+      <div id="choices-slot" class="shrink-0">${renderChoicesContainer()}</div>
+      <div id="drawer-slot">${S.drawer ? renderDrawer() : ''}</div>
     </div>
   </div>`;
 }
@@ -2939,18 +3285,32 @@ function renderCharSelect() {
 }
 
 function renderFocusedBeats() {
+  const total = S.currentBeats.length;
+  const limit = isPacingActive() ? clamp(S.visibleBeats || 1, 1, total) : total;
+  const shown = S.currentBeats.slice(0, limit);
+  const prevAnim = S.animatedUpTo || 0;
+  S.animatedUpTo = shown.length;
+
   return `
-  <div class="text-reveal space-y-4">
+  <div class="space-y-4">
     ${S.prevCue ? `<div class="font-sans-ui text-[11px] text-stone-500 border-l-2 border-white/10 pl-3 py-0.5 truncate">上一步 · ${S.prevCue}</div>` : ''}
-    ${S.currentBeats.map(b => {
-      if (b.type === 'system') return `<div class="font-sans-ui text-[12.5px] leading-6 text-sky-200/95 bg-sky-950/35 border border-sky-400/25 rounded-lg px-4 py-3 whitespace-pre-line">${b.text}</div>`;
-      if (b.type === 'check_ok') return `<div class="font-mono-ui text-[11.5px] text-emerald-300 bg-emerald-950/35 border border-emerald-500/35 rounded-lg px-3.5 py-2">${b.text}</div>`;
-      if (b.type === 'check_fail') return `<div class="font-mono-ui text-[11.5px] text-rose-300 bg-rose-950/35 border border-rose-500/35 rounded-lg px-3.5 py-2">${b.text}</div>`;
-      if (b.type === 'danger') return `<div class="text-[14.5px] leading-7 text-red-200 bg-red-950/35 border-l-2 border-red-500 pl-4 pr-3 py-2.5 rounded-r-lg">${b.text}</div>`;
-      if (b.type === 'clue') return `<div class="font-sans-ui text-[12.5px] leading-6 text-amber-200/95 bg-amber-950/25 border border-amber-500/25 rounded-lg px-3.5 py-2.5">${b.text}</div>`;
-      if (b.type === 'warn') return `<div class="font-sans-ui text-[12.5px] leading-6 text-amber-300/90 bg-white/[0.03] border border-white/10 rounded-lg px-3.5 py-2">${b.text}</div>`;
-      if (b.type === 'dialogue') return `<div class="pl-3.5 border-l-2 border-amber-400/45 py-0.5"><div class="font-sans-ui text-[11px] tracking-wider text-amber-300/85 mb-1">${b.speaker}</div><div class="text-[14.5px] leading-7 text-stone-200">${b.text}</div></div>`;
-      return `<p class="text-[15px] leading-[1.85] text-[#e4dfd3]">${b.text}</p>`;
+    ${shown.map((b, idx) => {
+      const animCls = idx >= prevAnim ? 'beat-enter' : '';
+      if (b.type === 'system') return `<div class="${animCls} font-sans-ui text-[12.5px] leading-6 text-sky-200/95 bg-sky-950/35 border border-sky-400/25 rounded-lg px-4 py-3 whitespace-pre-line">${b.text}</div>`;
+      if (b.type === 'check_ok') return `<div class="${animCls} font-mono-ui text-[11.5px] text-emerald-300 bg-emerald-950/35 border border-emerald-500/35 rounded-lg px-3.5 py-2">${b.text}</div>`;
+      if (b.type === 'check_fail') return `<div class="${animCls} font-mono-ui text-[11.5px] text-rose-300 bg-rose-950/35 border border-rose-500/35 rounded-lg px-3.5 py-2">${b.text}</div>`;
+      if (b.type === 'danger') return `<div class="${animCls} text-[14.5px] leading-7 text-red-200 bg-red-950/35 border-l-2 border-red-500 pl-4 pr-3 py-2.5 rounded-r-lg">${b.text}</div>`;
+      if (b.type === 'clue') return `<div class="${animCls} font-sans-ui text-[12.5px] leading-6 text-amber-200/95 bg-amber-950/25 border border-amber-500/25 rounded-lg px-3.5 py-2.5">${b.text}</div>`;
+      if (b.type === 'warn') return `<div class="${animCls} font-sans-ui text-[12.5px] leading-6 text-amber-300/90 bg-white/[0.03] border border-white/10 rounded-lg px-3.5 py-2">${b.text}</div>`;
+      if (b.type === 'dialogue') {
+        const npcId = speakerToNpcId(b.speaker);
+        const pUrl = (!S.activeTalk || S.activeTalk !== npcId) && npcId ? getNpcPortrait(npcId) : null;
+        if (pUrl) {
+          return `<div class="${animCls} flex items-start gap-3.5 py-2 px-3 rounded-xl bg-white/[0.02] border border-white/[0.06]"><img data-portrait="${npcId}" src="${pUrl}" alt="${b.speaker}" class="w-11 h-11 rounded-lg object-cover object-top border border-amber-400/30 shadow-md shrink-0 mt-0.5" /><div class="min-w-0 flex-1"><div class="font-sans-ui text-[11px] tracking-wider text-amber-300/90 font-medium mb-0.5">${b.speaker}</div><div class="text-[14.5px] leading-7 text-stone-200">${b.text}</div></div></div>`;
+        }
+        return `<div class="${animCls} pl-3.5 border-l-2 border-amber-400/45 py-0.5"><div class="font-sans-ui text-[11px] tracking-wider text-amber-300/85 mb-1">${b.speaker}</div><div class="text-[14.5px] leading-7 text-stone-200">${b.text}</div></div>`;
+      }
+      return `<p class="${animCls} text-[15px] leading-[1.85] text-[#e4dfd3]">${b.text}</p>`;
     }).join('')}
   </div>`;
 }
@@ -3310,14 +3670,20 @@ function renderDrawer() {
       <div class="text-[11px] text-stone-400">随交谈与实战逐步解锁对方身份、编号与装备底细。</div>
       ${Object.values(S.npcs).map(n => {
         const inj = n.alive && n.hp < n.maxHp * 0.8;
+        const pUrl = getNpcPortrait(n.id);
         return `
       <div class="p-3.5 rounded-lg border ${n.alive ? 'border-white/10 bg-white/[0.025]' : 'border-red-900/40 bg-red-950/20 opacity-65'}">
-        <div class="flex items-center justify-between gap-2">
-          <div class="text-xs font-medium text-stone-100">${npcDisplayName(n)} ${n.knownLevel >= 1 ? `<span class="font-mono-ui text-[10px] text-stone-500 ml-1">${n.code}</span>` : ''} ${inj ? `<span class="text-[9.5px] px-1.5 py-0.5 rounded bg-rose-950/70 border border-rose-500/40 text-rose-300 ml-1">受伤 ${n.hp}/${n.maxHp}</span>` : ''}</div>
-          <span class="text-[10px] px-2 py-0.5 rounded shrink-0 ${n.alive ? 'bg-white/[0.06] text-stone-300' : 'bg-red-900/50 text-red-300'}">${n.alive ? (n.knownLevel >= 1 ? `${n.role} · ${ROOMS[n.room]?.short || ''}` : `身份不明 · ${ROOMS[n.room]?.short || ''}`) : '已死亡'}</span>
+        <div class="flex items-start gap-3">
+          ${pUrl ? `<img data-portrait="${n.id}" src="${pUrl}" alt="${npcDisplayName(n)}" class="w-12 h-12 rounded-lg object-cover object-top border ${n.alive ? 'border-white/15' : 'border-red-900/50 grayscale opacity-60'} shrink-0" />` : ''}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs font-medium text-stone-100">${npcDisplayName(n)} ${n.knownLevel >= 1 ? `<span class="font-mono-ui text-[10px] text-stone-500 ml-1">${n.code}</span>` : ''} ${inj ? `<span class="text-[9.5px] px-1.5 py-0.5 rounded bg-rose-950/70 border border-rose-500/40 text-rose-300 ml-1">受伤 ${n.hp}/${n.maxHp}</span>` : ''}</div>
+              <span class="text-[10px] px-2 py-0.5 rounded shrink-0 ${n.alive ? 'bg-white/[0.06] text-stone-300' : 'bg-red-900/50 text-red-300'}">${n.alive ? (n.knownLevel >= 1 ? `${n.role} · ${ROOMS[n.room]?.short || ''}` : `身份不明 · ${ROOMS[n.room]?.short || ''}`) : '已死亡'}</span>
+            </div>
+            <div class="text-[11.5px] text-stone-400 mt-1.5 leading-relaxed">${n.knownLevel >= 1 ? n.note : n.anonDesc}</div>
+            ${n.knownLevel >= 2 ? `<div class="text-[11px] text-amber-300/85 mt-1.5 pt-1.5 border-t border-white/5">${n.realGear}</div>` : ''}
+          </div>
         </div>
-        <div class="text-[11.5px] text-stone-400 mt-1.5 leading-relaxed">${n.knownLevel >= 1 ? n.note : n.anonDesc}</div>
-        ${n.knownLevel >= 2 ? `<div class="text-[11px] text-amber-300/85 mt-1.5 pt-1.5 border-t border-white/5">${n.realGear}</div>` : ''}
       </div>`;
       }).join('')}
     </div>`;
@@ -3381,7 +3747,7 @@ function renderSpaceMode() {
 
   return `
   <div class="relative w-screen h-screen overflow-hidden flex flex-col lg:flex-row text-slate-900 font-sans-ui">
-    <img src="${SCENE_IMGS.space}" alt="死考空间" class="absolute inset-0 w-full h-full object-cover opacity-90 pointer-events-none select-none" />
+    <img data-scene-key="space" src="${resolveSceneMedia('space')}" alt="死考空间" class="absolute inset-0 w-full h-full object-cover opacity-90 pointer-events-none select-none" />
     <div class="absolute inset-0 bg-white/45 backdrop-blur-[2px] pointer-events-none"></div>
 
     <div class="relative z-10 w-full lg:w-[42%] h-[46vh] lg:h-full p-5 flex flex-col gap-4 overflow-y-auto scroll-thin">
