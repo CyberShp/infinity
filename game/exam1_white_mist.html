@@ -37,6 +37,7 @@
     .av-switches button + button { border-left: 1px solid #ffffff36; }
     .av-switches button[aria-pressed="false"] { color: #b1b3b3; }
     .av-switches button:focus-visible { outline: 2px solid #ebcf9c; outline-offset: -2px; }
+    .player-choice-portrait { width: clamp(3.5rem, 7vw, 4.75rem); aspect-ratio: 3 / 4; flex: none; object-fit: cover; border-radius: 0.375rem; }
 
     @keyframes mistDriftA {
       0% { transform: translateX(-6%) translateY(0); opacity: 0.24; }
@@ -339,6 +340,12 @@ window.AV_MANIFEST = {
     crisis_window: 'assets/scenes/exam1_crisis_window.webp',
     canal: 'assets/scenes/exam1_canal.webp',
     space: '../assets/hall-vortex.webp'
+  },
+  playerPortraits: {
+    arch: 'assets/portraits/player_arch.webp',
+    climb: 'assets/portraits/player_climb.webp',
+    archive: 'assets/portraits/player_archive.webp',
+    medic: 'assets/portraits/player_medic.webp'
   },
   portraits: {
     zhou: { calm: 'assets/portraits/zhou_calm.webp', tense: 'assets/portraits/zhou_tense.webp', injured: 'assets/portraits/zhou_injured.webp' },
@@ -1120,10 +1127,10 @@ function getNpcPortrait(npcId) {
 
 document.getElementById('root').addEventListener('error', event => {
   const el = event.target;
-  const { sceneKey, portrait } = el.dataset || {};
-  if (!sceneKey && !portrait) return;
+  const { sceneKey, portrait, playerPortrait } = el.dataset || {};
+  if (!sceneKey && !portrait && !playerPortrait) return;
   const failed = el.getAttribute('src');
-  if (!failed || failed.startsWith('data:')) return;
+  if (!failed || (!playerPortrait && failed.startsWith('data:'))) return;
   unavailableArtwork.add(failed);
   if (sceneKey) {
     if (el.tagName === 'VIDEO') {
@@ -1134,6 +1141,8 @@ document.getElementById('root').addEventListener('error', event => {
       img.src = embeddedScene(sceneKey);
       el.replaceWith(img);
     } else el.src = embeddedScene(sceneKey);
+  } else if (playerPortrait) {
+    el.remove();
   } else {
     const alternative = getNpcPortrait(portrait);
     if (alternative) el.src = alternative;
@@ -3342,15 +3351,21 @@ function renderCharSelect() {
       </p>
     </div>
     <div class="space-y-2.5 pt-1">
-      ${BACKGROUNDS.map(b => `
-      <button onclick="selectBackground('${b.id}')" class="w-full text-left p-4 rounded-xl bg-white/[0.025] hover:bg-white/[0.06] border border-white/10 hover:border-amber-400/45 transition group">
-        <div class="flex items-center justify-between">
-          <span class="text-[15px] font-medium text-stone-100 group-hover:text-amber-200 transition">${b.name}</span>
-          <span class="font-sans-ui text-[10px] px-2 py-0.5 rounded bg-white/[0.06] text-stone-300">${b.tag}</span>
+      ${BACKGROUNDS.map(b => {
+        const src = window.AV_MANIFEST?.playerPortraits?.[b.id];
+        return `
+      <button onclick="selectBackground('${b.id}')" class="w-full flex items-center gap-3 text-left p-4 rounded-xl bg-white/[0.025] hover:bg-white/[0.06] border border-white/10 hover:border-amber-400/45 transition group">
+        ${src && !unavailableArtwork.has(src) ? `<img class="player-choice-portrait" data-player-portrait="${b.id}" src="${src}" alt="" />` : ''}
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[15px] font-medium text-stone-100 group-hover:text-amber-200 transition">${b.name}</span>
+            <span class="shrink-0 font-sans-ui text-[10px] px-2 py-0.5 rounded bg-white/[0.06] text-stone-300">${b.tag}</span>
+          </div>
+          <div class="font-sans-ui text-xs text-stone-400 mt-1.5">${b.bond}</div>
+          <div class="font-sans-ui text-[11px] text-amber-300/80 mt-2">随身物：${b.item.name} — ${b.item.desc}</div>
         </div>
-        <div class="font-sans-ui text-xs text-stone-400 mt-1.5">${b.bond}</div>
-        <div class="font-sans-ui text-[11px] text-amber-300/80 mt-2">随身物：${b.item.name} — ${b.item.desc}</div>
-      </button>`).join('')}
+      </button>`;
+      }).join('')}
     </div>
   </div>`;
 }
