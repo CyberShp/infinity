@@ -1,6 +1,6 @@
 # 《白雾古宅 · 裴宅买命契》录音来源
 
-这 14 条 MP3 由实物或实景录音剪辑而成，均为 44.1 kHz、160 kbps。下表列出游戏里的声音、实际录到的声源和录音者的原始发布页。除特别标出的竹木敲击录音外，原录音均以 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) 发布。
+这 17 条 MP3 由实物或实景录音剪辑而成，均为 44.1 kHz、160 kbps。下表列出游戏里的声音、实际录到的声源和录音者的原始发布页。除表内标注 CC BY 的录音外，原录音均以 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) 发布。
 
 ## 环境氛围
 
@@ -27,3 +27,6 @@
 | `sfx/bell_ring.mp3` | 1.10 秒。保留手摇铜铃的连续急响，衰减高频和尾音，模拟从夹墙内传来的铃声。 | Joshua_van_Zyl [BELLHand-Int_Copper Bell Short_JvZ_OwSFX](https://freesound.org/people/Joshua_van_Zyl/sounds/764909/) |
 | `sfx/seal_tear.mp3` | 1.30 秒。先用 60 目砂纸手磨木块的颗粒声拟阴灰擦过契面，接一次实撕厚纸，收紧撕裂时长。原厚纸纸种不详。 | reg7783 [hand sanding wood](https://freesound.org/people/reg7783/sounds/726831/) · moai15 [Ripping_Thick_Sheet_01.wav](https://freesound.org/people/moai15/sounds/336596/) |
 | `sfx/gate_unseal.mp3` | 1.95 秒。用湖冰踩裂的脆响起头，接粗铁链落到混凝土地面并散开的声音，拟覆霜门链崩落。 | sim2710 [Ice breaking](https://freesound.org/people/sim2710/sounds/377484/) · smjosephrn [chains dragging and rattling.m4a](https://freesound.org/people/smjosephrn/sounds/663920/) |
+| `sfx/coffin_slide.mp3` | 1.49 秒。取实木匣滑盖沿槽摩擦、抵住槽端的录音作细节，叠入木箱擦过木地板的近距离实录。将木箱的拖动放慢、削去高频，保留起推的阻力和木盖停稳的短响，以两种实物拟川楠棺盖。 | DeqstersLab [Small Wood Box, Sliding Lid, Open and Close](https://freesound.org/people/DeqstersLab/sounds/710745/)（[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)） · kforetek [Wood Chest Slid.3.wav](https://freesound.org/people/kforetek/sounds/146805/)（[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)） |
+| `sfx/sluice_rush.mp3` | 2.03 秒。先听见渡船重链穿过机构，再叠入真实船闸开合的低鸣。老水磨坝门旁近录的急流由小到大压过链响，涌水时加入一记实录铁门颤动，拟水头撞开铁栅。双声道，44.1 kHz、160 kbps。 | qubodup [Big Metal Chain](https://freesound.org/people/qubodup/sounds/199282/)，取自 miguelstar2 易北河渡船实录 [DR05___0205_sandau_fähre.wav](https://freesound.org/people/miguelstar2/sounds/198470/) · schots [Canal lock doors opening and closing](https://freesound.org/people/schots/sounds/693568/) · eardeer [water_flow_dam_close_loop.wav](https://freesound.org/people/eardeer/sounds/443870/) · launemax [Rattling at an iron gate](https://freesound.org/people/launemax/sounds/274766/) · 全部采用 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `sfx/oar_water.mp3` | 1.80 秒。截取船内缓慢划桨实录的 13.25–15.05 秒，保留同一桨程中桨座的受力吱响、桨叶拨水和水声渐退。作者在船上用 Zoom H2 收录，未注明桨座木种。滤去低频震动，轻压突出的敲响，短淡入淡出，保留双声道。 | Fenodyrie [rowing boat from inside.wav](https://freesound.org/people/Fenodyrie/sounds/588307/)，[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
