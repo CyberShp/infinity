@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN" data-edition="numinous">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#100e0f">
+  <meta name="description" content="《全球死考》同人文字生存模拟。首考结束，回到死考空间。">
+  <title>全球死考 · Infinity</title>
+  <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="menu.css">
+  <link rel="stylesheet" href="atmosphere.css">
+  <link rel="stylesheet" href="menu-panels.css">
+  <script src="game/exam-save.js" defer></script>
+  <script src="menu-panels.js" defer></script>
+  <script src="vortex-renderer.js" defer></script>
+  <script src="atmosphere.js" defer></script>
+  <script src="menu.js" defer></script>
+</head>
+<body>
+  <svg class="symbol-bank" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3zM15.5 8.5a5 5 0 0 1 0 7m2.5-9.5a8 8 0 0 1 0 12"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3zm13 1 5 5m0-5-5 5"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5"/></symbol>
+    <symbol id="i-exit-full" viewBox="0 0 24 24"><path d="M4 9h5V4m6 0v5h5M4 15h5v5m6 0v-5h5"/></symbol>
+  </svg>
+
+  <div class="scrim" aria-hidden="true"></div>
+
+  <div class="viewport">
+    <header class="mast">
+      <div class="hall-editions" role="group" aria-label="大厅美术对比">
+        <button type="button" data-edition-choice="judgment" aria-pressed="false" aria-keyshortcuts="A" title="A · 即梦旧版"><b>A</b> 即梦</button>
+        <button type="button" data-edition-choice="numinous" aria-pressed="true" aria-keyshortcuts="B" title="B · Midjourney 新版"><b>B</b> Midjourney</button>
+      </div>
+      <div class="tools" role="group" aria-label="显示与声音">
+        <button type="button" class="utility" id="sound-toggle" aria-label="开启环境音" title="开启环境音" aria-pressed="false">
+          <svg class="icon sound-off" aria-hidden="true"><use href="#i-mute"/></svg>
+          <svg class="icon sound-on" aria-hidden="true"><use href="#i-volume"/></svg>
+        </button>
+        <span class="tool-rule" aria-hidden="true"></span>
+        <button type="button" class="utility" id="fullscreen-toggle" aria-label="进入全屏" title="进入全屏" aria-pressed="false">
+          <svg class="icon" aria-hidden="true"><use href="#i-full"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="title-screen" aria-labelledby="game-title">
+        <div class="title-block">
+          <span class="edition" lang="en" aria-hidden="true">Global Death Exam</span>
+          <h1 id="game-title">全球死考</h1>
+        </div>
+
+        <div class="inscribed-menu">
+          <div class="signature" lang="en">Infinity</div>
+          <nav class="menu" aria-label="主菜单">
+            <button class="entry selected" type="button" data-action="new" aria-haspopup="dialog"><span class="entry-name">开始游戏</span></button>
+            <button class="entry" type="button" data-action="continue" aria-haspopup="dialog" disabled><span class="entry-name">继续游戏</span></button>
+            <button class="entry" type="button" data-action="archive" aria-haspopup="dialog"><span class="entry-name">考场图鉴</span></button>
+            <button class="entry" type="button" data-action="settings" aria-haspopup="dialog"><span class="entry-name">系统设置</span></button>
+          </nav>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="foot-controls">
+        <div class="keyboard"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>↵</kbd> 确认</span></div>
+        <span class="save-state"><span id="save-label">暂无本地档案</span></span>
+      </div>
+      <aside class="scene-tag" aria-label="当前场景">
+        <p>死考空间<span>·</span>大厅</p>
+        <small class="scene-judgment">第三十二章《房间与兑换》</small>
+        <small class="scene-vortex">首考回归 · 兑换旋涡</small>
+      </aside>
+    </footer>
+  </div>
+  <div class="world">
+    <div class="world-art">
+      <button type="button" class="vortex-touch" aria-label="触碰旋涡，查看兑换" aria-haspopup="dialog"><span aria-hidden="true">触碰旋涡</span></button>
+    </div>
+  </div>
+</body>
+</html>
