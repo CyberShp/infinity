@@ -144,7 +144,10 @@
   // ================= 2. 考场主游玩界面 =================
   function renderPlayScreen(S) {
     const room = DATA().ROOMS[S.room];
-    const sceneSrc = resolveSceneImg(room.sceneKey);
+    const activeSceneKey = (S.watchman.state === 'HUNT' || S.sceneId === 'n1_west_zhao_rescue')
+      ? 'crisis_window'
+      : room.sceneKey;
+    const sceneSrc = resolveSceneImg(activeSceneKey);
     const wbId = getRoomWorkbenchId(S.room);
     const eng = E();
     const nailCount = eng.getNailCount();
