@@ -143,9 +143,9 @@ const BACKGROUNDS = [
 const ROOMS = {
   courtyard: { id: 'courtyard', name: '前院', short: '前院', x: 110, y: 124, art: 'courtyard', desc: '青石铺地，寒雾漫过脚踝，四面厢房轮廓隐在灰白墨色里。', neighbors: ['gate', 'hall', 'shrine', 'west', 'east'] },
   gate:      { id: 'gate', name: '厚木院门', short: '院门', x: 110, y: 170, art: 'courtyard', desc: '朱漆大门已被白雾凝出的厚霜死死封住，铁链结满冰棱。', neighbors: ['courtyard'] },
-  hall:      { id: 'hall', name: '主厅', short: '主厅', x: 110, y: 74, art: 'shrine', desc: '门闩断裂、木窗朽烂，正中悬着一幅面孔残缺的家主画像。', neighbors: ['courtyard', 'west', 'east', 'well'] },
+  hall:      { id: 'hall', name: '主厅', short: '主厅', x: 110, y: 74, art: 'shrine', desc: '门闩断裂、木窗朽烂，正中悬着一幅面孔残缺的家主画像。', neighbors: ['courtyard', 'west', 'east'] },
   shrine:    { id: 'shrine', name: '祠堂', short: '祠堂', x: 178, y: 138, art: 'shrine', desc: '灵位林立、香炉阴冷，三面砖墙封死，仅有一扇正门。', neighbors: ['courtyard'] },
-  west:      { id: 'west', name: '西厢（灶账房）', short: '西厢', x: 42, y: 102, art: 'west', desc: '旧灶房连着账房，厚实铁门闩完好，后窗可通往后院。', neighbors: ['courtyard', 'hall', 'well'] },
+  west:      { id: 'west', name: '西厢（灶账房）', short: '西厢', x: 42, y: 102, art: 'west', desc: '旧灶房连着账房，厚实铁门闩完好，后窗可通往后院。', neighbors: ['courtyard', 'hall'] },
   east:      { id: 'east', name: '东厢（破柴房）', short: '东厢', x: 178, y: 84, art: 'courtyard', desc: '柴薪杂物堆积，木墙半塌，空气里浮着焦糊与陈腐气味。', neighbors: ['courtyard', 'hall'] },
   well:      { id: 'well', name: '后院枯井', short: '枯井', x: 110, y: 26, art: 'well', desc: '三米深的干枯石井，井壁垂着锈铁梯，井底隐见排水铁闸。', neighbors: ['west', 'hall'] }
 };
@@ -195,18 +195,18 @@ const ROOM_HOTSPOTS = {
     { id: 'ws_stove', label: '旧土灶膛与铁门闩', x: 26, y: 52, mins: 1, clue: 'E03',
       text: '门后那根熟铁门闩沉重完好，卡槽毫无朽烂；你把掌心探进土灶深处，竟还摸到一丝极微弱的残余暖意。后墙木窗直通后院小径，进退有据。' },
     { id: 'ws_ledger', label: '书案泛黄账本', x: 68, y: 56, mins: 1, clue: 'E04',
-      text: '你翻到旧账本末页，发黄宣纸上用焦黑炭笔歪歪扭扭划着半行残字：“子时雾倒流，莫唤生人名，莫举明火灯。”最后几笔拉得很长，像是写字人突然被拖走。' },
+      text: '你翻到旧账本末页，发黄宣纸被水渍和焦痕毁去大半，只剩几处断续的焦黑炭字：“……子时雾退……切忌举火……莫应……”最后几笔拉得很长，像是写字人突然被拖走。' },
     { id: 'ws_cabinet', label: '墙角樟木立柜', x: 48, y: 40, mins: 1.5, special: 'cabinet',
       text: '墙角腐朽的樟木立柜背板隐约错位，敲上去发出空洞回响。' },
     { id: 'ws_window', label: '后墙木格窗', x: 74, y: 30, mins: 0.5,
-      text: '透过朽旧的窗格往外看，浓雾后方隐约可见一条碎石小径通向后院枯井方向。' }
+      text: '透过朽旧的窗格往外看，浓雾封死了后院小径，只能隐约辨出几十步外有一口枯井的轮廓——此刻贸然翻窗出去只会被浓雾吞没。' }
   ],
   hall: [
     { id: 'hl_portrait', label: '无面家主画像', x: 56, y: 34, mins: 1, clue: 'E09',
       text: '你踮脚细看正墙高悬的民国画像——那根本不是胡乱划毁，而是双眼位置被极其精细地挖空了两个黑洞，耳朵与嘴部却完好无损。',
       profText: {
-        archive: '【古制辨识】挖目留耳口——这是典型的“盲灵听声”禁忌暗示！',
-        medic: '【创伤辨识】挖痕边缘极其平整，刻意针对双目，说明这宅子的主人没有视觉。'
+        archive: '【古制辨识】挖目留耳口——画中人没有视觉，却偏偏留着听与言的器官。',
+        medic: '【创伤辨识】挖痕边缘极其平整，刻意针对双目，说明这宅子里的东西很可能没有视觉。'
       }
     },
     { id: 'hl_bolt', label: '断裂门闩与破窗', x: 26, y: 46, mins: 0.5, decoy: true,
@@ -214,7 +214,7 @@ const ROOM_HOTSPOTS = {
   ],
   east: [
     { id: 'es_corpse', label: '坍塌柴堆与焦黑油灯', x: 42, y: 54, mins: 1.5, clue: 'E05',
-      text: '你拨开半塌的柴堆，露出一具蜷缩的干尸——双眼空洞，怀里死死攥着一盏烧得焦黑变形的铜油灯。明火热源会直接招致致命袭杀！' },
+      text: '你拨开半塌的柴堆，露出一具蜷缩的干尸——双眼空洞，怀里死死攥着一盏烧得焦黑变形的铜油灯。灯芯还残留着焦油味，仿佛他生前正举着灯躲在这里。' },
     { id: 'es_tools', label: '墙角杂物堆', x: 70, y: 44, mins: 1.5, special: 'east_tools',
       text: '你在发霉的柴薪底下摸到一根沉手的【生锈短撬棍】与半卷【浸油粗麻绳】——关键时刻能撬死铁闸或绑死门闩！' }
   ],
@@ -225,22 +225,23 @@ const ROOM_HOTSPOTS = {
 };
 
 const CLUES = {
-  E01: { id: 'E01', title: '祠堂湿润香灰', text: '铜炉里的香灰湿润结块，积阴返潮，绝非阳火庇护之地。' },
+  E01: { id: 'E01', title: '祠堂湿润香灰', text: '铜炉里的香灰湿润结块，墙根泛黑绿水渍，地势低洼返潮。' },
   E02: { id: 'E02', title: '供桌向外抓痕', text: '供桌与木柱内侧刻满细碎指甲抓痕，方向从内向外——前人是被堵死在里面的。' },
   E03: { id: 'E03', title: '西厢余温与铁闩', text: '灶膛深处尚存微温，厚铁门闩完好，且后窗可直通后院留出退路。' },
-  E04: { id: 'E04', title: '残破账本炭字', text: '账本末页炭笔残字：“子时雾倒流，莫唤生人名，莫举明火灯。”' },
-  E05: { id: 'E05', title: '东厢焦黑油灯干尸', text: '干尸旁翻倒着烧焦的油灯，眼眶空洞——明火热源会直接招致致命袭杀。' },
-  E06: { id: 'E06', title: '喊名骤变现场', text: '活人真名被呼喊那一瞬，门外试探性的敲门骤然化作狂暴撞击。' },
+  E04: { id: 'E04', title: '账本焦黑残页', text: '末页水渍焦痕间残留断续炭字：“……子时雾退……切忌举火……莫应……”' },
+  E05: { id: 'E05', title: '东厢焦黑油灯干尸', text: '干尸双眼空洞，临死前怀里仍死攥着一盏烧焦变形的铜油灯。' },
+  E06: { id: 'E06', title: '十点门外异变记录', text: '门外先是极缓地轻叩并模仿熟人唤出真名，一旦有人喊名或留有明火，试探瞬间转为狂暴撞门。' },
   E07: { id: 'E07', title: '老宅地契暗渠图', text: '木柜夹层地契标注：后院枯井下有 300 米排水暗渠直通宅外溪涧。' },
   E08: { id: 'E08', title: '窗缝雾气倒流', text: '临近子时，原本往屋内钻的白雾开始倒吸回院外；拖至卯时全屋将成窒息死域。' },
-  E09: { id: 'E09', title: '无目家主画像', text: '主厅画像并非被胡乱划毁，而是双眼位置被精细挖空，暗示宅主无目。' }
+  E09: { id: 'E09', title: '无目家主画像', text: '主厅画像并非被胡乱划毁，而是双眼位置被精细挖空，耳口完好。' },
+  E10: { id: 'E10', title: '门缝引霜异常', text: '九点一刻屋里寒霜直扑明火风灯（或无火漆黑时门外异物停留十秒即离去），说明其对热源极度敏感。' }
 };
 
 const HYPOTHESES = [
-  { id: 'h_correct', label: '补全：【生人真名】与【明火热源】', correct: true, reqAny: [['E04'], ['E05', 'E06'], ['E04', 'E06'], ['E09', 'E06'], ['E09', 'E05']] },
-  { id: 'h_wrong1', label: '补全：【寒雾】与【阴气】（须举明火驱寒）', correct: false },
-  { id: 'h_wrong2', label: '补全：【脚步声】与【呼吸声】（绝对不可发声）', correct: false },
-  { id: 'h_wrong3', label: '补全：【牌位】与【香火】（死守祠堂至天亮）', correct: false }
+  { id: 'h_wrong1', label: '补全：【生人气息】与【血腥气味】', correct: false },
+  { id: 'h_correct', label: '补全：【生人真名】与【明火热源】', correct: true, reqAny: [['E06', 'E05'], ['E06', 'E10'], ['E06', 'E04'], ['E09', 'E05'], ['E09', 'E10'], ['E09', 'E04']] },
+  { id: 'h_wrong2', label: '补全：【脚步震动】与【门窗缝隙】', correct: false },
+  { id: 'h_wrong3', label: '补全：【高声呼喊】与【寒霜侵蚀】', correct: false }
 ];
 
 const SHOP_ITEMS = [
@@ -506,7 +507,12 @@ function initState(startStage = 'title') {
       hotspotsChecked: {}, // hotspotId -> true
       npcTalkedProtect: {},
       npcTopics: {},       // `${npcId}_${topic}` -> true
+      zhouHasShrineProof: false,
+      zhouHasWestProof: false,
+      shenHasShrineProof: false,
+      shenHasWestProof: false,
       voteStep: 0,
+      voteOpened: false,
       splitParty: false,       // true if player defied Zhao and went to West Wing
       zhouKnockedHelp: false,  // 21:30 injured Zhou banging on West Wing door
       reinforcedDoor: false,
@@ -562,7 +568,7 @@ function initState(startStage = 'title') {
         anonName: '胡茬粗犷的中年男人', anonDesc: '三十多岁，眉心拧着川字，正打量着东侧祠堂的方向。',
         name: '赵川', role: '前长途司机 · 历一场',
         note: '刚侥幸活过一场，脾气急、笃信传统避邪老规矩。',
-        realGear: '【D初战力】基础体魄微强化 + 一次性 D 级低阶镇宅驱邪符（不防规则盲灵）'
+        realGear: '【D初战力】基础体魄微强化 + 一次性 D 级低阶镇宅驱邪符（对高阶规则异变无效）'
       },
       lin: {
         id: 'lin', code: 'CN-09472', knownLevel: 0, room: 'courtyard', alive: true, hp: 90, maxHp: 90, trust: 35,
@@ -937,8 +943,7 @@ function enterExam() {
   pushBeat('失重感骤然砸落，鞋底狠狠磕在湿滑冰冷的青石板上。腐木、霉土与陈年潮气瞬间灌进鼻腔——四周是一座荒废多年的民国二进四合院，朱漆剥落的厚木大门在身后沉闷合拢，门缝外翻涌着浓得化不开的白雾。');
   pushBeat('院子里连你在内一共七个人。三个穿着日常衣物的男女和你一样刚跌坐在地；屋檐下却已经站着四个衣着利落、神色异常冷静的陌生人——为首是个三十出头、拎着暗青短斧的寸头男人。');
   pushBeat('“搞什么鬼？！绑架还是非法真人秀？！”穿湿皱西装的男人第一个跳起来，举着毫无信号的手机嘶吼，“谁把我信号屏蔽了？！我要报警——这破门怎么反锁了！”他满脸涨红，直接朝朱漆大门冲过去猛拽门环！', 'dialogue', '穿湿皱西装的男人');
-  pushBeat('旁边背帆布包的女生吓得双腿一软跪在青石板上，死死捂着嘴剧烈喘息。檐下转着金属改锥的青年下意识想伸手拦，却被拎斧男人轻轻抬手压住了。', 'normal');
-  pushBeat('“别拦，让他碰一下门。”拎斧男人声音低沉平静，眼神里没有嘲讽，只有看惯生死的冷硬，“不亲手撞一次南墙，新人永远不会信这里是什么地方。”', 'dialogue', '拎暗青短斧的男人');
+  pushBeat('旁边背帆布包的女生吓得双腿一软跪在青石板上，死死捂着嘴剧烈喘息。檐下转着金属改锥的青年下意识跨出半步想拉人，拎斧男人极轻地抬手按住他小臂，没说话，只是冷眼看着那个西装男扑向大门。', 'normal');
   render();
 }
 
@@ -1029,7 +1034,7 @@ function chooseNamePolicy(useAlias) {
     S.aliasUsed = null;
     pushBeat(`你没有隐瞒，报出了自己的名字：“${S.realName}。”周衡点点头记了下来。`);
   }
-  pushBeat('就在最后一人报号完毕的刹那，七只腕表同时发出低沉嗡鸣，表盘亮起幽蓝冷光，首轮考题冷冰冰浮现：\n【第一轮 · 抉择】白雾封院，择室安身：主厅／祠堂／西厢。（基础分：20｜新手保护期：10:00）', 'system');
+  pushBeat('就在最后一人报号完毕的刹那，七只腕表同时发出低沉嗡鸣，表盘亮起幽蓝冷光，首轮考题冷冰冰浮现：\n【第一轮 · 存续】白雾封院，择室避雾，撑过今夜首次异变。（基础分：20｜新手保护期：10:00）', 'system');
   pushBeat('“保护期整整十分钟，足够把院子摸个大概，但一个人肯定逛不全。”周衡干脆利落分了工——沈岚转身进主厅，陈默快步去西厢，赵川招呼着惊魂未定的林哲直奔东侧祠堂，周衡自己守在前院大门附近照看苏晓。', 'dialogue', '周衡');
   pushBeat('湿冷夜风从檐角掠过，青石板上的雾丝正贴着鞋边微微晃动。你可以点击左侧画面上的物件仔细查探、点击上方「同房在场」与同行者交谈，或通过左下角拓扑图穿行各房。');
   render();
@@ -1116,7 +1121,7 @@ function hotspotAction(hotspotId, act) {
     S.flags.hotspotsChecked[hotspotId] = true;
     pushBeat(hs.text);
     if (act === 'sample') {
-      pushBeat('你顺手掏出纸巾捏了一撮冰冷结块的湿香灰包好——待会儿选房交锋时，这就是直接打脸赵川“祠堂聚阳”论的铁证！', 'clue');
+      pushBeat('你掏出纸巾捏了一撮冰冷结块的湿香灰包好揣进兜里——真要劝住执迷不悟的人，手里有实物比空口白话管用得多。', 'clue');
     }
     if (hs.profText && hs.profText[S.bg.id]) pushBeat(hs.profText[S.bg.id], 'clue');
     addClue('E01');
@@ -1205,28 +1210,47 @@ function talkToNpcInRoom(npcId) {
   S.activeTalk = npcId;
 
   beginTurn(`交谈 · ${n.name}`);
+  const injured = n.hp < n.maxHp * 0.8;
+  const isProtect = S.stage === 'exam_protect';
   const greetings = {
-    zhou: S.stage === 'exam_protect'
+    zhou: isProtect
       ? '周衡正半侧身守在前院大门附近，手里暗青短斧垂在腿侧，腰间那盏铜壳风灯火苗微微跳动。见你走近，他压低声音：“查得怎么样？有事直说。”'
-      : '周衡靠在门侧擦拭暗青破邪斧，听到脚步抬头看了你一眼，低声道：“别大声，有话压着嗓子说。”',
-    shen: S.stage === 'exam_protect'
+      : injured
+        ? '周衡背靠土墙坐着，暗青短斧横在膝头，左肩衣料被寒霜撕开一道口子，呼出的白气里还带着血腥味：“……有发现？压着嗓子说。”'
+        : '周衡靠在门侧擦拭暗青破邪斧，听到脚步抬头看了你一眼，低声道：“别大声，有话压着嗓子说。”',
+    shen: isProtect
       ? '沈岚正举着一支冷白战术笔灯细细照过主厅墙面与断闩，见你进来头也不回：“主厅废了，门窗全是窟窿。你是来核对线索的，还是来问话的？”'
       : '沈岚独自坐在桌角阴影里，指尖把玩着一管治疗喷雾，神情冷淡却极度清醒：“有新发现？”',
-    chen: S.stage === 'exam_protect'
+    chen: isProtect
       ? '陈默正拿高频破拆改锥敲打西厢门后的熟铁门闩，回头冲你咧嘴一笑：“哟，你也摸到西厢来了？这破灶房看着阴森，门倒结实得离谱。”'
-      : '陈默把高频改锥别在腰间，搓了搓冻红的手指冲你小声打招呼：“哥们，这鬼天气真冷啊，找我啥事？”',
-    zhao: S.stage === 'exam_protect'
+      : injured
+        ? '陈默靠在灶台墙角，裤腿上还沾着发黑的冰渣，正咬着牙用布条勒紧冻裂的小腿。见你凑过来，他脸色惨白地压低气音：“……刚才多亏你拉门。有事快说，我这腿一时半会儿使不上劲。”'
+        : '陈默蹲在门后阴影里，手里捏着震动感应器没敢开灯，见你靠近极轻地比了个噤声手势：“外头动静不对，有话压低点说。”',
+    zhao: isProtect
       ? '赵川正双手背在身后踱步打量祠堂的灵位与厚门板，见你进来嗤笑一声：“小子，你也觉得祠堂最稳妥吧？听叔一句，今晚别乱跑。”'
-      : '赵川阴沉着脸缩在角落摩挲口袋里的黄符，见你凑过来冷哼了一声。',
-    su: S.stage === 'exam_protect'
+      : injured
+        ? '赵川右臂冻得发紫，整个人缩在最里的墙角一声不吭，往日那股横劲儿荡然无存。'
+        : '赵川阴沉着脸缩在角落摩挲口袋里的黄符，见你凑过来冷哼了一声。',
+    su: isProtect
       ? '苏晓抱紧帆布包缩在廊檐角落，脸色依旧发白，看见你走近像是抓住救命稻草般轻轻拉住你的袖角：“你、你查到什么了吗？我总觉得门外有东西在看我们……”'
       : '苏晓缩在墙角死死捂着嘴，眼睛红红地盯着你，生怕自己发出半点声音。',
-    lin: S.stage === 'exam_protect'
+    lin: isProtect
       ? '林哲紧挨在赵川身后，手里还死死攥着黑屏手机，推了推歪掉的眼镜强装镇定：“别听他们吓唬人，哪有什么鬼神，肯定是某种高压电和干冰特效……”'
       : '林哲抱膝缩在桌角浑身发抖，嘴里神经质地碎碎念着明早的项目汇报。'
   };
   pushBeat(greetings[npcId] || `${n.name}停下手头动作，低声看着你。`, 'dialogue', n.name);
   render();
+}
+
+function formatSharedEvidenceList() {
+  const items = [];
+  if (S.clues.includes('E01')) items.push('祠堂铜炉里潮湿结块的冷香灰');
+  if (S.clues.includes('E02')) items.push('供桌内侧从里向外抠出来的断甲抓痕');
+  if (S.clues.includes('E03')) items.push('西厢完好的熟铁门闩与通往后院的后窗');
+  if (S.clues.includes('E04')) items.push('西厢旧账本末页焦黑的炭笔残字');
+  if (S.clues.includes('E05')) items.push('东厢柴堆里攥着焦黑油灯的干尸');
+  if (S.clues.includes('E09')) items.push('主厅那幅双眼被精准挖空的家主画像');
+  return items.join('、');
 }
 
 function npcTopicAction(npcId, topic) {
@@ -1252,7 +1276,19 @@ function npcTopicAction(npcId, topic) {
       pushBeat('周衡沉默了两秒，声音放得更轻：“上一场我们五个人，死了个不信邪的新人。死考空间什么都能换，但完美修复极贵，付不起扣成负分当场抹杀。你比大多数新人稳，别信老经验，只信现场物证。”', 'dialogue', '周衡');
     } else if (topic === 'share_proof') {
       if (firstTime) n.trust += 14;
-      pushBeat('你压低声音把刚查到的祠堂湿香灰/抓痕或西厢账本炭字透给了周衡。周衡眼神骤然一凝，伸手按住斧柄：“抓痕朝外……好险！幸亏你先去摸了一趟底。待会儿选房交锋，你把证据直接摆出来，我压住赵川！”', 'dialogue', '周衡');
+      const hasShrine = S.clues.includes('E01') || S.clues.includes('E02');
+      const hasWest = S.clues.includes('E03') || S.clues.includes('E04');
+      if (hasShrine) S.flags.zhouHasShrineProof = true;
+      if (hasWest) S.flags.zhouHasWestProof = true;
+      const listStr = formatSharedEvidenceList();
+      pushBeat(`你压低声音，把刚亲眼查到的实情——${listStr}——原原本本告诉了周衡。`);
+      if (hasShrine && hasWest) {
+        pushBeat('周衡听完眼神骤然一沉，拇指无意识摩挲了一下斧柄：“里面往外抠的抓痕……那祠堂绝对是堵死人的地方。西厢既然铁闩完好又有后窗，一会儿雾压下来，我带队直接进西厢，赵川那边我来压。”', 'dialogue', '周衡');
+      } else if (hasShrine) {
+        pushBeat('周衡皱紧眉头，朝东侧祠堂的方向冷冷瞥了一眼：“香灰结块、里面还有抓痕……赵川光顾着看门板厚，压根没蹲下去细查。行，我心里有数了，一会儿碰头我不会轻易顺着他进祠堂。你方便的话再去西厢看一眼退路。”', 'dialogue', '周衡');
+      } else {
+        pushBeat('周衡微微颔首：“西厢门闩结实又有后窗，确实比主厅强。不过赵川铁了心要进祠堂，如果祠堂那边没找出硬毛病，怕是很难按住他。”', 'dialogue', '周衡');
+      }
     }
   } else if (npcId === 'shen') {
     if (topic === 'intel') {
@@ -1266,18 +1302,35 @@ function npcTopicAction(npcId, topic) {
       pushBeat('沈岚冷笑一声，指尖轻敲袖口的镀银手术刀：“赵川上一场碰巧遇到低阶游魂，靠一张 D 级驱邪符混过关，就以为所有灵异都怕牌位和黄符。死考里死得最快的，往往就是刚活过一场、开始迷信经验的人。”', 'dialogue', '沈岚');
     } else if (topic === 'share_proof') {
       if (firstTime) n.trust += 16;
-      pushBeat('你把查到的物证简明扼要地跟沈岚交叉核对。她眼中闪过一丝难得的认可：“证据链很扎实。待会儿表决不管周衡怎么犹豫，我一定站西厢这边。”', 'dialogue', '沈岚');
+      const hasShrine = S.clues.includes('E01') || S.clues.includes('E02');
+      const hasWest = S.clues.includes('E03') || S.clues.includes('E04');
+      if (hasShrine) S.flags.shenHasShrineProof = true;
+      if (hasWest) S.flags.shenHasWestProof = true;
+      const listStr = formatSharedEvidenceList();
+      pushBeat(`你把刚查到的情况——${listStr}——简明扼要地跟沈岚对了一遍。`);
+      if (hasShrine && hasWest) {
+        pushBeat('沈岚沉默了两秒，收起手里的冷光笔灯，眼中闪过一丝难得的认可：“主厅废了，祠堂地势低又没后路，西厢至少有铁闩和后窗。一会儿人收拢过来，我不会跟着赵川去送死。”', 'dialogue', '沈岚');
+      } else if (hasShrine) {
+        pushBeat('沈岚眉头微蹙：“潮湿结块还带向外抓痕？那祠堂肯定不能进。主厅四面漏风、东厢半塌，算下来整座院子只剩西厢没排除了——你去西厢看过门闩和后窗没有？”', 'dialogue', '沈岚');
+      } else {
+        pushBeat('沈岚淡淡点头：“西厢至少有门闩有退路，比主厅强得多。如果祠堂那边再有问题，今晚基本就只能落脚西厢了。”', 'dialogue', '沈岚');
+      }
     }
   } else if (npcId === 'chen') {
+    const chenInjured = n.hp < n.maxHp * 0.8;
     if (topic === 'intel') {
       n.knownLevel = 2;
       if (firstTime) n.trust += 10;
-      pushBeat('陈默敲了敲门后厚重的熟铁门闩：“这玩意儿结实得很，后墙还有扇木窗能通后院留退路。对了，墙角那口樟木立柜刚才我撞了一下，背板里头空荡荡的，准有暗格！”', 'dialogue', '陈默');
+      pushBeat(chenInjured
+        ? '陈默忍着腿上冻伤的抽痛，抬下巴指了指墙角：“刚才我进来时扫了一眼……那口樟木立柜背板是错位的，里面空着，要是有空你可以摸摸看。”'
+        : '陈默敲了敲门后厚重的熟铁门闩：“这玩意儿结实得很，后墙还有扇木窗能通后院留退路。对了，墙角那口樟木立柜刚才我撞了一下，背板里头空荡荡的，准有暗格！”', 'dialogue', '陈默');
       addClue('E03');
     } else if (topic === 'gear') {
       n.knownLevel = 2;
       if (firstTime) n.trust += 8;
-      pushBeat('陈默把高频破拆改锥转了个花：“我以前修车的，没周队那种横练体魄，在空间就专换机械破拆和感应器。真要逃命撬锁叫我准没错——可要是撞上看不见的鬼东西，我这堆铁疙瘩就抓瞎了。”', 'dialogue', '陈默');
+      pushBeat(chenInjured
+        ? '陈默苦笑一声，摸了摸腰间沾着冰霜的改锥：“我以前修车的，没周队那种横练体魄，在空间就专换机械破拆和感应器。刚才在祠堂差点冻死在里头……真要逃命撬锁我还能搭把手，正面撞上那东西我这堆铁疙瘩根本扛不住。”'
+        : '陈默把高频破拆改锥转了个花：“我以前修车的，没周队那种横练体魄，在空间就专换机械破拆和感应器。真要逃命撬锁叫我准没错——可要是撞上看不见的鬼东西，我这堆铁疙瘩就抓瞎了。”', 'dialogue', '陈默');
     } else if (topic === 'help_cabinet') {
       S.activeTalk = null;
       hotspotAction('ws_cabinet', 'chen_help');
@@ -1324,27 +1377,32 @@ function moveToRoom(roomId) {
   if (S.stage !== 'exam_protect' && S.stage !== 'exam_night' && S.stage !== 'exam_late') return;
   if (S.stage === 'exam_protect' && !S.flags.nameChoiceDone) return;
   if (S.location === roomId) return;
+  if (roomId === 'well') {
+    beginTurn();
+    pushBeat('后院已被浓得化不开的白雾彻底封死，在雾压消退前贸然翻出去无异于送死。', 'warn');
+    render(); return;
+  }
   const cur = ROOMS[S.location];
   if (!cur.neighbors.includes(roomId)) {
     beginTurn();
     pushBeat(`从【${cur.name}】无法直接抵达【${ROOMS[roomId].name}】，请先经过相连通道。`, 'warn');
     render(); return;
   }
-  if (roomId === 'well' && S.stage === 'exam_protect') {
-    beginTurn();
-    pushBeat('后院通道被浓雾半掩，先摸清前院几间备选厢房更要紧。', 'warn');
-    render(); return;
-  }
+  const leavingBaseAtNight = (S.stage === 'exam_night' || S.stage === 'exam_late') && S.baseRoom && S.location === S.baseRoom && roomId !== S.baseRoom;
   S.activeTalk = null;
   S.activeHotspot = null;
   S.location = roomId;
   beginTurn(`移步至 · ${ROOMS[roomId].name}`);
   const here = presentNpcs(roomId);
   const whoStr = here.length ? ` 此时房内有：${here.map(n => npcDisplayName(n)).join('、')}。` : ' 房内空无一人。';
-  pushBeat(`你穿过湿冷回廊来到【${ROOMS[roomId].name}】。${ROOMS[roomId].desc}${whoStr}`);
+  if (leavingBaseAtNight) {
+    pushBeat(`你极轻地拨开铁门闩，侧身滑出【${ROOMS[S.baseRoom].name}】钻进寒雾弥漫的回廊，贴墙摸入【${ROOMS[roomId].name}】。${ROOMS[roomId].desc}${whoStr}`);
+  } else {
+    pushBeat(`你穿过湿冷回廊来到【${ROOMS[roomId].name}】。${ROOMS[roomId].desc}${whoStr}`);
+  }
   if ((S.stage === 'exam_night' || S.stage === 'exam_late') && roomId !== S.baseRoom) {
-    S.sound = clamp(S.sound + 15, 0, 100);
-    pushBeat('夜雾已深，你放轻脚步在回廊间穿行，腕表心率微微抬升。', 'warn');
+    S.sound = clamp(S.sound + 18, 0, 100);
+    pushBeat('夜雾已深，离开门闩保护后每一步都像踩在薄冰上，腕表心率明显抬升。', 'warn');
   } else if (S.stage === 'exam_protect' && S.timeMin >= S.protectEndMin) {
     S.sound = clamp(S.sound + 8, 0, 100);
     pushBeat('保护期已过，回廊里的白雾正缓缓增厚，鞋底踩在湿石板上带起轻微声响。', 'warn');
@@ -1353,22 +1411,63 @@ function moveToRoom(roomId) {
   render();
 }
 
-// ======================== VOTE & SPLIT-PARTY SYSTEM ========================
+// ======================== SHELTER CONFRONTATION & SPLIT-PARTY SYSTEM ========================
 function resolveProtectionEnd(forcedByFog = false) {
   S.activeTalk = null;
   S.activeHotspot = null;
   S.stage = 'exam_vote';
   S.location = 'courtyard';
   S.flags.voteStep = 1;
+  S.flags.voteOpened = false;
   if (S.timeMin < S.protectEndMin) S.timeMin = S.protectEndMin;
   playSfx('watch');
   Object.values(S.npcs).forEach(n => { n.room = 'courtyard'; n.knownLevel = Math.max(n.knownLevel, 1); });
-  beginTurn(`${fmtTime(S.timeMin)} · 七人聚首，选房交锋`);
+  beginTurn(`${fmtTime(S.timeMin)} · 雾压前院，定下今夜落脚点`);
   pushBeat(forcedByFog
-    ? '白雾终于彻底合拢院落，厚木院门被寒霜完全封死，院墙外拖沓的脚步声越来越清晰！你顶着寒意急忙撤回前院屋檐下，七人被迫立刻定下今夜落脚点。'
-    : '你回到前院屋檐下，其余六人也陆续收拢过来。院门已渐渐挂满白霜，湿冷雾气正漫过青石板，必须立刻决定今晚的落脚房间。');
-  pushBeat('“别磨蹭了，全员进祠堂！”赵川第一个拍板，“门板最厚，又有牌位和我这张空间换的驱邪符镇着，最稳妥！”林哲立刻附和：“对！西厢黑得像坟地，必须去祠堂！”', 'dialogue', '赵川');
-  pushBeat('周衡眉头微皱，和抱臂站在一旁的沈岚同时看向你：“都查得差不多了，你那边发现什么没有？”', 'dialogue', '周衡');
+    ? '白雾终于彻底合拢院落，厚木院门被寒霜完全封死，院墙外拖沓的脚步声越来越清晰！你顶着寒意急忙撤回前院屋檐下，七人被迫立刻决定今晚躲进哪间房。'
+    : '你回到前院屋檐下，其余六人也陆续收拢过来。院门已渐渐挂满白霜，湿冷雾气正漫过青石板，檐下空气冷得刺鼻。');
+  pushBeat('“别磨蹭了，全员进祠堂！”赵川第一个抢过话头，拍着兜里那张露出黄角的驱邪符，“我刚摸过门板，祠堂那两扇厚柏木比防盗门还结实！里头又有祖宗牌位，再贴上我从空间换的镇宅符，稳妥熬到天亮！”', 'dialogue', '赵川');
+  pushBeat('缩在他身后的林哲脸色煞白，急忙跟着点头：“对、对！我刚才瞟了眼西厢，黑漆漆的像停尸房一样，主厅门窗又全烂了——进祠堂吧，大家挤在一起心里踏实点！”', 'dialogue', '林哲');
+  pushBeat('陈默皱了皱眉，搓着冻红的手指低声嘀咕：“主厅确实废了，可西厢门后那根熟铁门闩其实挺结实，后墙还有扇窗子能看后院……”话没说完就被赵川一声嗤笑打断。');
+  pushBeat(S.flags.zhouHasShrineProof
+    ? '周衡眉头紧锁，先冷冷看了赵川一眼，随即目光转向你——显然他记着你刚才私下提过的祠堂异常：“时间不多了，你把你刚查到的东西当面说给大伙儿听。”'
+    : '周衡沉着脸扫过屋檐下每一个人，目光最后落到沈岚和你身上：“主厅不能住，现在就剩祠堂和西厢。谁还查到什么实在东西，现在全摆出来。”', 'dialogue', '周衡');
+  render();
+}
+
+function voteStageAction(opt) {
+  S.flags.voteStep = 2;
+  S.flags.voteOpened = true;
+  beginTurn('檐下争执 · 亮明底牌');
+  const hasShrineProof = S.clues.includes('E01') || S.clues.includes('E02');
+  const hasWestProof = S.clues.includes('E03') || S.clues.includes('E04');
+
+  if (opt === 'present_all' && (hasShrineProof || hasWestProof)) {
+    const pts = [];
+    if (S.clues.includes('E01')) pts.push('祠堂铜炉里的香灰是湿润结块的，墙根全是黑绿水渍，那间屋子地势最低，最先被阴雾倒灌');
+    if (S.clues.includes('E02')) pts.push('供桌内侧和木柱根部密密麻麻全是从里向外抠出来的指甲抓痕，三面死墙连后窗都没有，进去了就是被活活堵死的死瓮');
+    if (S.clues.includes('E03')) pts.push('西厢门后有完好的熟铁门闩，灶膛还有一丝余温，后墙带窗真出事还能留退路');
+    if (S.clues.includes('E04')) pts.push('西厢旧账本末页还留着前人焦黑炭字，提到了子时雾退和忌火忌应声');
+    pushBeat(`你没跟赵川扯虚的，直接把亲眼见到的实情一条条摆在青石板前：${pts.join('；')}。`);
+    if (hasShrineProof) {
+      S.flags.zhouHasShrineProof = true;
+      S.flags.shenHasShrineProof = true;
+      pushBeat('赵川脸色瞬间涨得通红，脖子一梗喝道：“放屁！南方老宅哪个不返潮？木头上的印子指不定是耗子啃的！一个零场新人懂个屁，拿这些吓唬谁呢！”', 'dialogue', '赵川');
+      pushBeat('沈岚冷冷打断他，袖口泛起一丝寒光：“耗子啃不出人指甲的弧度，也不会从里往外抠。主厅废了，祠堂是死瓮，西厢至少有铁闩和后窗。”', 'dialogue', '沈岚');
+      if (hasWestProof) {
+        pushBeat('周衡盯着你手里的证据沉默了两秒，神色彻底沉下来：“祠堂确实不对劲。赵川，别拿上一场的经验赌大伙儿的命——”', 'dialogue', '周衡');
+      } else {
+        pushBeat('周衡脸色凝重地看向陈默：“西厢那边真有后窗和铁闩？”陈默立刻点头：“千真万确，我刚敲过！”', 'dialogue', '周衡');
+      }
+    } else {
+      pushBeat('你重点说了西厢的熟铁门闩与后窗退路，但手头没有祠堂本身出问题的硬证据。赵川冷哼一声：“有后窗算什么本事？漏风漏雾！门板厚才是硬道理！”', 'dialogue', '赵川');
+      pushBeat('周衡神色明显有些犹豫，看了看步步逼近的白雾，一时难以强行压下赵川和吓坏了的林哲。');
+    }
+  } else {
+    pushBeat('你暂时没急着抢话，冷眼观察檐下几人的神态。');
+    pushBeat('赵川见没人拿出祠堂的硬毛病，嗓门更大了，直接拽着发抖的林哲往祠堂台阶迈：“周队，雾都漫过脚脖子了，再拖下去全得冻死在院子里！”', 'dialogue', '赵川');
+    pushBeat('沈岚抱臂站在原地没动，冷冷扫了眼西厢方向；周衡握紧短斧，显然正在做最后的决断。');
+  }
   render();
 }
 
@@ -1376,60 +1475,78 @@ function voteDecision(choice) {
   beginTurn();
   const hasShrineProof = S.clues.includes('E01') || S.clues.includes('E02');
   const hasWestProof = S.clues.includes('E03') || S.clues.includes('E04');
+  const zhouConvinced = S.flags.zhouHasShrineProof || (hasShrineProof && hasWestProof);
 
   if (choice === 'convince_all') {
-    // Full persuasion: needs strong evidence
     S.baseRoom = 'west'; S.location = 'west';
     S.contrib.west = 4;
     Object.values(S.npcs).forEach(n => { n.room = 'west'; });
     S.npcs.zhou.trust += 15; S.npcs.shen.trust += 16; S.npcs.chen.trust += 10;
-    pushBeat('你把查到的铁证条理分明地甩在众人面前——祠堂湿香灰与向外抠出的抓痕彻底击碎了赵川的旧经验，西厢的熟铁门闩与残破账本更让周衡与沈岚当场变色。');
-    pushBeat('沈岚冷声开口：“抓痕朝外说明祠堂是死瓮，去西厢。”周衡果断拍板：“全员进西厢！赵川、林哲，立刻跟上！”七人合流退入西厢落锁。', 'dialogue', '周衡');
-    finishRound1();
+    pushBeat('沈岚率先转身朝西厢走去，陈默紧随其后。周衡沉声拍板：“全员进西厢！赵川、林哲，少废话，立刻跟上！”');
+    pushBeat('赵川骂骂咧咧地吐了口唾沫，终究不敢独自留守祠堂，拉着发抖的林哲不情不愿地跟着七人合流退入西厢落锁。');
+    enterNightPhase();
   } else if (choice === 'split_west') {
-    // REDLINE #5: Player refuses Zhao and splits off to West Wing!
     S.flags.splitParty = true;
     S.baseRoom = 'west'; S.location = 'west';
     S.contrib.west = 5;
-    // Who follows you? Based on real trust/talks!
     const followers = [];
-    if (S.flags.npcTalkedProtect.shen || S.clues.includes('E09') || hasShrineProof) {
+    // Logical consistency: if Zhou already knows Shrine has outward scratch marks / wet ash, he NEVER stupidly walks into Shrine!
+    if (zhouConvinced) {
+      S.npcs.zhou.room = 'west'; followers.push('周衡');
+      S.npcs.chen.room = 'west'; followers.push('陈默');
+      S.oilLampLit = true;
+    } else {
+      S.npcs.zhou.room = 'shrine'; S.npcs.chen.room = 'shrine';
+      S.oilLampLit = false;
+    }
+    if (S.flags.shenHasShrineProof || S.flags.npcTalkedProtect.shen || S.clues.includes('E09') || hasShrineProof) {
       S.npcs.shen.room = 'west'; followers.push('沈岚');
     } else { S.npcs.shen.room = 'shrine'; }
     if (S.flags.npcTalkedProtect.su || S.npcs.su.trust >= 55) {
       S.npcs.su.room = 'west'; followers.push('苏晓');
     } else { S.npcs.su.room = 'shrine'; }
-    // Zhou, Chen, Zhao, Lin go to shrine
-    S.npcs.zhou.room = 'shrine'; S.npcs.chen.room = 'shrine'; S.npcs.zhao.room = 'shrine'; S.npcs.lin.room = 'shrine';
-    S.oilLampLit = false; // Zhou's spirit lamp is in shrine, not with you!
+    S.npcs.zhao.room = 'shrine'; S.npcs.lin.room = 'shrine';
 
     if (followers.length === 0) {
       pushBeat('你拿不出压服全场的证据，但也绝不肯跟着赵川去祠堂送死。你冷冷丢下一句“祠堂没后窗，祝你们好运”，转身独自退入西厢拉死铁门闩！');
-      pushBeat('【触发分支 · 孤狼求生线】其余六人全员进了祠堂，此刻偌大的西厢里只有你一个人。没有队友替你分担，但也没人会拖你后腿。', 'clue');
+      pushBeat('【分支 · 孤狼求生线】其余六人全员进了祠堂，此刻偌大的西厢里只有你一个人。没有队友替你分担，但也没人会拖你后腿。', 'clue');
     } else {
-      pushBeat(`你拒绝进祠堂，果断转身走向西厢。赵川在身后冷笑，但${followers.join('与')}权衡两秒后，竟然毫不犹豫地脱离大部队跟进了你的西厢！`);
-      pushBeat(`【触发分支 · 少数派分队线】此刻西厢内有你与${followers.join('、')}；周衡、陈默、赵川与林哲等人则退进了祠堂。`, 'clue');
+      const shrineNames = Object.values(S.npcs).filter(n => n.room === 'shrine').map(n => n.name).join('、');
+      pushBeat(`你拒绝进祠堂，果断转身走向西厢。赵川冷笑着拽着${shrineNames.includes('林哲') ? '林哲' : '人'}直奔祠堂，而${followers.join('、')}权衡两秒后，毫不犹豫地跟着你退进了西厢落锁！`);
+      pushBeat(`【分支 · 分队对峙线】此刻西厢内有你与${followers.join('、')}；${shrineNames}则退进了东侧祠堂。`, 'clue');
     }
-    finishRound1();
+    enterNightPhase();
   } else {
-    // Follow Zhao to Shrine
     S.baseRoom = 'shrine'; S.location = 'shrine';
     Object.values(S.npcs).forEach(n => { n.room = 'shrine'; });
     pushBeat('你压下疑虑，跟着大部队退进了祠堂。厚木门合上那一刻，潮湿阴冷的香灰味瞬间包裹了每个人。');
-    finishRound1();
+    enterNightPhase();
   }
 }
 
-function finishRound1() {
-  S.rounds.r1 = true;
-  S.publishedRounds.r2 = true; // REDLINE #1: Round 2 dynamically published ONLY AFTER Round 1!
+function enterNightPhase() {
+  // Round 1 is NOT trivially awarded just for picking a room!
+  // You must actually SURVIVE the first night assault (22:00) to complete Round 1 and unlock Round 2!
   S.stage = 'exam_night';
-  playSfx('watch');
-  pushBeat('【第一轮 · 抉择 已完成】基础分 +20 已记入腕表。', 'system');
-  pushBeat('厚木门合拢落闩的刹那，屋里骤然静得只剩几道粗重喘息。门缝底下贴着一层发白的寒霜，周衡腰间那盏镇魂风灯在潮冷空气里微微泛出一丝诡异的青绿。');
-  pushBeat('腕表再度冰冷震动，屏幕跳出第二轮残缺题面：\n【第二轮 · 补全】今夜叩门者无目，唯循【██】与【██】索命。（基础分：25）', 'system');
+  playSfx('frost_crack');
+  pushBeat('厚木门合拢落闩的刹那，屋里骤然静得只剩几道粗重喘息。门缝底下贴着一层发白的寒霜，腕表表盘依旧停留在第一轮考核状态——仅仅躲进屋子，还远远不算过关。');
+  if (S.oilLampLit && isHere('zhou')) {
+    pushBeat('周衡腰间那盏镇魂风灯在潮冷空气里微微跳动，昏黄火光边缘隐约泛出一丝诡异的青绿。');
+  }
   advanceTime(8);
   render();
+}
+
+function completeRound1AndPublishRound2() {
+  if (!S.rounds.r1) {
+    S.rounds.r1 = true;
+    playSfx('watch');
+    pushBeat('腕表冰冷震动，屏幕蓝光一闪：\n【第一轮 · 存续 已完成！基础分 +20 已记入腕表。】', 'system');
+  }
+  if (!S.publishedRounds.r2) {
+    S.publishedRounds.r2 = true;
+    pushBeat('紧接着，第二轮残缺题面缓缓浮现：\n【第二轮 · 补全】今夜叩门者无目，唯循【██】与【██】索命。（基础分：25）', 'system');
+  }
 }
 
 // ======================== 21:30 SHRINE FLOOD (OBJECTIVE EVENT) ========================
@@ -1449,6 +1566,8 @@ function resolveShrineFlood() {
     S.npcs.zhao.hp = Math.max(20, S.npcs.zhao.hp - 35);
     S.npcs.zhou.hp = Math.max(40, S.npcs.zhou.hp - 15);
     S.npcs.zhou.knownLevel = 2; S.npcs.zhao.knownLevel = 2;
+    FXDirector.trigger('shake');
+    playSfx('door_slam');
     beginTurn('21:30 · 祠堂阴雾倒灌，全员破门溃退');
     pushBeat('21:30，祠堂潮湿供桌下突然倒灌出刺骨浓雾，木架上的灵位接二连三砸落在地！赵川脸色煞白，慌忙甩出空间换的【镇宅驱邪符】——黄符刚触到寒雾便“嗤”地卷成黑灰，毫无用处！', 'danger');
     pushBeat('危急关头，周衡爆发出 C 级横练体魄，抡起暗青破邪消防斧硬生生劈开被寒霜封死的门板，碎木混着冰渣四溅，掩护众人狼狈冲出祠堂退守西厢！赵川右臂冻伤发紫，蜷在灶角彻底闭上了嘴。', 'danger');
@@ -1461,21 +1580,20 @@ function resolveShrineFlood() {
   if (zhouInShrine) {
     const wasAway = S.location !== 'west';
     S.location = 'west';
-    // Zhao's talisman fails -> Zhao & Lin die in the shrine/fog; Zhou & Chen break out wounded!
     S.npcs.zhao.alive = false; S.npcs.zhao.hp = 0;
     S.npcs.lin.alive = false; S.npcs.lin.hp = 0;
     S.npcs.zhou.hp = 65; S.npcs.chen.hp = 60;
     S.npcs.zhou.knownLevel = 2;
     S.flags.zhouKnockedHelp = true;
+    FXDirector.trigger('shake');
     playSfx('danger');
     beginTurn('21:30 · 祠堂惨剧与拍门求救');
     if (wasAway) pushBeat('东侧祠堂骤然爆出凄厉惨叫与劈砍巨响，你立刻悄无声息退回西厢反锁木门！', 'danger');
     pushBeat(`21:30，东侧祠堂突然爆出凄厉惨叫与沉闷的劈砍巨响！紧接着你的腕表接连两次冰冷震动：【考生 ${S.npcs.zhao.code} 已死亡】【考生 ${S.npcs.lin.code} 已死亡】！`, 'danger');
-    pushBeat('十秒后，西厢门外响起急促而沉重的拍门声——不是有节奏的诡异轻叩，而是周衡嘶哑的喘息与低喝：“开门！是我！祠堂塌雾了，陈默受伤了，快开门！”', 'danger');
-    pushBeat('门外寒雾翻涌，你必须立刻决定：拉开铁门闩放外面的幸存者进来，还是按死门闩闭门自保？');
+    pushBeat('十秒后，西厢门外响起急促而沉重的拍门声——不是有节奏的诡异轻叩，而是周衡嘶哑的喘息与低喝：“开门！是我，周衡！祠堂正门被封死了，白雾全倒灌进来了——陈默腿冻伤了，快拉门闩！”', 'danger');
+    pushBeat('门缝外寒雾正顺着风压剧烈翻涌，拉开门闩不仅要顶住倒灌的冷雾，还可能把雾里的动静引过来——你必须立刻决断。');
     return true;
   } else {
-    // No Zhou in shrine -> everyone in shrine dies!
     inShrine.forEach(n => { n.alive = false; n.hp = 0; });
     playSfx('danger');
     beginTurn('21:30 · 祠堂死寂');
@@ -1486,24 +1604,38 @@ function resolveShrineFlood() {
 
 function respondZhouDoor(openIt) {
   S.flags.zhouKnockedHelp = false;
-  beginTurn('21:32 · 西厢门扉抉择');
+  beginTurn('21:33 · 西厢门扉抉择');
   const shrineLeft = Object.values(S.npcs).filter(n => n.alive && n.room === 'shrine');
   if (openIt) {
+    S.sound = clamp(S.sound + 20, 0, 100);
+    playSfx('frost_crack');
+    FXDirector.trigger('shake');
+    const ok = rollCheck('phy', 12, S.bg.id === 'climb' ? 2 : 0, '顶住门缝寒雾倒灌');
     shrineLeft.forEach(n => { n.room = 'west'; });
     S.npcs.zhou.trust += 25; S.npcs.chen.trust += 20;
     S.oilLampLit = true; // Zhou brings his spirit lamp in
-    pushBeat(`你咬牙拉开铁门闩，一股夹着霜雪的冷风瞬间灌进屋里！你一把将满身霜血、拎着破邪斧的${shrineLeft.map(n=>n.name).join('、')}拽进西厢，反手死死落锁！`);
+    if (ok) {
+      S.sta = clamp(S.sta - 12, 0, 100);
+      if (applyDamage(6, '门缝倒灌的极寒白雾彻底冻裂了你的肺叶。腕表冰冷提示：【考生 CN-09471 已死亡】。')) return;
+      pushBeat(`你咬牙拉开铁门闩，一股刀割般的寒雾瞬间顺着门缝猛灌进来！你拼尽全力顶住门板，一把将满身霜血、拎着破邪斧的${shrineLeft.map(n=>n.name).join('、')}拽进西厢，反手死死砸回铁闩！掌心和面颊被寒雾刮得生疼。`);
+    } else {
+      S.sta = clamp(S.sta - 15, 0, 100);
+      S.doorDurability = Math.max(40, S.doorDurability - 15);
+      if (applyDamage(15, '失控倒灌的寒雾与门板撞击重创了你的胸口。腕表冰冷提示：【考生 CN-09471 已死亡】。')) return;
+      pushBeat(`拉开门闩的刹那，门外积蓄的雾压轰然将木门狠狠撞向你肩头！你闷哼一声被震退半步，周衡反手抡斧斩断卷进门缝的浓雾，拖着受伤的陈默滚进屋内，两人合力才重新死死顶上铁闩！`, 'danger');
+    }
     pushBeat('周衡靠着土墙大口喘气，呼出的白雾里带着血腥味，眼里满是后怕与感激：“赵川那张驱邪符屁用没有，祠堂根本没退路……今天算我欠你一条命！”', 'dialogue', '周衡');
     if (hasItem('medkit')) {
       pushBeat('周衡与陈默身上都有明显冻伤与擦裂，你包里的便携外伤急救包或许能派上用场。', 'clue');
     }
+    advanceTime(3);
   } else {
     shrineLeft.forEach(n => { n.alive = false; n.hp = 0; });
     playSfx('danger');
     pushBeat('你死死按住冰冷的熟铁门闩，一动不动。门外的拍打与喘息在浓雾里撑了不到半分钟，伴随着斧刃劈空的沉闷响动彻底消失。');
     pushBeat(`腕表连续冰冷震动：${shrineLeft.map(n=>`【考生 ${n.code} 已死亡】`).join('')}。西厢内外彻底陷入死寂。`, 'danger');
+    advanceTime(3);
   }
-  advanceTime(6);
   render();
 }
 
@@ -1609,6 +1741,7 @@ function midEventAction(eventId, opt) {
   S.flags.activeMidEvent = null;
   beginTurn();
   if (eventId === 'night_lamp') {
+    addClue('E10');
     if (opt === 'extinguish_now') {
       S.oilLampLit = false; S.heat = 0; S.flags.lampDebateDone = true;
       if (S.npcs.shen) S.npcs.shen.trust = clamp(S.npcs.shen.trust + 8, 0, 100);
@@ -1627,7 +1760,7 @@ function midEventAction(eventId, opt) {
       pushBeat('你示意暂且留着这盏微火，先把赵川和林哲紧绷的神经稳住。火苗在屋里晃出拉长的暗影，窗纸外那层湿冷雾气压得更沉了。', 'warn');
     } else if (opt === 'check_crack') {
       S.sta = clamp(S.sta - 4, 0, 100);
-      pushBeat('你屏住呼吸贴近门缝默数节律——确认在屋内无火无声的状态下，门外游荡的盲灵最多停顿十秒就会滑走。你把这条时间规律牢牢记在心里。', 'clue');
+      pushBeat('你屏住呼吸贴近门缝默数节律——在屋内无火无声的状态下，门外那道湿冷摩擦声只在窗格前停顿了约莫十秒便滑走了。你把这段停顿暗暗记在心里。', 'clue');
     } else {
       S.sta = clamp(S.sta + 4, 0, 100);
       pushBeat('你缩回灶台阴影里用衣领捂住口鼻，放缓呼吸节奏保存体温，静静听着那股寒意彻底远去。');
@@ -1706,7 +1839,6 @@ function trigger2200Crisis() {
     pushBeat('“笃、笃、笃。”门外响起极有节奏的三声轻叩，不急不缓。紧接着，门缝底下渗进一道干涩扭曲、却诡异模仿着苏晓母亲腔调的呼唤：“苏晓……外面好冷……开门……”', 'danger');
     pushBeat('苏晓浑身僵直得像块石头，眼泪顺着下巴直往下掉；缩在桌角的林哲脸色惨白如纸，喉结剧烈滚动，整根神经眼看就要彻底绷断！');
   } else {
-    // Solo or minority branch without Lin! Blind spirit calls YOUR real name directly!
     pushBeat(`“笃、笃、笃。”门外响起极有节奏的三声轻叩。紧接着，门缝底下渗进一道干涩扭曲、却精准念出你本名的诡异呼唤：“${S.realName}……${S.realName}……开门……”`, 'danger');
     if (S.aliasUsed) {
       pushBeat(`你脊背瞬间窜起一股寒气——进宅后你明明一直用代号“${S.aliasUsed}”，门外的东西却能直接读出你的真名！`, 'clue');
@@ -1722,8 +1854,8 @@ function trigger2200Crisis() {
 
 function postCrisisGuidance() {
   return S.rounds.r2
-    ? '你早已补全【第二轮 · 补全】题面，现在只需熄灯静候子时异变，或补查后院逃生出路。'
-    : '劫后余生，屋里陷入死寂。请打开右上角「线索板」，整合证据补全【第二轮 · 补全】的残缺题面。';
+    ? '你已补全【第二轮 · 补全】题面，现在只需熄灯静候子时异变，或补查屋内外遗漏线索。'
+    : '劫后余生，屋里陷入死寂。请打开右上角「线索板」，交叉比对两条以上物证补全【第二轮 · 补全】的残缺题面。';
 }
 
 function crisisAction(step, opt) {
@@ -1735,20 +1867,21 @@ function crisisAction(step, opt) {
     if (step === 1) {
       pushBeat(opt === 'cover_su' ? '你抢先按住僵直的苏晓肩膀，示意她千万别应声。' : '你贴近门侧阴影，死死盯住窗纸外晃动的无眼轮廓。');
       pushBeat('可缩在桌角的林哲还是彻底崩溃了，在极度窒息中脱口尖叫出一句：“苏晓你别看门缝！！”', 'dialogue', '林哲');
-      playSfx('danger');
+      playSfx('door_slam');
+      FXDirector.trigger('shake');
       pushBeat('“苏晓”二字落地刹那，试探性的轻叩瞬间化作震耳欲聋的狂暴撞击！门框震得簌簌掉灰，窗纸外死死贴上一张无眼裂口的苍白面孔！', 'danger');
       if (!S.oilLampLit) {
-        pushBeat('好在你此前早已劝灭了明火风灯，黑暗中盲灵只能凭声音盲目猛撞，攻势明显偏斜！', 'clue');
+        pushBeat('好在你此前早已劝灭了明火风灯，黑暗中门外那东西只能凭声音盲目猛撞，攻势明显偏斜！', 'clue');
       }
       addClue('E06');
       S.flags.crisisStep = 2;
     } else if (step === 2) {
       if (opt === 'extinguish') {
         S.oilLampLit = false; S.heat = 0; S.contrib.door += 3;
-        pushBeat('电光火石间你一把拍灭周衡的镇魂风灯！火光熄灭刹那，疯狂撞门的盲灵攻势明显一滞，黑暗瞬间吞没了整间西厢！', 'clue');
+        pushBeat('电光火石间你一把拍灭周衡的镇魂风灯！火光熄灭刹那，疯狂撞门的那东西攻势明显一滞，黑暗瞬间吞没了整间西厢！', 'clue');
       } else if (opt === 'brace_dark') {
         S.sta = clamp(S.sta - 10, 0, 100); S.contrib.door += 3;
-        pushBeat('屋里没有明火干扰，你借着门闩余势稳稳配合周衡顶死门板，震得肩胛发麻，却硬生生卸掉了盲灵最狂暴的一波冲撞！', 'clue');
+        pushBeat('屋里没有明火干扰，你借着门闩余势稳稳配合周衡顶死门板，震得肩胛发麻，却硬生生卸掉了门外最狂暴的一波冲撞！', 'clue');
       } else if (opt === 'cover_su_dark') {
         S.contrib.door += 3; S.npcs.su.trust += 15;
         pushBeat('黑暗中你一把拉住僵直的苏晓退往灶台死角死死捂住她的嘴，避免二次尖叫引爆仇恨；周衡独自挥斧稳住了大门！', 'clue');
@@ -1771,6 +1904,7 @@ function crisisAction(step, opt) {
       S.npcs.lin.alive = false; S.npcs.lin.hp = 0;
       S.stage = 'exam_late';
       S.timeMin = 22 * 60 + 20;
+      completeRound1AndPublishRound2();
       pushBeat(postCrisisGuidance());
     }
     render(); return;
@@ -1794,6 +1928,7 @@ function crisisAction(step, opt) {
       }
       S.stage = 'exam_late';
       S.timeMin = 22 * 60 + 18;
+      completeRound1AndPublishRound2();
       pushBeat(postCrisisGuidance());
     } else {
       const dmg = wasLit ? 18 : 10;
@@ -1801,10 +1936,11 @@ function crisisAction(step, opt) {
       S.oilLampLit = false; S.heat = 0;
       addClue('E06');
       pushBeat(wasLit
-        ? '你试图硬顶木门却没有立刻熄灭热源，门板被撞得剧烈变形，震伤了你的肩背！直到灯火被撞翻熄灭，盲灵才失去锁定缓缓退去。'
-        : '你冲上前死死抵住门板，脚步声引来一记沉闷试探重撞，震得肩背生疼！好在屋内本就无火无声，盲灵很快失去目标退回雾中。', 'danger');
+        ? '你试图硬顶木门却没有立刻熄灭热源，门板被撞得剧烈变形，震伤了你的肩背！直到灯火被撞翻熄灭，门外那东西才失去锁定缓缓退去。'
+        : '你冲上前死死抵住门板，脚步声引来一记沉闷试探重撞，震得肩背生疼！好在屋内本就无火无声，门外那东西很快失去目标退回雾中。', 'danger');
       S.stage = 'exam_late';
       S.timeMin = 22 * 60 + 20;
+      completeRound1AndPublishRound2();
       pushBeat(postCrisisGuidance());
     }
     render();
@@ -1847,7 +1983,7 @@ function submitDeduction(hypId) {
   } else {
     S.deductionCooldownUntil = S.timeMin + 15;
     pushBeat(hyp.correct
-      ? '补全词条方向吻合，但你提交的支撑物证不足（需勾选【残破账本炭字】或【无目画像/东厢油灯 + 喊名现场】）。'
+      ? '补全词条方向吻合，但支撑物证不足——单靠一条孤证无法通过腕表校验，必须同时勾选两条不同来源的现场物证分别佐证两处空白。'
       : '腕表闪过刺目红光——补全内容与现场事实矛盾，15 分钟内无法再次提交。', 'warn');
   }
   advanceTime(5);
@@ -1992,7 +2128,7 @@ function settleExam() {
     rankDesc = '拒绝盲从、独自熬过白雾与暗渠，以极高的个人决断力单人生还。';
   } else if (S.rounds.r1 && S.rounds.r2 && S.rounds.r3 && S.flags.foundDeed && S.hp >= 85 && survivors.length >= 4) {
     rank = '完美破局';
-    rankDesc = '铁证服众、洞悉盲灵规则、挖出地契暗渠且全队低损突围，堪称教科书级首考。';
+    rankDesc = '铁证服众、洞悉古宅规则、挖出地契暗渠且全队低损突围，堪称教科书级首考。';
   } else if (!S.rounds.r2 || net < 15) {
     rank = '惨胜残存';
     rankDesc = '虽侥幸付清空间账单活了下来，但余分捉襟见肘，下一场将举步维艰。';
@@ -2152,7 +2288,7 @@ function renderTitleScreen() {
     <div class="relative z-10 flex items-center justify-between px-8 lg:px-14 pt-7">
       <div class="flex items-center gap-3 font-mono-ui text-[11px] tracking-[0.24em] text-stone-400">
         <span class="w-2 h-2 rounded-full bg-red-600/90 animate-pulse"></span>
-        <span>DEATH EXAM TERMINAL // TRUTH ENGINE 0.9</span>
+        <span>DEATH EXAM TERMINAL // TRUTH ENGINE 1.0</span>
       </div>
       <div class="font-mono-ui text-[11px] tracking-[0.18em] text-stone-500 hidden sm:block">SEASON I · WHITE MIST MANOR</div>
     </div>
@@ -2632,7 +2768,7 @@ function renderChoices() {
     const r = S.location;
     const afterSafe = S.timeMin >= S.protectEndMin;
     if (afterSafe) {
-      btns.push(choiceBtn('趁白雾尚未彻底封院，立刻回前院参与七人选房交锋', '建议集合', 'resolveProtectionEnd(false)', true));
+      btns.push(choiceBtn('趁白雾尚未彻底封院，立刻回前院与众人碰头定下落脚房', '回前院碰头', 'resolveProtectionEnd(false)', true));
     }
     if (r !== 'shrine' && ROOMS[r].neighbors.includes('shrine')) btns.push(choiceBtn('前往【祠堂】查探 / 找赵川与林哲聊聊', '30 秒', "moveToRoom('shrine')"));
     if (r !== 'west' && ROOMS[r].neighbors.includes('west')) btns.push(choiceBtn('前往【西厢】查探 / 找陈默了解情况', '30 秒', "moveToRoom('west')"));
@@ -2640,16 +2776,26 @@ function renderChoices() {
     if (r !== 'east' && ROOMS[r].neighbors.includes('east')) btns.push(choiceBtn('前往【东厢】查探破柴房', '30 秒', "moveToRoom('east')"));
     if (r !== 'courtyard' && ROOMS[r].neighbors.includes('courtyard')) btns.push(choiceBtn('返回【前院】', '30 秒', "moveToRoom('courtyard')"));
     if (!afterSafe) {
-      btns.push(choiceBtn('侦察完毕，提前回前院进入七人选房交锋', '集合选房', 'resolveProtectionEnd(false)'));
+      btns.push(choiceBtn('查探得差不多了，提前回前院与众人碰头定下今晚房间', '提前碰头', 'resolveProtectionEnd(false)'));
     }
     return btns.slice(0, 5).join('');
   }
 
   if (S.stage === 'exam_vote') {
-    const hasStrongProof = (S.clues.includes('E01') || S.clues.includes('E02')) && (S.clues.includes('E03') || S.clues.includes('E04'));
+    const hasShrineProof = S.clues.includes('E01') || S.clues.includes('E02');
+    const hasWestProof = S.clues.includes('E03') || S.clues.includes('E04');
+    if (S.flags.voteStep === 1) {
+      const btns = [];
+      if (hasShrineProof || hasWestProof) {
+        btns.push(choiceBtn('当面把刚查到的现场异常摆出来，直接反驳赵川进祠堂的提议', '当面亮证', "voteStageAction('present_all')"));
+      }
+      btns.push(choiceBtn('先不抢话，冷眼观察老队员之间怎么争论', '静观其变', "voteStageAction('watch')"));
+      return btns.join('');
+    }
+    const canConvinceAll = S.flags.zhouHasShrineProof || (hasShrineProof && hasWestProof);
     const btns = [];
-    if (hasStrongProof) {
-      btns.push(choiceBtn('把查到的祠堂异常与西厢情况摆上台面，说服周衡与全员改驻西厢', '摆证说服', "voteDecision('convince_all')"));
+    if (canConvinceAll) {
+      btns.push(choiceBtn('趁周衡与沈岚已站在西厢这边，顺势压住赵川全员进西厢', '全员进西厢', "voteDecision('convince_all')"));
     }
     btns.push(choiceBtn('拒绝跟赵川进祠堂，自行退守西厢（哪怕分队或独行）', '坚持西厢', "voteDecision('split_west')"));
     btns.push(choiceBtn('暂不撕破脸，随大流跟着赵川进祠堂避雾', '随队进祠堂', "voteDecision('shrine')"));
@@ -2658,8 +2804,8 @@ function renderChoices() {
 
   if (S.flags.zhouKnockedHelp) {
     return [
-      choiceBtn('立刻拉开铁门闩，放满身霜血的周衡与陈默进西厢！', '开门放人', 'respondZhouDoor(true)', true),
-      choiceBtn('死死按住铁门闩绝不开门——决不放浓雾进屋！', '闭门自保', 'respondZhouDoor(false)', true)
+      choiceBtn('顶着门缝寒雾倒灌拉开铁门闩，拽满身霜血的周衡与陈默进西厢！', '3 分钟 · 顶雾险', 'respondZhouDoor(true)', true),
+      choiceBtn('死死按住铁门闩绝不开门——决不放浓雾与声响进屋！', '3 分钟 · 闭门自保', 'respondZhouDoor(false)', true)
     ].join('');
   }
 
@@ -2786,8 +2932,8 @@ function renderDrawer() {
     <div class="space-y-3 font-sans-ui text-xs leading-6">
       ${S.publishedRounds.r1 ? `
       <div class="p-3.5 rounded-lg border ${S.rounds.r1 ? 'border-emerald-500/35 bg-emerald-950/20' : 'border-white/10 bg-white/[0.02]'}">
-        <div class="flex justify-between text-stone-200 font-medium"><span>第一轮 · 抉择（20分）</span><span>${S.rounds.r1 ? '✓ 已完成' : '进行中'}</span></div>
-        <div class="text-stone-400 mt-1">白雾封院，择室安身：主厅／祠堂／西厢。</div>
+        <div class="flex justify-between text-stone-200 font-medium"><span>第一轮 · 存续（20分）</span><span>${S.rounds.r1 ? '✓ 已完成' : '进行中'}</span></div>
+        <div class="text-stone-400 mt-1">白雾封院，择室避雾，撑过今夜首次异变。</div>
       </div>` : `<div class="p-3 rounded-lg border border-white/5 bg-white/[0.01] text-stone-500 text-[11px]">考题尚未下发……</div>`}
       ${S.publishedRounds.r2 ? `
       <div class="p-3.5 rounded-lg border ${S.rounds.r2 ? 'border-emerald-500/35 bg-emerald-950/20' : 'border-white/10 bg-white/[0.02]'}">
