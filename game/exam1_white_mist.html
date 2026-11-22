@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>全球死考 · 第一场：白雾古宅</title>
+  <script src="exam-save.js"></script>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -430,13 +431,18 @@ function playSfx(type) { AudioDirector.playSfx(type); }
 
 function saveProgress() {
   try {
-    if (S.stage && S.stage !== 'title' && S.stage !== 'char_select') {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(S));
+    if (!S.stage || S.stage === 'title' || S.stage === 'char_select') return;
+    const saved = window.WhiteMistSave
+      ? window.WhiteMistSave.write(S)
+      : (localStorage.setItem(SAVE_KEY, JSON.stringify(S)), true);
+    if (saved && typeof location !== 'undefined' && location.hash === '#new' && typeof history !== 'undefined') {
+      history.replaceState(null, '', '#continue');
     }
   } catch (e) {}
 }
 function loadSavedMeta() {
   try {
+    if (window.WhiteMistSave) return window.WhiteMistSave.read();
     const raw = localStorage.getItem(SAVE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (e) { return null; }
@@ -447,12 +453,19 @@ function clearSaveData() {
 }
 function continueSavedGame() {
   const saved = loadSavedMeta();
-  if (!saved) return;
+  if (!saved) {
+    if (window.WhiteMistSave && typeof location !== 'undefined') location.replace('../index.html');
+    return;
+  }
   S = saved; S.drawer = null; render();
 }
 function startNewExam() { initState('char_select'); render(); }
 function returnToTitle() {
   saveProgress();
+  if (window.WhiteMistSave && typeof location !== 'undefined') {
+    location.replace('../index.html');
+    return;
+  }
   S.stage = 'title'; S.titleModal = null; S.drawer = null; render();
 }
 
@@ -2981,8 +2994,16 @@ function renderSpaceMode() {
   </div>`;
 }
 
-initState('title');
-render();
+if (typeof location !== 'undefined' && location.hash === '#new') {
+  startNewExam();
+} else if (typeof location !== 'undefined' && location.hash === '#continue') {
+  continueSavedGame();
+} else if (window.WhiteMistSave && typeof location !== 'undefined') {
+  location.replace('../index.html' + (location.hash === '#rules' ? '#rules' : ''));
+} else {
+  initState('title');
+  render();
+}
 
 </script>
 </body>

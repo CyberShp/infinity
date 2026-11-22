@@ -1,0 +1,54 @@
+/* The painting, its animated detail and reflected light share one coordinate space. */
+[data-edition="judgment"] .world-art::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: inherit;
+  mask-image: radial-gradient(
+    ellipse var(--reflection-width, 15%) var(--reflection-height, 12%)
+    at var(--reflection-x, var(--vortex-x, 72%)) var(--reflection-y, 77%),
+    black, transparent
+  );
+  mix-blend-mode: screen;
+  opacity: calc(.025 + var(--hall-light, .4) * .19);
+}
+
+[data-edition="numinous"] .world:not([data-motion="on"]) .world-art::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: url("assets/hall-vortex-gilt.webp") center / 100% 100% no-repeat;
+  opacity: .52;
+}
+
+.hall-current {
+  position: absolute;
+  pointer-events: none;
+  left: var(--vortex-x, 72%);
+  top: var(--vortex-y, 44%);
+  width: var(--vortex-width, 25%);
+  aspect-ratio: var(--vortex-aspect, 1);
+  height: auto;
+  transform: translate(-50%, -50%);
+}
+
+[data-edition="numinous"] .hall-current {
+  transform: translate(-50%, -50%) rotate(calc(var(--vortex-tilt, 0) * 1deg));
+}
+
+[data-edition="numinous"] .hall-current:not(.hall-current--shader) {
+  mask-image: radial-gradient(ellipse 50% 50%, transparent calc(var(--vortex-core, .13) * 60%),
+    black calc(var(--vortex-core, .13) * 100% + 6%), black 72%, transparent 100%);
+}
+
+[data-edition="numinous"] .world:not([data-motion="on"]) .hall-current,
+.hall-current[hidden] {
+  display: none;
+}
+
+#sound-toggle[aria-pressed="true"] .sound-off,
+#sound-toggle:not([aria-pressed="true"]) .sound-on {
+  display: none;
+}
