@@ -47,6 +47,19 @@
       savePref(key, val);
     },
 
+    _bgmTargetVolume(key) {
+      if (key === 'crisis') return 0.90;
+      if (key === 'manor_quiet') return 0.88;
+      return 0.82;
+    },
+
+    _duckBgm(duck) {
+      if (!this.bgmEl) return;
+      try {
+        this.bgmEl.volume = duck ? 0.25 : this._bgmTargetVolume(this.currentBgmKey);
+      } catch {}
+    },
+
     unlock() {
       this.unlocked = true;
       const Ctx = global.AudioContext || global.webkitAudioContext;
@@ -56,10 +69,14 @@
       if (this.ctx && this.ctx.state === 'suspended') {
         this.ctx.resume().catch(() => {});
       }
-      if (this.sfxEnabled && this.currentBgmKey && (!this.bgmEl || this.bgmEl.paused)) {
-        const k = this.currentBgmKey;
-        this.currentBgmKey = null;
-        this.playBgm(k);
+      if (this.sfxEnabled && this.currentBgmKey) {
+        if (this.bgmEl && this.bgmEl.paused) {
+          this.bgmEl.play().catch(() => {});
+        } else if (!this.bgmEl) {
+          const k = this.currentBgmKey;
+          this.currentBgmKey = null;
+          this.playBgm(k);
+        }
       }
     },
 
@@ -69,7 +86,7 @@
       if (!src || this.missing.has(src)) return;
       if (this.currentBgmKey === key && this.bgmEl && !this.bgmEl.paused) return;
       this.currentBgmKey = key;
-      if (!this.sfxEnabled || !this.unlocked) return;
+      if (!this.sfxEnabled) return;
 
       try {
         if (this.bgmEl) {
@@ -78,10 +95,13 @@
         }
         const el = new Audio(src);
         el.loop = true;
-        el.volume = key === 'crisis' ? 0.42 : 0.32;
+        el.volume = this._bgmTargetVolume(key);
         el.onerror = () => { this.missing.add(src); };
-        el.play().catch(() => {});
         this.bgmEl = el;
+        const p = el.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {});
+        }
       } catch {}
     },
 
@@ -104,25 +124,28 @@
           global.speechSynthesis.cancel();
         }
       } catch {}
+      this._duckBgm(false);
     },
 
-    _pickColdFemaleZhVoice() {
+    _pickFemaleZhVoice() {
       try {
         const synth = global.speechSynthesis;
         if (!synth || typeof synth.getVoices !== 'function') return null;
         const voices = synth.getVoices() || [];
         const zhVoices = voices.filter(v => /zh|cmn|chinese/i.test(v.lang || ''));
         if (!zhVoices.length) return null;
-        const preferred = zhVoices.find(v =>
-          /xiaoxiao|xiaoyi|ting-ting|tingting|meijia|yaoyao|huihui|sin-ji|female|女|google 普通话/i.test(v.name || '')
-        );
-        return preferred || zhVoices[0];
+        const maleRe = /kangkang|yunxi|yunjian|yunyang|yunze|danny|zhiwei|male|男/i;
+        const femaleRe = /xiaoxiao|xiaoyi|ting-ting|tingting|meijia|mei-jia|lili|yaoyao|huihui|sin-ji|shanshan|yating|hanj|female|女|google 普通话/i;
+        const preferred = zhVoices.find(v => femaleRe.test(v.name || '') && !maleRe.test(v.name || ''));
+        if (preferred) return preferred;
+        const nonMale = zhVoices.find(v => !maleRe.test(v.name || ''));
+        return nonMale || zhVoices[0];
       } catch {
         return null;
       }
     },
 
-    _speakColdSystemVoice(spokenText) {
+    _speakCustomerServiceFemale(spokenText) {
       if (!spokenText || !this.sfxEnabled || !this.voiceEnabled) return;
       try {
         const synth = global.speechSynthesis;
@@ -131,24 +154,27 @@
         synth.cancel();
         const u = new Utter(spokenText);
         u.lang = 'zh-CN';
-        u.rate = 0.98;
-        u.pitch = 0.78;
-        u.volume = 0.92;
-        const v = this._pickColdFemaleZhVoice();
+        u.rate = 0.96;
+        u.pitch = 1.06;
+        u.volume = 0.95;
+        const v = this._pickFemaleZhVoice();
         if (v) u.voice = v;
+        this._duckBgm(true);
+        u.onend = () => this._duckBgm(false);
+        u.onerror = () => this._duckBgm(false);
         synth.speak(u);
       } catch {}
     },
 
     /**
-     * 死考机械女声双轨播报：
-     * 1) 优先播放 AV_MANIFEST.voice[voiceKey] 预制冷感女声 .mp3
-     * 2) 缺失时无缝触发 watch_haptic 贴肤短震 + 低音调冷感中文女声 speechSynthesis 兜底
+     * 死考客服女声双轨播报：
+     * 1) 优先播放预生成 zh-CN-XiaoxiaoNeural 客服女声 .mp3，同时柔和压低 BGM 音量
+     * 2) 若离线/缺失则兜底使用中文女声 speechSynthesis（pitch 1.06，严排男声）
      */
     playSystemBroadcast(voiceKey, spokenText) {
       if (!this.sfxEnabled) return;
       this.stopSystemBroadcast();
-      this.playSfx('watch', { volume: 0.72 });
+      this.playSfx('watch', { volume: 0.65 });
       if (!this.voiceEnabled) return;
 
       const manifest = global.AV_MANIFEST;
@@ -156,24 +182,31 @@
       if (src && !this.missing.has(src) && typeof Audio === 'function') {
         try {
           const el = new Audio(src);
-          el.volume = 0.92;
+          el.volume = 0.96;
+          this._duckBgm(true);
+          el.onended = () => {
+            if (this.voiceEl === el) this.voiceEl = null;
+            this._duckBgm(false);
+          };
           el.onerror = () => {
             this.missing.add(src);
             if (this.voiceEl === el) this.voiceEl = null;
-            this._speakColdSystemVoice(spokenText);
+            this._duckBgm(false);
+            this._speakCustomerServiceFemale(spokenText);
           };
           this.voiceEl = el;
           const p = el.play();
           if (p && typeof p.catch === 'function') {
             p.catch(() => {
               if (this.voiceEl === el) this.voiceEl = null;
-              this._speakColdSystemVoice(spokenText);
+              this._duckBgm(false);
+              this._speakCustomerServiceFemale(spokenText);
             });
           }
           return;
         } catch {}
       }
-      this._speakColdSystemVoice(spokenText);
+      this._speakCustomerServiceFemale(spokenText);
     },
 
     /**

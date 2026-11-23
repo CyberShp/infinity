@@ -14,7 +14,7 @@
   }
 
   const Story = {
-    // ================= 序幕三拍：雨巷白雾 → 60秒倒计时与机械女声 → 坠入裴宅 =================
+    // ================= 序幕三拍：雨巷白雾 → 60秒倒计时与客服女声 → 坠入裴宅 =================
     selectOrigin(originId) {
       const eng = E();
       const orig = DATA().ORIGINS.find(o => o.id === originId);
@@ -34,6 +34,7 @@
         global.AudioEngine.playBgm('alley');
       }
 
+      eng.beginScene('20:30 · 江南旧巷 · 浓雾骤起');
       eng.pushLog({
         type: 'narration',
         text: `细雨落在江南旧巷的青石板上。你是【${orig.name}】陆寻。${orig.bond}`
@@ -49,6 +50,7 @@
         { label: '贴着潮湿砖墙快步退回街口', action: 'prologue_probe_walk' },
         { label: '停在原地，按职业本能观察雾气与体感异常', action: 'prologue_probe_sense' }
       ];
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -57,6 +59,7 @@
       const S = eng.S;
       S.clockMin = 20 * 60 + 33;
 
+      eng.beginScene('20:33 · 腕表锁死 · 六十秒倒计时');
       if (mode === 'phone') {
         eng.pushLog({
           type: 'narration',
@@ -86,12 +89,12 @@
       });
       eng.pushLog({
         type: 'narration',
-        text: '下一瞬，一道毫无起伏、听不出半点活人情绪的冰冷机械女声，在白雾与颅骨深处同时响起——'
+        text: '下一瞬，一道字正腔圆、礼貌得像银行客服热线般柔和、却毫无温度的年轻女声，在白雾与耳畔同时响起——'
       });
       eng.pushBroadcast(
         'sys_intro_60s',
-        '已锁定适格考生，编号 C-N-零九四七一。欢迎来到全球死考。首场考核将在六十秒后载入。考核期间，一切死亡均为真实死亡；严禁强行剥离或损毁腕表，违者即刻抹杀。',
-        '【机械女声通告】\n「已锁定适格考生：CN-09471。欢迎来到全球死考。首场考核将在 60 秒后载入。考核期间，一切死亡均为真实死亡；严禁强行剥离或损毁腕表，违者即刻抹杀。」'
+        '您好，已锁定适格考生，编号 C N 零九四七一。欢迎参加全球死考。您的首场考核将在六十秒后正式载入。考核期间，一切伤亡均为真实死亡；请勿强行剥离或损毁考生腕表，违者将即刻抹杀。',
+        '【死考系统女声播报】\n「您好，已锁定适格考生：CN-09471。欢迎参加全球死考。您的首场考核将在 60 秒后正式载入。考核期间，一切伤亡均为真实死亡；请勿强行剥离或损毁考生腕表，违者将即刻抹杀。」'
       );
 
       S.sceneId = 'prologue_countdown';
@@ -100,6 +103,7 @@
         { label: '压住心悸，低头核对表盘并确认随身物件在手', action: 'prologue_cd_check' },
         { label: '趁倒计时未归零，从墙根摸半块沉手青砖揣进兜里', action: 'prologue_cd_brick' }
       ];
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -108,6 +112,7 @@
       const S = eng.S;
       S.clockMin = 20 * 60 + 35;
 
+      eng.beginScene('20:35 · 倒数归零 · 场景投送');
       if (mode === 'pry') {
         S.hp = Math.max(1, S.hp - 4);
         eng.pushLog({
@@ -116,8 +121,8 @@
         });
         eng.pushBroadcast(
           'sys_intro_warn',
-          '警告。检测到剥离腕表企图。再次尝试，即刻抹杀。',
-          '【机械女声通告】\n「警告。检测到剥离腕表企图。再次尝试，即刻抹杀。」'
+          '提示：检测到剥离腕表企图。请立即停止操作，再次尝试将执行抹杀。',
+          '【死考系统女声播报】\n「提示：检测到剥离腕表企图。请立即停止操作，再次尝试将执行抹杀。」'
         );
       } else if (mode === 'check') {
         S.stats.WIL += 1;
@@ -135,12 +140,12 @@
 
       eng.pushLog({
         type: 'narration',
-        text: '表盘猩红数字滑至最后三秒。白雾骤然向内坍缩，冷硬的女声一字一顿砸在耳膜上——'
+        text: '表盘猩红数字滑至最后三秒。白雾骤然向内坍缩，那道平稳礼貌的女声在耳边落下——'
       });
       eng.pushBroadcast(
         'sys_intro_zero',
-        '三、二、一。场景投送完成。',
-        '【机械女声通告】\n「三、二、一。场景投送完成。」'
+        '三，二，一。场景投送完成。',
+        '【死考系统女声播报】\n「三，二，一。场景投送完成。」'
       );
       eng.pushLog({
         type: 'narration',
@@ -151,6 +156,7 @@
       S.pendingChoices = [
         { label: '稳住重心，迅速扫视院内其余六人', action: 'scene_gate_shock' }
       ];
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -164,6 +170,7 @@
         global.AudioEngine.playSfx('door_slam', { volume: 0.55 });
       }
 
+      eng.beginScene('20:40 · 裴宅前院 · 初醒与立威');
       eng.pushLog({
         type: 'narration',
         text: '天井里连你在内一共七个人。你身侧跌坐着一男一女——穿湿皱西装的年轻男人，和一个背着帆布包、半边眼镜摔歪在地的女生。而对面廊檐台阶下早已分开站着四个神色冷硬的人：一个拎着短柄暗青消防斧的寸头男人，一个蹲在石阶边检查工具包的工装青年，一个靠在廊柱阴影里的暗灰冲锋衣女人，以及正烦躁扯着皮夹克往大门张望的胡茬汉子。'
@@ -203,6 +210,7 @@
         { label: '直视周衡询问底线：“真撞上死局，老手会拿新人探路吗？”', action: 'intro_probe_zhou' },
         { label: '蹲下帮发抖的女生稳住呼吸，顺带细看西装男掌心的冻痕', action: 'intro_probe_su' }
       ];
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -211,6 +219,7 @@
       const S = eng.S;
       S.clockMin = 20 * 60 + 41;
 
+      eng.beginScene('20:41 · 前院试探与报号');
       if (mode === 'gear') {
         S.npcs.chen.trust += 8;
         eng.pushLog({
@@ -260,6 +269,7 @@
 
       S.sceneId = 'choose_callsign';
       S.pendingChoices = [];
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -278,6 +288,7 @@
         const target = S.npcs[res.npcId];
         if (target) target.trust = Math.max(0, target.trust - 8);
         S.toast = null;
+        eng.beginScene('20:41 · 重报称呼');
         eng.pushLog({
           type: 'narration',
           text: `你脱口报了个「${res.name}」。`
@@ -286,6 +297,7 @@
           type: 'dialog', speaker: '周衡', portrait: 'zhou', emotion: 'tense',
           text: '周衡眼神冷了下来：“拿同场活人的名字寻开心？别浪费时间，重报一个。”'
         });
+        eng.finalizeSceneBeats();
         eng.emit();
         return false;
       }
@@ -297,6 +309,7 @@
       S.phase = 'protect';
       S.round = 1;
 
+      eng.beginScene('20:42 · 第一轮考题下发 · 保护期开始');
       if (res.kind === 'troll') {
         S.flags.troll_alias = true;
         Object.values(S.npcs).forEach(n => {
@@ -330,8 +343,8 @@
 
       eng.pushBroadcast(
         'sys_round1_start',
-        '第一轮考核：投宿。白雾封门，择屋过夜，活过今夜五更天明。基础分，二十分。新手保护期，十分钟，计时开始。',
-        '【机械女声通告 · 第一轮考题下发】\n「第一轮考核：投宿。白雾封门，择屋过夜，活过今夜五更天明（05:00）。基础分：20。新手保护期：10:00，计时开始。」'
+        '第一轮考核：投宿。白雾封门，择屋过夜，活过今夜五更天明。基础分，二十分。新手保护期，十分钟，现在开始计时。',
+        '【死考系统女声播报 · 第一轮考题下发】\n「第一轮考核：投宿。白雾封门，择屋过夜，活过今夜五更天明（05:00）。基础分：20。新手保护期：10:00，现在开始计时。」'
       );
       eng.pushLog({
         type: 'dialog', speaker: '周衡', portrait: 'zhou', emotion: 'calm',
@@ -352,6 +365,7 @@
 
       S.sceneId = 'free_explore';
       S.pendingChoices = [];
+      eng.finalizeSceneBeats();
       eng.emit();
       return true;
     },
@@ -378,6 +392,7 @@
 
       const cost = S.phase === 'day2' ? 15 : (S.phase === 'protect' ? 1 : 6);
       S.room = roomId;
+      eng.beginScene(`${eng.formatClock(S.clockMin + cost)} · ${eng.getRoomName(roomId)}`);
       eng.advanceTime(cost);
 
       if (S.stage !== 'play') return;
@@ -389,6 +404,7 @@
 
       this.checkTimeTriggers();
       if (S.phase === 'day2') this.checkDay2RoomEvents(roomId);
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -405,6 +421,7 @@
       }
 
       S.flags.searched[r + '_' + S.day] = true;
+      eng.beginScene(`${eng.formatClock(S.clockMin + cost)} · 搜检 · ${eng.getRoomName(r)}`);
       eng.advanceTime(cost);
       if (S.stage !== 'play') return;
 
@@ -485,6 +502,7 @@
       }
 
       this.checkTimeTriggers();
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -496,6 +514,7 @@
       if (!npc || !npc.alive || npc.room !== S.room) return;
 
       const cost = S.phase === 'day2' ? 10 : (S.phase === 'protect' ? 1 : 0);
+      eng.beginScene(`${eng.formatClock(S.clockMin + cost)} · 交谈 · ${npc.name}`);
       if (cost > 0) eng.advanceTime(cost);
       if (S.stage !== 'play') return;
 
@@ -602,6 +621,7 @@
       }
 
       this.checkTimeTriggers();
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -636,10 +656,11 @@
         global.AudioEngine.playSfx('watchman_bang', { volume: 0.75, pan: 0 });
       }
 
+      eng.beginScene('20:52 · 保护期结束 · 择屋过夜');
       eng.pushBroadcast(
         'sys_protect_end',
-        '新手保护期结束。',
-        '【机械女声通告】\n「新手保护期结束。」'
+        '提示：新手保护期已结束。',
+        '【死考系统女声播报】\n「提示：新手保护期已结束。」'
       );
       eng.pushLog({
         type: 'danger',
@@ -696,6 +717,7 @@
 
       S.sceneId = 'night1_shelter_split';
       S.pendingChoices = choices;
+      eng.finalizeSceneBeats();
     },
 
     // ================= 第一夜路径 A：西厢人心暗流局 =================
@@ -711,6 +733,7 @@
       S.npcs.lin.room = 'west';
       S.npcs.su.room = 'west';
 
+      eng.beginScene('21:05 · 第一夜 · 进驻西厢');
       const zhaoSafe = savedZhaoNow || S.flags.zhao_warned;
       if (zhaoSafe) {
         S.flags.zhao_warned = true;
@@ -733,7 +756,6 @@
         });
       }
 
-      // 沈岚自然顺水推舟（绝不蠢到当众塞停表）
       eng.pushLog({
         type: 'dialog', speaker: '沈岚', portrait: 'shen', emotion: 'calm',
         text: '沈岚靠在门侧阴影里，语气平淡：“夜里腕表屏幕太亮，没事别乱点。里间那张雕花暖榻铺着厚毡子，你们两个新人要是扛不住冻，就去里头靠着，我们几个守门边和灶口。”'
@@ -769,14 +791,16 @@
           { label: '按住门闩不开门，任由门外动静归于死寂', action: 'n1_rescue_zhao_no' }
         ];
       } else {
-        this.enterNight1WestInvestigation();
+        this.enterNight1WestInvestigation(false);
       }
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
     resolveWestZhaoRescue(saveHim) {
       const eng = E();
       const S = eng.S;
+      eng.beginScene(saveHim ? '21:32 · 冒雾拽人' : '21:32 · 门外死寂');
       if (saveHim) {
         S.flags.zhao_rescued = true;
         S.npcs.zhao.room = 'west';
@@ -800,18 +824,20 @@
         });
         eng.pushBroadcast(
           'sys_dead_zhao',
-          '考生，C-N-零八一四四，已死亡。',
-          '【机械女声通告】\n「考生 CN-08144，已死亡。」'
+          '播报：考生 C N 零八一四四，已死亡。',
+          '【死考系统女声播报】\n「播报：考生 CN-08144，已死亡。」'
         );
       }
-      this.enterNight1WestInvestigation();
+      this.enterNight1WestInvestigation(false);
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
-    enterNight1WestInvestigation() {
+    enterNight1WestInvestigation(newScene) {
       const eng = E();
       const S = eng.S;
       S.clockMin = 22 * 60 + 15;
+      if (newScene) eng.beginScene('22:15 · 西厢暗查');
       eng.pushLog({
         type: 'narration',
         text: '【22:15 · 西厢静默】屋外竹骨梆声时远时近，距三更还有三刻钟。林哲蜷在里间暖榻上把玩着怀表，周衡靠在门边擦拭斧刃，沈岚闭目养神。你还有时间暗中查验屋里的账册、怀表与暖榻，再决定三更怎么应对。'
@@ -848,7 +874,7 @@
       S.pendingChoices = choices;
     },
 
-    // 三更点卯 ＋ 四更寒潮过渡（西厢）
+    // 三更点卯 ＋ 四更寒潮（独立成幕，读完再步入次日破晓）
     resolveWestMidnight(route) {
       const eng = E();
       const S = eng.S;
@@ -858,9 +884,10 @@
         global.AudioEngine.playSfx('knock');
       }
 
+      eng.beginScene('23:00 · 三更点卯 · 西厢死局');
       const rollCallText = S.usedRealName
-        ? '【23:00 · 三更点卯】“笃……笃……笃。”竹骨梆在西厢门外缓缓敲响三记。一道没有眼睛的惨白轮廓死死贴上窗纸，沙哑问账：“乙丑岁奉……西厢住客，陆寻……林哲……哪位应账——”你死死咬住牙关，一字未吐。'
-        : '【23:00 · 三更点卯】“笃……笃……笃。”竹骨梆在西厢门外缓缓敲响三记。一道没有眼睛的惨白轮廓死死贴上窗纸，沙哑问账：“乙丑岁奉……西厢住客，哪位应账——”';
+        ? '“笃……笃……笃。”竹骨梆在西厢门外缓缓敲响三记。一道没有眼睛的惨白轮廓死死贴上窗纸，沙哑问账：“乙丑岁奉……西厢住客，陆寻……林哲……哪位应账——”你死死咬住牙关，一字未吐。'
+        : '“笃……笃……笃。”竹骨梆在西厢门外缓缓敲响三记。一道没有眼睛的惨白轮廓死死贴上窗纸，沙哑问账：“乙丑岁奉……西厢住客，哪位应账——”';
 
       eng.pushLog({
         type: 'danger',
@@ -898,8 +925,8 @@
         });
         eng.pushBroadcast(
           'sys_dead_lin',
-          '考生，C-N-零九四七二，已死亡。',
-          '【机械女声通告】\n「考生 CN-09472，已死亡。」'
+          '播报：考生 C N 零九四七二，已死亡。',
+          '【死考系统女声播报】\n「播报：考生 CN-09472，已死亡。」'
         );
         eng.pushLog({
           type: 'dialog', speaker: '周衡', portrait: 'zhou', emotion: 'tense',
@@ -921,8 +948,8 @@
         });
         eng.pushBroadcast(
           'sys_dead_shen',
-          '考生，C-N-零六三零二，已死亡。',
-          '【机械女声通告】\n「考生 CN-06302，已死亡。」'
+          '播报：考生 C N 零六三零二，已死亡。',
+          '【死考系统女声播报】\n「播报：考生 CN-06302，已死亡。」'
         );
         eng.pushLog({
           type: 'narration',
@@ -930,14 +957,18 @@
         });
       }
 
-      // 四更寒潮过渡拍
       S.clockMin = 24 * 60 + 3 * 60 + 30;
       eng.pushLog({
         type: 'narration',
         text: '【03:30 · 四更寒潮】后半夜气温跌至冰点，白雾顺着窗纸缝隙结出一层厚霜，竹骨梆在回廊外又缓慢转了两圈，直到五更天边泛起一线灰白才彻底沉寂。'
       });
 
-      this.completeNight1ToDay2();
+      S.sceneId = 'night1_dawn_wait';
+      S.pendingChoices = [
+        { label: '熬至五更晨钟响起，推门迎接次日天明', action: 'advance_to_day2' }
+      ];
+      eng.finalizeSceneBeats();
+      eng.emit();
     },
 
     // ================= 第一夜路径 B：东厢柴房机关独守局 =================
@@ -964,6 +995,7 @@
         eng.addItem('quicklime');
       }
 
+      eng.beginScene('21:10 · 第一夜 · 独守东厢柴房');
       eng.pushLog({
         type: 'narration',
         text: '你转身退入破败的东厢柴房。木门缺闩，半扇木窗坍塌漏风。干尸怀中取出的《鲁门营造厌胜残谱》、扁铁凿、朱砂墨斗与墙角生石灰就在手边——三更之前，你得靠自己把这间破屋的防线搭稳。'
@@ -974,6 +1006,7 @@
         { label: '打开【东厢柴房拆解台】布置防线', action: 'n1_open_east_wb' },
         { label: '布置完毕，熄光屏息熬过三更与四更寒潮', action: 'n1_east_endure' }
       ];
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -984,6 +1017,7 @@
       S.clockMin = 25 * 60;
       if (global.AudioEngine) global.AudioEngine.playSfx('watchman_bang', { volume: 0.9, pan: 0 });
 
+      eng.beginScene('01:00 · 东厢柴房 · 子丑拒煞');
       let missing = 0;
       if (!wb.eastInkDone) {
         missing++;
@@ -1007,7 +1041,6 @@
         });
       }
 
-      // 严格尊重保护期是否劝住赵川的状态，不再强制写死赵川！
       if (!S.flags.zhao_warned) {
         S.npcs.zhao.alive = false;
         eng.pushLog({
@@ -1016,8 +1049,8 @@
         });
         eng.pushBroadcast(
           'sys_dead_zhao',
-          '考生，C-N-零八一四四，已死亡。',
-          '【机械女声通告】\n「考生 CN-08144，已死亡。」'
+          '播报：考生 C N 零八一四四，已死亡。',
+          '【死考系统女声播报】\n「播报：考生 CN-08144，已死亡。」'
         );
       }
       S.npcs.lin.alive = false;
@@ -1028,11 +1061,16 @@
       });
       eng.pushBroadcast(
         'sys_dead_lin',
-        '考生，C-N-零九四七二，已死亡。',
-        '【机械女声通告】\n「考生 CN-09472，已死亡。」'
+        '播报：考生 C N 零九四七二，已死亡。',
+        '【死考系统女声播报】\n「播报：考生 CN-09472，已死亡。」'
       );
 
-      this.completeNight1ToDay2();
+      S.sceneId = 'night1_dawn_wait';
+      S.pendingChoices = [
+        { label: '熬至五更晨钟响起，推门迎接次日天明', action: 'advance_to_day2' }
+      ];
+      eng.finalizeSceneBeats();
+      eng.emit();
     },
 
     // ================= 第一夜路径 C：东侧宗祠黑水突围局 =================
@@ -1054,15 +1092,16 @@
         global.AudioEngine.playSfx('sluice_rush');
       }
 
+      eng.beginScene('21:30 · 东侧宗祠 · 黑水倒灌');
       if (S.wb.drainOpened) {
         eng.pushLog({
           type: 'danger',
-          text: '【21:30 · 宗祠异变】刚过二更半，青砖缝骤然涌出刺骨黑水，但你保护期已撬开供桌下的泄水石栓，积水打着漩涡急泻入暗渠并未漫高！只是外门已被黑霜冻死，必须趁梆声未至合力撞门撤往西厢。'
+          text: '刚过二更半，青砖缝骤然涌出刺骨黑水，但你保护期已撬开供桌下的泄水石栓，积水打着漩涡急泻入暗渠并未漫高！只是外门已被黑霜冻死，必须趁梆声未至合力撞门撤往西厢。'
         });
       } else {
         eng.pushLog({
           type: 'danger',
-          text: '【21:30 · 宗祠黑水倒灌】刚过二更半，青砖缝里突然狂涌出刺骨腥臭的黑水，瞬间漫过膝盖！木门从外侧被黑霜彻底冻死，推之不动。'
+          text: '刚过二更半，青砖缝里突然狂涌出刺骨腥臭的黑水，瞬间漫过膝盖！木门从外侧被黑霜彻底冻死，推之不动。'
         });
         if (!S.flags.zhao_warned) {
           eng.pushLog({
@@ -1077,12 +1116,14 @@
         { label: '憋气潜入冰水，打开【宗祠拆解台】查验供桌底石栓', action: 'n1_open_shrine_wb' },
         { label: '发力撞裂外门薄霜，冒雾冲往西厢拍门求援', action: 'n1_shrine_breakout' }
       ];
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
     resolveShrineBreakout() {
       const eng = E();
       const S = eng.S;
+      eng.beginScene('21:40 · 宗祠突围 · 撤入西厢');
       if (!S.wb.drainOpened) {
         eng.hurtPlayer(35, '未拔开水下泄水石栓强行顶水撞门，刺骨黑水没过胸口，你险些溺毙才勉强撞裂冻门爬出', true);
         if (S.stage !== 'play') return;
@@ -1102,7 +1143,8 @@
           ? '周衡听见动静拉闩把你和赵川拽进西厢。赵川劫后余生大口喘气，哑声道：“这条命你救的，天亮有件保命的东西归你。”'
           : '周衡听见动静拉闩把你拽进西厢，顺手插死铁闩，冷声扫了你一眼：“命大。”'
       });
-      this.enterNight1WestInvestigation();
+      this.enterNight1WestInvestigation(false);
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -1127,14 +1169,15 @@
 
       eng.addDoc('doc_autopsy');
 
+      eng.beginScene('第 2 日 05:30 · 卯时晨钟 · 月洞门开');
       eng.pushLog({
         type: 'narration',
-        text: '【第 2 日 05:30 · 卯时晨钟】内院深处响起一声沉闷铜钟。正厅后方原本死锁的酸枝木月洞门嘎吱一声无风自开，露出阴森深邃的二进内宅。'
+        text: '内院深处响起一声沉闷铜钟。正厅后方原本死锁的酸枝木月洞门嘎吱一声无风自开，露出阴森深邃的二进内宅。'
       });
       eng.pushBroadcast(
         'sys_r1_done_r2',
-        '第一轮考核完成，基础分二十，已计入。第二轮考核：验契。旧债未清，生人入册。日落酉时前，查明岁奉主契根由，于中堂落定章程。基础分，三十五分。',
-        '【机械女声通告 · 第一轮结算 / 第二轮考题下发】\n「第一轮考核完成（基础分 +20）。\n第二轮考核：验契。旧债未清，生人入册。日落酉时前，查明裴宅岁奉主契根由，于中堂落定今夜章程。（基础分：35）」'
+        '第一轮考核已完成，基础分二十分已计入。现在下发第二轮考核：验契。旧债未清，生人入册。日落酉时前，查明岁奉主契根由，并于中堂落定今夜章程。基础分，三十五分。',
+        '【死考系统女声播报 · 第一轮结算 / 第二轮考题下发】\n「第一轮考核已完成（基础分 +20）。\n现在下发第二轮考核：验契。旧债未清，生人入册。日落酉时前，查明裴宅岁奉主契根由，并于中堂落定今夜章程。（基础分：35）」'
       );
       eng.pushLog({
         type: 'narration',
@@ -1156,6 +1199,7 @@
 
       S.sceneId = 'free_explore';
       S.pendingChoices = [];
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -1243,6 +1287,7 @@
     resolveDay2Shen(mode) {
       const eng = E();
       const S = eng.S;
+      eng.beginScene('西绣楼 · 沈岚定约');
       if (mode === 'dark') {
         S.flags.shen_dark_ally = true;
         S.npcs.shen.alliedDark = true;
@@ -1269,6 +1314,7 @@
       }
       S.sceneId = 'free_explore';
       S.pendingChoices = [];
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -1281,15 +1327,17 @@
       S.flags.confronted_council = true;
 
       if (global.AudioEngine) global.AudioEngine.playSfx('watch');
+      eng.beginScene('酉时 · 中堂拍证摊牌');
       eng.pushLog({
         type: 'narration',
-        text: '【酉时 · 中堂摊牌】白雾重新漫上马头墙，所有幸存考生齐聚中央正厅。周衡将消防短斧重重顿在八仙桌上：“天快黑透了。把今天查出来的硬证据拍上桌面，定下今晚怎么活着走出这院子。”'
+        text: '白雾重新漫上马头墙，所有幸存考生齐聚中央正厅。周衡将消防短斧重重顿在八仙桌上：“天快黑透了。把今天查出来的硬证据拍上桌面，定下今晚怎么活着走出这院子。”'
       });
 
       S.sceneId = 'day2_council_wait';
       S.pendingChoices = [
         { label: '打开【当堂拍证台】，出示至少 2 份铁证并敲定今夜方略', action: 'open_council_modal' }
       ];
+      eng.finalizeSceneBeats();
       eng.emit();
     },
 
@@ -1326,7 +1374,6 @@
         return false;
       }
 
-      // 严格前置校验，杜绝死人诈尸或无据选 IF 线
       if (chosenPlan === 'IF2' && (!S.npcs.shen.alive || !S.flags.shen_dark_ally)) {
         S.toast = '你并未与存活的沈岚达成暗盟，无法执行此方案。';
         eng.emit();
@@ -1356,10 +1403,11 @@
         global.AudioEngine.playBgm('manor_stealth');
       }
 
+      eng.beginScene('第 2 夜 18:05 · 第三轮《断岁》 · 双煞入夜');
       eng.pushBroadcast(
         'sys_r2_done_r3',
-        '第二轮考核完成，基础分三十五，已计入。第三轮考核：断岁。三更催命，五更封棺。天明之前，了结岁奉因果，离开白雾边界。基础分，四十五分。',
-        '【机械女声通告 · 第二轮结算 / 第三轮考题下发】\n「第二轮考核完成（基础分 +35）。\n第三轮考核：断岁。三更催命，五更封棺。天明（05:00）之前，了结岁奉因果，离开白雾边界。（基础分：45）」'
+        '第二轮考核已完成，基础分三十五分已计入。现在下发第三轮考核：断岁。三更催命，五更封棺。天明之前，了结岁奉因果，离开白雾边界。基础分，四十五分。',
+        '【死考系统女声播报 · 第二轮结算 / 第三轮考题下发】\n「第二轮考核已完成（基础分 +35）。\n现在下发第三轮考核：断岁。三更催命，五更封棺。天明（05:00）之前，了结岁奉因果，离开白雾边界。（基础分：45）」'
       );
 
       if (chosenPlan === 'IF2') {
@@ -1401,6 +1449,7 @@
 
       S.sceneId = 'free_explore';
       S.pendingChoices = [];
+      eng.finalizeSceneBeats();
       eng.emit();
       return true;
     },
@@ -1595,6 +1644,7 @@
       }
       if (action === 'n1_west_route_b') return this.resolveWestMidnight('B');
       if (action === 'n1_west_route_c') return this.resolveWestMidnight('C');
+      if (action === 'advance_to_day2') return this.completeNight1ToDay2();
       if (action === 'n1_open_east_wb') {
         S.modal = { type: 'wb', id: 'wb_east_defense', partId: 'threshold_ink' };
         eng.emit();

@@ -137,6 +137,9 @@
 
       // 当前剧情节拍与弹窗状态
       sceneId: 'intro_alley',
+      sceneTitle: '',
+      sceneStartIdx: 0,
+      revealedCount: 0,
       pendingChoices: [],
       modal: null,
       history: [],
@@ -235,6 +238,101 @@
       return `${prefix} · 寅卯五更`;
     },
 
+    beginScene(title) {
+      if (global.AudioEngine && typeof global.AudioEngine.stopSystemBroadcast === 'function') {
+        global.AudioEngine.stopSystemBroadcast();
+      }
+      this.S.sceneTitle = title || '';
+      this.S.sceneStartIdx = this.S.history.length;
+      this.S.revealedCount = 0;
+    },
+
+    getCurrentSceneItems() {
+      const start = Math.max(0, Math.min(this.S.sceneStartIdx || 0, this.S.history.length));
+      return this.S.history.slice(start);
+    },
+
+    getVisibleSceneItems() {
+      const items = this.getCurrentSceneItems();
+      if (!items.length) return [];
+      const paceOn = !global.AudioEngine || global.AudioEngine.paceEnabled !== false;
+      if (!paceOn) return items;
+      const count = Math.max(1, Math.min(this.S.revealedCount || 1, items.length));
+      return items.slice(0, count);
+    },
+
+    hasUnrevealedBeats() {
+      const paceOn = !global.AudioEngine || global.AudioEngine.paceEnabled !== false;
+      if (!paceOn) return false;
+      const items = this.getCurrentSceneItems();
+      if (items.length <= 1) return false;
+      return (this.S.revealedCount || 1) < items.length;
+    },
+
+    syncCurrentBeatAudio() {
+      const visible = this.getVisibleSceneItems();
+      if (!visible.length) return;
+      const last = visible[visible.length - 1];
+      if (last && last.type === 'broadcast' && !last.spoken) {
+        last.spoken = true;
+        if (global.AudioEngine && typeof global.AudioEngine.playSystemBroadcast === 'function') {
+          global.AudioEngine.playSystemBroadcast(last.voiceKey, last.spokenText || last.text);
+        }
+      }
+    },
+
+    finalizeSceneBeats() {
+      const items = this.getCurrentSceneItems();
+      const paceOn = !global.AudioEngine || global.AudioEngine.paceEnabled !== false;
+      if (!items.length) {
+        this.S.revealedCount = 0;
+        return;
+      }
+      this.S.revealedCount = paceOn ? 1 : items.length;
+      if (!paceOn) {
+        // 全展开模式下仅播报本幕最后一条未播语音
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (items[i].type === 'broadcast' && !items[i].spoken) {
+            items[i].spoken = true;
+            if (global.AudioEngine && typeof global.AudioEngine.playSystemBroadcast === 'function') {
+              global.AudioEngine.playSystemBroadcast(items[i].voiceKey, items[i].spokenText || items[i].text);
+            }
+            break;
+          }
+        }
+      } else {
+        this.syncCurrentBeatAudio();
+      }
+    },
+
+    advanceBeat() {
+      const items = this.getCurrentSceneItems();
+      if (!items.length) return false;
+      const cur = Math.max(1, this.S.revealedCount || 1);
+      if (cur < items.length) {
+        this.S.revealedCount = cur + 1;
+        this.syncCurrentBeatAudio();
+        this.emit();
+        return true;
+      }
+      return false;
+    },
+
+    revealAllBeats() {
+      const items = this.getCurrentSceneItems();
+      this.S.revealedCount = items.length;
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (items[i].type === 'broadcast' && !items[i].spoken) {
+          items[i].spoken = true;
+          if (global.AudioEngine && typeof global.AudioEngine.playSystemBroadcast === 'function') {
+            global.AudioEngine.playSystemBroadcast(items[i].voiceKey, items[i].spokenText || items[i].text);
+          }
+          break;
+        }
+      }
+      this.emit();
+    },
+
     pushLog(entry) {
       const id = 'log_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
       const item = Object.assign({
@@ -243,21 +341,35 @@
         type: 'narration' // narration | dialog | system | broadcast | danger | evidence
       }, entry);
       this.S.history.push(item);
-      if (this.S.history.length > 160) this.S.history.shift();
+      if (this.S.history.length > 220) {
+        this.S.history.shift();
+        this.S.sceneStartIdx = Math.max(0, (this.S.sceneStartIdx || 0) - 1);
+      }
+      // 如果是在自由探索非 beginScene 的追加日志，确保当前可见数跟上至少第 1 条
+      const paceOn = !global.AudioEngine || global.AudioEngine.paceEnabled !== false;
+      const curLen = this.getCurrentSceneItems().length;
+      if (!paceOn) {
+        this.S.revealedCount = curLen;
+      } else if (!this.S.revealedCount) {
+        this.S.revealedCount = 1;
+      }
       return item;
     },
 
     pushBroadcast(voiceKey, spokenText, displayText) {
-      if (global.AudioEngine && typeof global.AudioEngine.playSystemBroadcast === 'function') {
-        global.AudioEngine.playSystemBroadcast(voiceKey, spokenText || displayText);
-      } else if (global.AudioEngine) {
-        global.AudioEngine.playSfx('watch');
-      }
-      return this.pushLog({
+      const item = this.pushLog({
         type: 'broadcast',
         voiceKey: voiceKey || '',
-        text: displayText || spokenText
+        spokenText: spokenText || displayText,
+        text: displayText || spokenText,
+        spoken: false
       });
+      // 若本幕刚好只有这一条，立即播放；否则等待玩家逐段推进到本条时触发
+      const visible = this.getVisibleSceneItems();
+      if (visible.length && visible[visible.length - 1] === item) {
+        this.syncCurrentBeatAudio();
+      }
+      return item;
     },
 
     classifyCallsign(raw) {
@@ -973,7 +1085,8 @@
       if (net < 0) {
         this.triggerGameOver(
           `你虽逃出白雾古宅，但三轮基础分(+${base})＋贡献(+${bonus})扣除死考空间基础费(-${fee})与躯体修复费(-${repair})后，净积分跌破零点（${net} 分）。深红旋涡轰然压下，白光将你当场抹杀。`,
-          '结算净分低于零点，执行抹杀。'
+          '提示：结算净分低于零点，即将执行抹杀。',
+          'sys_erasure'
         );
         return;
       }
@@ -1002,20 +1115,20 @@
         global.AudioEngine.playSfx('gate_unseal');
         global.AudioEngine.playSystemBroadcast(
           'sys_exam_clear',
-          '第三轮考核完成。正在传回死考空间，执行基础费用与躯体修复清算。'
+          '第三轮考核已完成。正在为您传回死考空间，即将执行基础费用与躯体修复清算。'
         );
       }
       this.emit();
     },
 
-    triggerGameOver(reason, spokenOverride) {
+    triggerGameOver(reason, spokenOverride, voiceKeyOverride) {
       this.S.stage = 'gameover';
       this.S.modal = null;
       this.S.gameOverReason = reason;
       if (global.AudioEngine) {
         global.AudioEngine.playSystemBroadcast(
-          'sys_dead_player',
-          spokenOverride || '考生，C-N-零九四七一，已死亡。'
+          voiceKeyOverride || 'sys_dead_player',
+          spokenOverride || '播报：考生 C N 零九四七一，已死亡。'
         );
       }
       this.emit();

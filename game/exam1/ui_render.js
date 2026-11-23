@@ -164,6 +164,11 @@
     const isFreeExplore = S.sceneId === 'free_explore';
     const isNight = S.phase === 'night1' || S.phase === 'night2';
     const locationLabel = isPrologue ? '江南旧巷' : eng.getRoomName(S.room);
+    const visibleItems = eng.getVisibleSceneItems();
+    const totalSceneItems = eng.getCurrentSceneItems().length;
+    const hasMoreBeats = eng.hasUnrevealedBeats();
+    const remainingBeats = Math.max(0, totalSceneItems - visibleItems.length);
+    const hasPastHistory = (S.sceneStartIdx || 0) > 0;
 
     return `
     <div class="relative w-screen h-screen overflow-hidden flex flex-col text-[#e7e1d6] bg-[#0b0b0d] font-sans-ui">
@@ -179,22 +184,24 @@
           <span class="text-xs text-stone-300">当前位置：<b class="text-amber-200">${esc(locationLabel)}</b></span>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2.5 text-xs">
+        <div class="flex flex-wrap items-center gap-2 text-xs">
           <span class="font-mono-ui ${S.hp <= 40 ? 'text-rose-400 font-bold' : 'text-emerald-300'}">HP ${S.hp}/${S.maxHp}${S.bleeding ? ' 🩸流血' : ''}${S.blinded ? ' 👁迷眼' : ''}</span>
           ${!isPrologue ? `
             <span class="font-mono-ui ${S.sound >= 50 ? 'text-rose-400' : 'text-stone-400'}">声响 ${S.sound}</span>
             <span class="font-mono-ui ${S.heat >= 40 ? 'text-amber-400' : 'text-stone-400'}">热源 ${S.heat}</span>
             <span class="font-mono-ui text-amber-300">拔钉 ${nailCount}/3</span>
           ` : ''}
-          <button type="button" onclick="window.UI.toggleVoice()" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px]">${global.AudioEngine && global.AudioEngine.voiceEnabled ? '🎙 语音播报开' : '🔇 语音关'}</button>
-          <button type="button" onclick="window.UI.toggleAudio()" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px]">${global.AudioEngine && global.AudioEngine.sfxEnabled ? '🔊 音效开' : '🔇 静音'}</button>
+          ${hasPastHistory ? `<button type="button" onclick="window.UI.openHistory()" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px] text-amber-200">📜 前情回看</button>` : ''}
+          <button type="button" onclick="window.UI.togglePace()" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px]">${!global.AudioEngine || global.AudioEngine.paceEnabled ? '📖 逐段展开' : '⚡ 全段瞬显'}</button>
+          <button type="button" onclick="window.UI.toggleVoice()" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px]">${global.AudioEngine && global.AudioEngine.voiceEnabled ? '🎙 语音开' : '🔇 语音关'}</button>
+          <button type="button" onclick="window.UI.toggleAudio()" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px]">${global.AudioEngine && global.AudioEngine.sfxEnabled ? '🔊 音乐/音效开' : '🔇 静音'}</button>
           <a href="../index.html" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px] text-stone-300">返回大厅</a>
         </div>
       </header>
 
       <!-- 主体双栏布局 -->
       <div class="relative z-10 flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
-        <!-- 左主舞台：叙事流 + 行动指令区 -->
+        <!-- 左主舞台：当前场景独立叙事流 + 行动指令区 -->
         <main class="flex-1 min-w-0 flex flex-col min-h-0 border-r border-white/10">
           ${S.toast ? `
           <div class="shrink-0 mx-4 mt-3 px-3.5 py-2 rounded-lg bg-amber-950/75 border border-amber-400/40 text-xs text-amber-100 flex items-center justify-between gap-3">
@@ -202,23 +209,38 @@
             <button type="button" onclick="window.UI.clearToast()" class="text-amber-300 hover:text-white text-xs">✕</button>
           </div>` : ''}
 
-          <!-- 滚动叙事流 -->
-          <div id="story-feed" class="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-4 space-y-3 scroll-thin">
-            ${S.history.map(renderLogItem).join('')}
+          <!-- 当前场景独立滚动叙事流（点击空白处逐段推进） -->
+          <div id="story-feed" ${hasMoreBeats ? 'onclick="window.UI.nextBeat()"' : ''} class="flex-1 min-h-0 overflow-y-auto px-4 md:px-7 py-5 space-y-3.5 scroll-thin ${hasMoreBeats ? 'cursor-pointer select-none' : ''}">
+            ${S.sceneTitle ? `
+            <div class="flex items-center justify-between pb-2.5 mb-1 border-b border-amber-200/15">
+              <div class="text-xs font-mono-ui tracking-[0.18em] text-amber-300/85 uppercase">◈ ${esc(S.sceneTitle)}</div>
+              <div class="text-[10px] font-mono-ui text-stone-500">${visibleItems.length} / ${totalSceneItems}</div>
+            </div>` : ''}
+            ${visibleItems.map((item, idx) => renderLogItem(item, idx === visibleItems.length - 1)).join('')}
           </div>
 
-          <!-- 底部操作台 -->
+          <!-- 底部操作台：未读完本幕前仅显示叙事推进条，读完才浮现抉择 -->
           <section class="shrink-0 p-4 bg-[#0d0e13]/95 border-t border-white/10 space-y-2.5 max-h-[38vh] overflow-y-auto scroll-thin">
-            ${S.sceneId === 'choose_callsign'
-              ? renderCallsignPanel()
-              : (S.pendingChoices && S.pendingChoices.length > 0
-                  ? `<div class="space-y-2">
-                      ${S.pendingChoices.map(c => `
-                        <button type="button" onclick="window.UI.dispatchStory('${esc(c.action)}')" class="w-full text-left px-4 py-2.5 rounded-xl bg-amber-950/30 hover:bg-amber-900/45 border border-amber-400/35 hover:border-amber-300/70 text-xs md:text-sm text-stone-100 transition">
-                          ▸ ${esc(c.label)}
-                        </button>`).join('')}
-                     </div>`
-                  : renderFreeActionBar(S, wbId, isFreeExplore, isNight))}
+            ${hasMoreBeats
+              ? `<div class="flex items-center gap-2.5">
+                  <button type="button" onclick="window.UI.nextBeat()" class="flex-1 px-4 py-3 rounded-xl bg-amber-950/45 hover:bg-amber-900/55 border border-amber-400/45 hover:border-amber-300/80 text-xs md:text-sm text-amber-100 font-medium transition flex items-center justify-between">
+                    <span>点击继续阅读（或按空格键）</span>
+                    <span class="text-[11px] font-mono-ui text-amber-300/80">剩余 ${remainingBeats} 段 ▾</span>
+                  </button>
+                  <button type="button" onclick="window.UI.revealAll()" class="shrink-0 px-3.5 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/15 text-xs text-stone-400 hover:text-stone-200 transition">
+                    展开本幕
+                  </button>
+                </div>`
+              : (S.sceneId === 'choose_callsign'
+                  ? renderCallsignPanel()
+                  : (S.pendingChoices && S.pendingChoices.length > 0
+                      ? `<div class="space-y-2">
+                          ${S.pendingChoices.map(c => `
+                            <button type="button" onclick="window.UI.dispatchStory('${esc(c.action)}')" class="w-full text-left px-4 py-2.5 rounded-xl bg-amber-950/30 hover:bg-amber-900/45 border border-amber-400/35 hover:border-amber-300/70 text-xs md:text-sm text-stone-100 transition">
+                              ▸ ${esc(c.label)}
+                            </button>`).join('')}
+                         </div>`
+                      : renderFreeActionBar(S, wbId, isFreeExplore, isNight)))}
           </section>
         </main>
 
@@ -264,10 +286,11 @@
     </div>`;
   }
 
-  function renderLogItem(item) {
+  function renderLogItem(item, isLatest) {
+    const anim = isLatest ? ' beat-enter' : '';
     if (item.type === 'broadcast') {
       return `
-      <div class="px-4 py-3 rounded-xl bg-slate-950/85 border border-slate-500/45 shadow-inner text-xs md:text-[13px] leading-6 text-slate-200 font-mono-ui whitespace-pre-line">
+      <div class="px-4 py-3 rounded-xl bg-slate-950/85 border border-slate-500/45 shadow-inner text-xs md:text-[13px] leading-6 text-slate-200 font-mono-ui whitespace-pre-line${anim}">
         <div class="flex items-center justify-between text-[10px] tracking-[0.18em] text-slate-400 uppercase mb-1">
           <span>◈ GLOBAL DEATH EXAM · VOICE BROADCAST</span>
           <span>[${esc(item.time)}]</span>
@@ -278,7 +301,7 @@
     if (item.type === 'dialog') {
       const pSrc = item.portrait ? resolvePortrait(item.portrait, item.emotion || 'calm') : '';
       return `
-      <div class="flex gap-3 p-3 rounded-xl bg-white/[0.04] border border-white/10">
+      <div class="flex gap-3 p-3 rounded-xl bg-white/[0.04] border border-white/10${anim}">
         ${pSrc ? `<img src="${pSrc}" alt="" class="w-11 h-14 object-cover rounded-lg border border-white/15 shrink-0" />` : ''}
         <div class="min-w-0 flex-1">
           <div class="flex items-center justify-between text-[11px] text-amber-300/90 font-medium">
@@ -291,24 +314,24 @@
     }
     if (item.type === 'system') {
       return `
-      <div class="px-3.5 py-2.5 rounded-xl bg-amber-950/25 border border-amber-500/30 text-xs md:text-[13px] leading-6 text-amber-100 whitespace-pre-line">
+      <div class="px-3.5 py-2.5 rounded-xl bg-amber-950/25 border border-amber-500/30 text-xs md:text-[13px] leading-6 text-amber-100 whitespace-pre-line${anim}">
         <span class="font-mono-ui text-[10px] text-amber-400/70 mr-2">[${esc(item.time)}]</span>${esc(item.text)}
       </div>`;
     }
     if (item.type === 'danger') {
       return `
-      <div class="px-3.5 py-2.5 rounded-xl bg-rose-950/40 border border-rose-500/45 text-xs md:text-[13px] leading-6 text-rose-100 whitespace-pre-line">
+      <div class="px-3.5 py-2.5 rounded-xl bg-rose-950/40 border border-rose-500/45 text-xs md:text-[13px] leading-6 text-rose-100 whitespace-pre-line${anim}">
         <span class="font-mono-ui text-[10px] text-rose-300 mr-2">[${esc(item.time)}]</span>${esc(item.text)}
       </div>`;
     }
     if (item.type === 'evidence') {
       return `
-      <div class="px-3.5 py-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/35 text-xs md:text-[13px] leading-6 text-emerald-100 whitespace-pre-line">
+      <div class="px-3.5 py-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/35 text-xs md:text-[13px] leading-6 text-emerald-100 whitespace-pre-line${anim}">
         <span class="font-mono-ui text-[10px] text-emerald-300 mr-2">[${esc(item.time)}]</span>${esc(item.text)}
       </div>`;
     }
     return `
-    <div class="px-1 text-[13.5px] leading-7 text-stone-300 whitespace-pre-line">
+    <div class="px-1 text-[13.5px] leading-7 text-stone-300 whitespace-pre-line${anim}">
       <span class="font-mono-ui text-[10px] text-stone-500 mr-1.5">${esc(item.time)}</span>${esc(item.text)}
     </div>`;
   }
@@ -521,13 +544,35 @@
     </div>`;
   }
 
-  // ================= 6. 三大交互弹窗（原件翻验台 / 物理拆解台 / 当堂拍证台） =================
+  // ================= 6. 四大交互弹窗（原件翻验台 / 物理拆解台 / 当堂拍证台 / 前情回看） =================
   function renderModal(S) {
     const m = S.modal;
     if (m.type === 'doc') return renderDocModal(S, m);
     if (m.type === 'wb') return renderWorkbenchModal(S, m);
     if (m.type === 'confront') return renderConfrontModal(S, m);
+    if (m.type === 'history') return renderHistoryModal(S);
     return '';
+  }
+
+  function renderHistoryModal(S) {
+    const past = S.history.slice(0, Math.max(0, S.sceneStartIdx || 0));
+    return `
+    <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="w-full max-w-2xl max-h-[86vh] bg-[#121318] border border-amber-500/35 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div class="shrink-0 p-4 border-b border-white/10 flex items-center justify-between gap-3 bg-[#171820]">
+          <div>
+            <div class="text-[10px] tracking-[0.2em] text-amber-400/80 uppercase">ARCHIVE · PAST SCENES</div>
+            <h3 class="text-base font-bold text-stone-100 mt-0.5">前情回看（共 ${past.length} 条记录）</h3>
+          </div>
+          <button type="button" onclick="window.UI.closeModal()" class="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-stone-200">关闭</button>
+        </div>
+        <div class="flex-1 min-h-0 overflow-y-auto p-5 space-y-3 scroll-thin">
+          ${past.length === 0
+            ? '<div class="text-xs text-stone-500">暂无前序场景记录。</div>'
+            : past.map(item => renderLogItem(item, false)).join('')}
+        </div>
+      </div>
+    </div>`;
   }
 
   function renderDocModal(S, m) {
@@ -852,6 +897,17 @@
       el.src = 'assets/exam1_courtyard.jpg';
     },
     chooseOrigin(id) { global.EXAM1_STORY.selectOrigin(id); },
+    nextBeat() { E().advanceBeat(); },
+    revealAll() { E().revealAllBeats(); },
+    openHistory() { SRef().modal = { type: 'history' }; render(); },
+    togglePace() {
+      if (global.AudioEngine) {
+        const next = !global.AudioEngine.paceEnabled;
+        global.AudioEngine.setPref('pace', next);
+        if (!next) E().revealAllBeats();
+        else render();
+      }
+    },
     dispatchStory(action) { global.EXAM1_STORY.dispatch(action); },
     submitRealName() { global.EXAM1_STORY.submitCallsign('陆寻'); },
     submitCustomCallsign() {

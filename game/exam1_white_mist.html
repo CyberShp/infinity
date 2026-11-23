@@ -20,13 +20,18 @@
     .scroll-thin::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
     .scroll-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 999px; }
     .scroll-thin::-webkit-scrollbar-thumb:hover { background: rgba(255,215,150,0.38); }
+    @keyframes beatFadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .beat-enter { animation: beatFadeIn 0.32s ease-out both; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script>
-    // ======================== CODEX VISUAL / AUDIO / FX MANIFEST (v3.1) ========================
+    // ======================== CODEX VISUAL / AUDIO / FX MANIFEST (v3.2) ========================
     window.AV_MANIFEST = {
       scenes: {
         title: '../assets/hall-vortex.webp',
@@ -104,7 +109,8 @@
         sys_r1_done_r2: 'assets/audio/voice/sys_r1_done_r2.mp3',
         sys_r2_done_r3: 'assets/audio/voice/sys_r2_done_r3.mp3',
         sys_exam_clear: 'assets/audio/voice/sys_exam_clear.mp3',
-        sys_dead_player: 'assets/audio/voice/sys_dead_player.mp3'
+        sys_dead_player: 'assets/audio/voice/sys_dead_player.mp3',
+        sys_erasure: 'assets/audio/voice/sys_erasure.mp3'
       }
     };
   </script>
@@ -123,10 +129,21 @@
       const eng = window.EXAM1_ENGINE;
       eng.onUpdate(() => window.UI.render());
 
-      // 解锁浏览器实录音频策略
+      // 每次交互确保浏览器实录 BGM 正常解锁与续播
       document.addEventListener('pointerdown', () => {
         if (window.AudioEngine) window.AudioEngine.unlock();
-      }, { once: true });
+      });
+
+      // 空格 / 回车逐段推进叙事（输入框聚焦时不拦截）
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== ' ' && e.key !== 'Enter') return;
+        const tag = (e.target && e.target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'button') return;
+        if (window.EXAM1_ENGINE && window.EXAM1_ENGINE.hasUnrevealedBeats()) {
+          e.preventDefault();
+          window.UI.nextBeat();
+        }
+      });
 
       const hash = (typeof location !== 'undefined' && location.hash) || '';
       if (hash === '#continue' && eng.load()) {
