@@ -143,16 +143,19 @@
 
   // ================= 2. 考场主游玩界面 =================
   function renderPlayScreen(S) {
-    const room = DATA().ROOMS[S.room];
-    const activeSceneKey = (S.watchman.state === 'HUNT' || S.sceneId === 'n1_west_zhao_rescue')
-      ? 'crisis_window'
-      : room.sceneKey;
-    const sceneSrc = resolveSceneImg(activeSceneKey);
-    const wbId = getRoomWorkbenchId(S.room);
     const eng = E();
+    const isPrologue = S.phase === 'prologue';
+    const room = DATA().ROOMS[S.room] || DATA().ROOMS.courtyard;
+    const activeSceneKey = isPrologue
+      ? 'alley'
+      : ((S.watchman.state === 'HUNT' || S.sceneId === 'n1_west_zhao_rescue')
+          ? 'crisis_window'
+          : room.sceneKey);
+    const sceneSrc = resolveSceneImg(activeSceneKey);
+    const wbId = isPrologue ? null : getRoomWorkbenchId(S.room);
     const nailCount = eng.getNailCount();
     const roundTitles = {
-      0: '序幕 · 入院',
+      0: isPrologue ? '序幕 · 雨巷白雾' : '序幕 · 前院初醒',
       1: '第一轮 · 投宿 (20分)',
       2: '第二轮 · 验契 (35分)',
       3: '第三轮 · 断岁 (45分)'
@@ -160,6 +163,7 @@
 
     const isFreeExplore = S.sceneId === 'free_explore';
     const isNight = S.phase === 'night1' || S.phase === 'night2';
+    const locationLabel = isPrologue ? '江南旧巷' : eng.getRoomName(S.room);
 
     return `
     <div class="relative w-screen h-screen overflow-hidden flex flex-col text-[#e7e1d6] bg-[#0b0b0d] font-sans-ui">
@@ -172,16 +176,18 @@
         <div class="flex flex-wrap items-center gap-2.5">
           <span class="px-2.5 py-1 rounded-md bg-red-950/60 border border-red-500/40 text-amber-200 text-xs font-mono-ui font-semibold">${esc(eng.formatClock(S.clockMin))} · ${esc(eng.getWatchLabel())}</span>
           <span class="px-2.5 py-1 rounded-md bg-white/5 border border-white/10 text-stone-200 text-xs">${roundTitles[S.round] || ''}</span>
-          ${S.worldState !== 'W0' ? `<span class="px-2 py-1 rounded-md text-[11px] font-medium ${S.worldState === 'W1' ? 'bg-rose-950/60 text-rose-200 border border-rose-500/40' : 'bg-sky-950/60 text-sky-200 border border-sky-500/40'}">${S.worldState === 'W1' ? 'W1 尸煞回阳' : 'W2 凶宅饥渴'}</span>` : ''}
-          <span class="text-xs text-stone-300">当前位置：<b class="text-amber-200">${esc(room.name)}</b></span>
+          <span class="text-xs text-stone-300">当前位置：<b class="text-amber-200">${esc(locationLabel)}</b></span>
         </div>
 
-        <div class="flex flex-wrap items-center gap-3 text-xs">
+        <div class="flex flex-wrap items-center gap-2.5 text-xs">
           <span class="font-mono-ui ${S.hp <= 40 ? 'text-rose-400 font-bold' : 'text-emerald-300'}">HP ${S.hp}/${S.maxHp}${S.bleeding ? ' 🩸流血' : ''}${S.blinded ? ' 👁迷眼' : ''}</span>
-          <span class="font-mono-ui ${S.sound >= 50 ? 'text-rose-400' : 'text-stone-400'}">声响 ${S.sound}</span>
-          <span class="font-mono-ui ${S.heat >= 40 ? 'text-amber-400' : 'text-stone-400'}">热源 ${S.heat}</span>
-          <span class="font-mono-ui text-amber-300">拔钉 ${nailCount}/3</span>
-          <button type="button" onclick="window.UI.toggleAudio()" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px]">${global.AudioEngine && global.AudioEngine.sfxEnabled ? '🔊 实录音效开' : '🔇 静音'}</button>
+          ${!isPrologue ? `
+            <span class="font-mono-ui ${S.sound >= 50 ? 'text-rose-400' : 'text-stone-400'}">声响 ${S.sound}</span>
+            <span class="font-mono-ui ${S.heat >= 40 ? 'text-amber-400' : 'text-stone-400'}">热源 ${S.heat}</span>
+            <span class="font-mono-ui text-amber-300">拔钉 ${nailCount}/3</span>
+          ` : ''}
+          <button type="button" onclick="window.UI.toggleVoice()" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px]">${global.AudioEngine && global.AudioEngine.voiceEnabled ? '🎙 语音播报开' : '🔇 语音关'}</button>
+          <button type="button" onclick="window.UI.toggleAudio()" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px]">${global.AudioEngine && global.AudioEngine.sfxEnabled ? '🔊 音效开' : '🔇 静音'}</button>
           <a href="../index.html" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/15 text-[11px] text-stone-300">返回大厅</a>
         </div>
       </header>
@@ -203,22 +209,24 @@
 
           <!-- 底部操作台 -->
           <section class="shrink-0 p-4 bg-[#0d0e13]/95 border-t border-white/10 space-y-2.5 max-h-[38vh] overflow-y-auto scroll-thin">
-            ${S.pendingChoices && S.pendingChoices.length > 0
-              ? `<div class="space-y-2">
-                  ${S.pendingChoices.map(c => `
-                    <button type="button" onclick="window.UI.dispatchStory('${esc(c.action)}')" class="w-full text-left px-4 py-2.5 rounded-xl bg-amber-950/30 hover:bg-amber-900/45 border border-amber-400/35 hover:border-amber-300/70 text-xs md:text-sm text-stone-100 transition">
-                      ▸ ${esc(c.label)}
-                    </button>`).join('')}
-                 </div>`
-              : renderFreeActionBar(S, wbId, isFreeExplore, isNight)}
+            ${S.sceneId === 'choose_callsign'
+              ? renderCallsignPanel()
+              : (S.pendingChoices && S.pendingChoices.length > 0
+                  ? `<div class="space-y-2">
+                      ${S.pendingChoices.map(c => `
+                        <button type="button" onclick="window.UI.dispatchStory('${esc(c.action)}')" class="w-full text-left px-4 py-2.5 rounded-xl bg-amber-950/30 hover:bg-amber-900/45 border border-amber-400/35 hover:border-amber-300/70 text-xs md:text-sm text-stone-100 transition">
+                          ▸ ${esc(c.label)}
+                        </button>`).join('')}
+                     </div>`
+                  : renderFreeActionBar(S, wbId, isFreeExplore, isNight))}
           </section>
         </main>
 
         <!-- 右侧情报与拓扑面板 -->
         <aside class="w-full lg:w-[390px] xl:w-[420px] shrink-0 bg-[#0b0c10]/88 backdrop-blur-xl flex flex-col min-h-0 max-h-[42vh] lg:max-h-none overflow-y-auto scroll-thin p-4 space-y-4">
-          ${renderTopologyMap(S)}
-          ${renderInventoryAndDocs(S)}
-          ${renderNpcRoster(S)}
+          ${isPrologue
+            ? renderPrologueSidebar(S)
+            : `${renderTopologyMap(S)}${renderInventoryAndDocs(S)}${renderNpcRoster(S)}`}
         </aside>
       </div>
 
@@ -226,7 +234,47 @@
     </div>`;
   }
 
+  function renderPrologueSidebar(S) {
+    return `
+    <div class="rounded-xl bg-white/[0.03] border border-white/10 p-4 space-y-2.5">
+      <div class="text-[11px] font-mono-ui tracking-widest text-slate-400 uppercase">WATCH TERMINAL · CN-09471</div>
+      <div class="text-xs text-stone-300 leading-6">当前尚未载入考场拓扑。</div>
+      <div class="grid grid-cols-2 gap-2 pt-2 border-t border-white/10 text-[11px] font-mono-ui text-stone-400">
+        <div>体魄 PHY：${S.stats.PHY}</div>
+        <div>敏捷 AGI：${S.stats.AGI}</div>
+        <div>观察 OBS：${S.stats.OBS}</div>
+        <div>意志 WIL：${S.stats.WIL}</div>
+      </div>
+    </div>
+    ${renderInventoryAndDocs(S)}`;
+  }
+
+  function renderCallsignPanel() {
+    return `
+    <div class="space-y-2.5">
+      <button type="button" onclick="window.UI.submitRealName()" class="w-full text-left px-4 py-2.5 rounded-xl bg-amber-950/30 hover:bg-amber-900/45 border border-amber-400/35 hover:border-amber-300/70 text-xs md:text-sm text-stone-100 transition">
+        ▸ 如实答道：“陆寻。”
+      </button>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <input id="callsign-input" type="text" maxlength="8" placeholder="或输入你想报出的化名（1～8字）" onkeydown="if(event.key==='Enter'){window.UI.submitCustomCallsign();}" class="flex-1 px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/20 focus:border-amber-400/70 focus:outline-none text-xs md:text-sm text-stone-100 placeholder:text-stone-500" />
+        <button type="button" onclick="window.UI.submitCustomCallsign()" class="shrink-0 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-amber-900/50 border border-white/20 hover:border-amber-400/60 text-xs md:text-sm text-stone-100 font-medium transition">
+          报出此称呼
+        </button>
+      </div>
+    </div>`;
+  }
+
   function renderLogItem(item) {
+    if (item.type === 'broadcast') {
+      return `
+      <div class="px-4 py-3 rounded-xl bg-slate-950/85 border border-slate-500/45 shadow-inner text-xs md:text-[13px] leading-6 text-slate-200 font-mono-ui whitespace-pre-line">
+        <div class="flex items-center justify-between text-[10px] tracking-[0.18em] text-slate-400 uppercase mb-1">
+          <span>◈ GLOBAL DEATH EXAM · VOICE BROADCAST</span>
+          <span>[${esc(item.time)}]</span>
+        </div>
+        <div>${esc(item.text)}</div>
+      </div>`;
+    }
     if (item.type === 'dialog') {
       const pSrc = item.portrait ? resolvePortrait(item.portrait, item.emotion || 'calm') : '';
       return `
@@ -272,9 +320,17 @@
     // 搜查当前房间
     btns.push(`<button type="button" onclick="window.UI.searchRoom()" class="px-3.5 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-xs text-stone-100 transition">🔍 细致搜查本室</button>`);
 
-    // 打开当前房间物理拆解台（零空气墙！）
+    // 打开当前房间物理拆解台
     if (wbId && WBS()[wbId]) {
       btns.push(`<button type="button" onclick="window.UI.openWorkbench('${wbId}')" class="px-3.5 py-2 rounded-lg bg-amber-950/50 hover:bg-amber-900/60 border border-amber-400/50 text-xs text-amber-100 font-medium transition">🛠 拆解台：${esc(WBS()[wbId].title.split('·')[1] || WBS()[wbId].title)}</button>`);
+    }
+
+    // 同房存活考生交谈按钮（保护期 & 次日白昼）
+    if (S.phase === 'protect' || S.phase === 'day2') {
+      const present = Object.values(S.npcs).filter(n => n.alive && n.room === S.room);
+      present.forEach(n => {
+        btns.push(`<button type="button" onclick="window.UI.talkNpc('${n.id}')" class="px-3 py-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.12] border border-white/15 text-xs text-stone-200 transition">💬 与${esc(n.name)}交谈</button>`);
+      });
     }
 
     // 随身医疗/解毒
@@ -287,47 +343,50 @@
 
     // 保护期提前触发选房
     if (S.phase === 'protect') {
-      btns.push(`<button type="button" onclick="window.UI.forceShelter()" class="px-3 py-2 rounded-lg bg-rose-950/45 hover:bg-rose-900/55 border border-rose-500/40 text-xs text-rose-200">⏳ 回前院集合 · 提前选房</button>`);
+      btns.push(`<button type="button" onclick="window.UI.forceShelter()" class="px-3 py-2 rounded-lg bg-rose-950/45 hover:bg-rose-900/55 border border-rose-500/40 text-xs text-rose-200">⏳ 回前院集合 · 定屋过夜</button>`);
     }
 
     // 第 2 日白昼：提前开启酉时中堂摊牌
     if (S.phase === 'day2' && !S.flags.confronted_council) {
-      btns.push(`<button type="button" onclick="window.UI.forceCouncil()" class="px-3 py-2 rounded-lg bg-amber-900/40 hover:bg-amber-800/55 border border-amber-400/50 text-xs text-amber-100">⚖️ 前往正厅 · 发起酉时拍证摊牌</button>`);
+      btns.push(`<button type="button" onclick="window.UI.forceCouncil()" class="px-3 py-2 rounded-lg bg-amber-900/40 hover:bg-amber-800/55 border border-amber-400/50 text-xs text-amber-100">⚖️ 前往正厅 · 发起酉时摊牌</button>`);
     }
 
     // 第二夜战术辅助
     if (S.phase === 'night2') {
       if (eng.hasItem('vib_sensor') && !S.flags.vib_deployed) {
-        btns.push(`<button type="button" onclick="window.UI.deployVib()" class="px-3 py-2 rounded-lg bg-sky-950/55 hover:bg-sky-900/65 border border-sky-400/45 text-xs text-sky-200">📡 部署震动感应器（精确标定双煞）</button>`);
+        btns.push(`<button type="button" onclick="window.UI.deployVib()" class="px-3 py-2 rounded-lg bg-sky-950/55 hover:bg-sky-900/65 border border-sky-400/45 text-xs text-sky-200">📡 部署震动感应器</button>`);
       }
       if (eng.hasItem('copper_kettle') && (S.room === 'well' || S.room === 'east')) {
-        btns.push(`<button type="button" onclick="window.UI.setDecoy()" class="px-3 py-2 rounded-lg bg-sky-950/55 hover:bg-sky-900/65 border border-sky-400/45 text-xs text-sky-200">💧 悬挂滴水铜壶（引偏账房伥2回合）</button>`);
+        btns.push(`<button type="button" onclick="window.UI.setDecoy()" class="px-3 py-2 rounded-lg bg-sky-950/55 hover:bg-sky-900/65 border border-sky-400/45 text-xs text-sky-200">💧 悬挂滴水铜壶</button>`);
+      }
+      if (eng.hasItem('wet_brick')) {
+        btns.push(`<button type="button" onclick="window.UI.throwBrick()" class="px-3 py-2 rounded-lg bg-sky-950/55 hover:bg-sky-900/65 border border-sky-400/45 text-xs text-sky-200">🧱 远处掷出湿青砖诱声</button>`);
       }
 
-      // 六大终局动作入口（按所在房间条件自然浮现！）
+      // 六大终局动作入口
       if (S.room === 'gate' && S.flags.gate_unsealed) {
-        btns.push(`<button type="button" onclick="window.UI.triggerEnding('M1')" class="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-xs font-bold text-white shadow-lg">🚪 【主线 M1】踏出崩霜正门，离开白雾古宅！</button>`);
+        btns.push(`<button type="button" onclick="window.UI.triggerEnding('M1')" class="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-xs font-bold text-white shadow-lg">🚪 踏出崩霜正门，离开白雾边界</button>`);
       }
       if (S.room === 'gate' && S.flags.gate_cracked && !S.flags.gate_unsealed) {
-        btns.push(`<button type="button" onclick="window.UI.triggerEnding('M3')" class="px-4 py-2 rounded-lg bg-stone-700 hover:bg-stone-600 text-xs font-semibold text-amber-100">🚪 【主线 M3】侧身钻出正门黑霜窄缝（低分苟活）</button>`);
+        btns.push(`<button type="button" onclick="window.UI.triggerEnding('M3')" class="px-4 py-2 rounded-lg bg-stone-700 hover:bg-stone-600 text-xs font-semibold text-amber-100">🚪 侧身挤出正门黑霜窄缝</button>`);
       }
       if (S.room === 'canal' && S.wb.sluiceBlasted && S.wb.boatRepaired) {
-        btns.push(`<button type="button" onclick="window.UI.triggerEnding('M2')" class="px-4 py-2 rounded-lg bg-sky-700 hover:bg-sky-600 text-xs font-bold text-white shadow-lg">🚣 【主线 M2】摇动乌篷船冲破黑水河浓雾！</button>`);
+        btns.push(`<button type="button" onclick="window.UI.triggerEnding('M2')" class="px-4 py-2 rounded-lg bg-sky-700 hover:bg-sky-600 text-xs font-bold text-white shadow-lg">🚣 摇动乌篷船冲破黑水河浓雾</button>`);
       }
       if (S.room === 'corridor' && eng.hasItem('child_lock_deed')) {
-        btns.push(`<button type="button" onclick="window.UI.triggerEnding('IF1')" class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-600 text-xs font-bold text-white shadow-lg">🔥 【真·IF ①】立于穿堂直面账房伥，拍出秦小栓银锁与死契策反弑主！</button>`);
+        btns.push(`<button type="button" onclick="window.UI.triggerEnding('IF1')" class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-600 text-xs font-bold text-white shadow-lg">🔥 立于穿堂直面账房伥，拍出秦小栓银锁与祭河死契</button>`);
       }
       if (S.room === 'coffin_hall' && S.corpseBoss.jadeTaken) {
-        btns.push(`<button type="button" onclick="window.UI.triggerEnding('IF2')" class="px-4 py-2 rounded-lg bg-purple-800 hover:bg-purple-700 text-xs font-bold text-white shadow-lg">🩸 【真·IF ②】携【借命压舌血玉】与沈岚决裂周衡、亡命脱逃！</button>`);
+        btns.push(`<button type="button" onclick="window.UI.triggerEnding('IF2')" class="px-4 py-2 rounded-lg bg-purple-800 hover:bg-purple-700 text-xs font-bold text-white shadow-lg">🩸 携【借命压舌血玉】与沈岚亡命脱逃</button>`);
       }
       if (S.room === 'coffin_hall' && S.corpseBoss.sealed) {
-        btns.push(`<button type="button" onclick="window.UI.triggerEnding('IF3')" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-xs font-bold text-stone-950 shadow-lg">✨ 【真·IF ③】川楠棺已反噬封死！带领幸存众人踏出正门！</button>`);
+        btns.push(`<button type="button" onclick="window.UI.triggerEnding('IF3')" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-xs font-bold text-stone-950 shadow-lg">✨ 川楠棺已反噬封死，带众人踏出正门</button>`);
       }
     }
 
     return `
     <div class="flex flex-wrap gap-2">${btns.join('')}</div>
-    <div class="text-[11px] text-stone-500">提示：点击右侧【二进十节点拓扑图】任意已解锁房间即可直接移动；随时点击【原件档案夹】亲手翻页、翻背面或撬表。</div>`;
+    <div class="text-[11px] text-stone-500">点击右侧拓扑图已解锁房间即可移动；随时点击【原件档案夹】亲手翻验。</div>`;
   }
 
   // ================= 3. 二进十节点实时拓扑图（含听梆声纹与双煞预警） =================
@@ -612,14 +671,9 @@
       if (it) pool.push({ id: evId, label: '🔎 ' + it.name });
     });
 
-    const plans = [
-      { id: 'M1', name: '【主线 M1】鲁门拔三钉 ＋ 阴灰覆印撕总契破正门' },
-      { id: 'M2', name: '【主线 M2】宗祠放水提开千斤闸 ＋ 黑水河埠撑乌篷船渡雾' },
-      { id: 'IF1', name: '【真·IF ①】立于穿堂拍出银锁死契，策反无目账房伥反水弑主' },
-      { id: 'IF2', name: '【真·IF ②】表面支开周衡陈默，实则与沈岚潜入后罩房撬棺盗血玉' },
-      { id: 'IF3', name: '【真·IF ③】七人协力，以裴敬之八字替死偶倒钉川楠棺逆转封煞' },
-      { id: 'M3', name: '【主线 M3】暂不硬碰大阵，见机走门缝苟活' }
-    ];
+    const plans = isCouncil && global.EXAM1_STORY && typeof global.EXAM1_STORY.getAvailableCouncilPlans === 'function'
+      ? global.EXAM1_STORY.getAvailableCouncilPlans()
+      : [{ id: 'M1', name: '按鲁门残谱拔除三枚锁宅钉，以湿阴灰撕毁神龛总契破正门' }];
 
     return `
     <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -799,8 +853,15 @@
     },
     chooseOrigin(id) { global.EXAM1_STORY.selectOrigin(id); },
     dispatchStory(action) { global.EXAM1_STORY.dispatch(action); },
+    submitRealName() { global.EXAM1_STORY.submitCallsign('陆寻'); },
+    submitCustomCallsign() {
+      const el = document.getElementById('callsign-input');
+      const val = el ? el.value : '';
+      global.EXAM1_STORY.submitCallsign(val);
+    },
     moveTo(roomId) { global.EXAM1_STORY.moveToRoom(roomId); },
     searchRoom() { global.EXAM1_STORY.searchCurrentRoom(); },
+    talkNpc(npcId) { global.EXAM1_STORY.talkToNpc(npcId); },
     openDoc(docId) {
       SRef().modal = { type: 'doc', id: docId, pageIdx: 0 };
       if (global.AudioEngine) global.AudioEngine.playSfx('paper_flip');
@@ -836,6 +897,7 @@
     forceCouncil() { global.EXAM1_STORY.triggerDay2Council(); },
     deployVib() { global.EXAM1_STORY.deployVibSensor(); },
     setDecoy() { global.EXAM1_STORY.setKettleDecoy(); },
+    throwBrick() { global.EXAM1_STORY.throwWetBrick(); },
     triggerEnding(key) { global.EXAM1_STORY.triggerEndingAction(key); },
     toggleEvidence(id) {
       const m = SRef().modal;
@@ -861,6 +923,13 @@
       if (global.AudioEngine) {
         global.AudioEngine.unlock();
         global.AudioEngine.setPref('audio', !global.AudioEngine.sfxEnabled);
+        render();
+      }
+    },
+    toggleVoice() {
+      if (global.AudioEngine) {
+        global.AudioEngine.unlock();
+        global.AudioEngine.setPref('voice', !global.AudioEngine.voiceEnabled);
         render();
       }
     },

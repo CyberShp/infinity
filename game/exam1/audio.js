@@ -16,9 +16,11 @@
   const AudioEngine = {
     fxEnabled: readPref('fx'),
     sfxEnabled: readPref('audio'),
+    voiceEnabled: readPref('voice'),
     paceEnabled: readPref('pace'),
     ctx: null,
     bgmEl: null,
+    voiceEl: null,
     currentBgmKey: null,
     unlocked: false,
     missing: new Set(),
@@ -28,12 +30,18 @@
       if (key === 'fx') this.fxEnabled = val;
       if (key === 'audio') {
         this.sfxEnabled = val;
-        if (!val) this.stopBgm();
-        else if (this.currentBgmKey) {
+        if (!val) {
+          this.stopBgm();
+          this.stopSystemBroadcast();
+        } else if (this.currentBgmKey) {
           const k = this.currentBgmKey;
           this.currentBgmKey = null;
           this.playBgm(k);
         }
+      }
+      if (key === 'voice') {
+        this.voiceEnabled = val;
+        if (!val) this.stopSystemBroadcast();
       }
       if (key === 'pace') this.paceEnabled = val;
       savePref(key, val);
@@ -81,6 +89,91 @@
       if (this.bgmEl) {
         try { this.bgmEl.pause(); } catch {}
       }
+    },
+
+    stopSystemBroadcast() {
+      if (this.voiceEl) {
+        try {
+          this.voiceEl.pause();
+          this.voiceEl.src = '';
+        } catch {}
+        this.voiceEl = null;
+      }
+      try {
+        if (global.speechSynthesis && typeof global.speechSynthesis.cancel === 'function') {
+          global.speechSynthesis.cancel();
+        }
+      } catch {}
+    },
+
+    _pickColdFemaleZhVoice() {
+      try {
+        const synth = global.speechSynthesis;
+        if (!synth || typeof synth.getVoices !== 'function') return null;
+        const voices = synth.getVoices() || [];
+        const zhVoices = voices.filter(v => /zh|cmn|chinese/i.test(v.lang || ''));
+        if (!zhVoices.length) return null;
+        const preferred = zhVoices.find(v =>
+          /xiaoxiao|xiaoyi|ting-ting|tingting|meijia|yaoyao|huihui|sin-ji|female|女|google 普通话/i.test(v.name || '')
+        );
+        return preferred || zhVoices[0];
+      } catch {
+        return null;
+      }
+    },
+
+    _speakColdSystemVoice(spokenText) {
+      if (!spokenText || !this.sfxEnabled || !this.voiceEnabled) return;
+      try {
+        const synth = global.speechSynthesis;
+        const Utter = global.SpeechSynthesisUtterance;
+        if (!synth || typeof Utter !== 'function') return;
+        synth.cancel();
+        const u = new Utter(spokenText);
+        u.lang = 'zh-CN';
+        u.rate = 0.98;
+        u.pitch = 0.78;
+        u.volume = 0.92;
+        const v = this._pickColdFemaleZhVoice();
+        if (v) u.voice = v;
+        synth.speak(u);
+      } catch {}
+    },
+
+    /**
+     * 死考机械女声双轨播报：
+     * 1) 优先播放 AV_MANIFEST.voice[voiceKey] 预制冷感女声 .mp3
+     * 2) 缺失时无缝触发 watch_haptic 贴肤短震 + 低音调冷感中文女声 speechSynthesis 兜底
+     */
+    playSystemBroadcast(voiceKey, spokenText) {
+      if (!this.sfxEnabled) return;
+      this.stopSystemBroadcast();
+      this.playSfx('watch', { volume: 0.72 });
+      if (!this.voiceEnabled) return;
+
+      const manifest = global.AV_MANIFEST;
+      const src = manifest && manifest.voice && voiceKey && manifest.voice[voiceKey];
+      if (src && !this.missing.has(src) && typeof Audio === 'function') {
+        try {
+          const el = new Audio(src);
+          el.volume = 0.92;
+          el.onerror = () => {
+            this.missing.add(src);
+            if (this.voiceEl === el) this.voiceEl = null;
+            this._speakColdSystemVoice(spokenText);
+          };
+          this.voiceEl = el;
+          const p = el.play();
+          if (p && typeof p.catch === 'function') {
+            p.catch(() => {
+              if (this.voiceEl === el) this.voiceEl = null;
+              this._speakColdSystemVoice(spokenText);
+            });
+          }
+          return;
+        } catch {}
+      }
+      this._speakColdSystemVoice(spokenText);
     },
 
     /**

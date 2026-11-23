@@ -15,11 +15,11 @@
   function createInitialState(stage) {
     const DATA = global.EXAM1_DATA;
     return {
-      version: '3.0',
+      version: '3.1',
       stage: stage || 'char_select', // char_select | play | space | gameover
       day: 1,                        // 1 = 第1夜, 2 = 第2日白昼 / 第2夜
       phase: 'prologue',             // prologue | protect | night1 | day2 | council | night2 | ending
-      clockMin: 20 * 60 + 35,        // 从第1夜 20:35 起步（跨午夜继续累加，显示时 % 1440）
+      clockMin: 20 * 60 + 30,        // 从第1夜 20:30 雨巷起步
       round: 0,                      // 0 未发题 | 1 第一轮投宿 | 2 第二轮验契 | 3 第三轮断岁
       roundDone: { 1: false, 2: false, 3: false },
       worldState: 'W0',              // W1(首夜死人·尸煞回阳) | W2(首夜零亡·凶宅饥渴)
@@ -30,36 +30,37 @@
       origin: null,
       playerName: '陆寻',
       callsign: '陆寻',
+      usedRealName: false,
       playerCode: 'CN-09471',
       stats: { PHY: 10, AGI: 10, OBS: 10, WIL: 10 },
       hp: 100,
       maxHp: 100,
       sta: 100,
       maxSta: 100,
-      bleeding: false,               // 未包扎外伤：第二夜会被裴氏盲目尸煞隔墙锁定！
-      blinded: false,                // 硬砸瓦瓮生石灰迷眼，可用朱砂解毒散解除
+      bleeding: false,
+      blinded: false,
       room: 'courtyard',
 
-      // 5格工具背囊 + 独立证物/原件夹 + 房间地面暂存（满格不丢关键工具）
-      bag: [],                       // 最多 5 格（仅 tool 类占格）
+      // 5格工具背囊 + 独立证物/原件夹 + 房间地面暂存
+      bag: [],
       bagCap: 5,
-      roomDrops: {},                 // { roomId: [itemId, ...] }
-      evidence: [],                  // 证物、奇物、拔出的三钉
-      docs: [],                      // 已收入原件夹的 docId
-      clues: [],                     // 兼容 exam-save.js 字段校验
+      roomDrops: {},
+      evidence: [],
+      docs: [],
+      clues: [],
 
       // 环境与双煞 AI 数值
-      sound: 10,                     // 0–100（>=60 触发账房伥扑杀）
-      heat: 5,                       // 0–100（>=50 触发账房伥扑杀）
+      sound: 10,
+      heat: 5,
       playerTaboos: { gift: false, couch: false, answer: false },
-      bloodMarks: 0,                 // 徒手拔丧门钉见血烙下的血契印
+      bloodMarks: 0,
       watchman: {
         active: false,
         zoneIdx: 0,
         zone: 'gate',
         decoyTurns: 0,
         decoyZone: null,
-        state: 'PATROL',             // PATROL | ALERT | HUNT | REBELLED
+        state: 'PATROL',
         alertTarget: null
       },
       corpseBoss: {
@@ -92,7 +93,7 @@
         eastLimeDone: false,
         eastBraceDone: false,
 
-        lubanSliders: [0, 0, 0, 0], // 0..7 对应 财病离义官劫害本（正解：[1,2,6,7]）
+        lubanSliders: [0, 0, 0, 0],
         lubanOpened: false,
 
         embroideryOpened: false,
@@ -109,6 +110,7 @@
 
       // 剧情标志位与进度
       flags: {
+        troll_alias: false,
         ledger_slit: false,
         carpenter_flipped: false,
         watch_pried: false,
@@ -129,15 +131,15 @@
         zhou_betrayed: false,
         confronted_council: false,
         solo_bonus: false,
-        // 房间搜查记录
-        searched: {}
+        searched: {},
+        talked: {}
       },
 
       // 当前剧情节拍与弹窗状态
       sceneId: 'intro_alley',
       pendingChoices: [],
-      modal: null,                   // null | { type:'doc', id, pageIdx } | { type:'wb', id, partId } | { type:'confront', context }
-      history: [],                   // 叙事记录流 [{ id, type, speaker, portrait, emotion, text, time }]
+      modal: null,
+      history: [],
       toast: null,
 
       // 结算与死考空间大厅
@@ -169,6 +171,9 @@
     },
 
     init(stage) {
+      if (global.AudioEngine && typeof global.AudioEngine.stopSystemBroadcast === 'function') {
+        global.AudioEngine.stopSystemBroadcast();
+      }
       this.S = createInitialState(stage);
       return this.S;
     },
@@ -188,11 +193,22 @@
       else {
         try { data = JSON.parse(localStorage.getItem('death_exam_s1e1_save_v4')); } catch {}
       }
-      if (data && data.version === '3.0') {
+      if (data && data.version === '3.1') {
         this.S = data;
         return true;
       }
       return false;
+    },
+
+    getRoomName(roomId) {
+      const r = global.EXAM1_DATA && global.EXAM1_DATA.ROOMS && global.EXAM1_DATA.ROOMS[roomId];
+      if (!r) return roomId || '';
+      const S = this.S;
+      if (!S) return r.initialName || r.name;
+      const unlocked =
+        (r.revealFlag && S.flags && S.flags[r.revealFlag]) ||
+        (r.revealDoc && Array.isArray(S.docs) && S.docs.includes(r.revealDoc));
+      return unlocked ? (r.revealedName || r.name) : (r.initialName || r.name);
     },
 
     formatClock(min) {
@@ -204,6 +220,7 @@
 
     getWatchLabel() {
       const m = this.S.clockMin % 1440;
+      if (this.S.phase === 'prologue') return '第1夜 · 现实雨巷';
       if (this.S.phase === 'day2' || this.S.phase === 'council') {
         if (m < 9 * 60) return '第2日 · 卯辰之交';
         if (m < 13 * 60) return '第2日 · 巳午白昼';
@@ -223,11 +240,50 @@
       const item = Object.assign({
         id,
         time: this.formatClock(this.S.clockMin),
-        type: 'narration' // narration | dialog | system | danger | evidence
+        type: 'narration' // narration | dialog | system | broadcast | danger | evidence
       }, entry);
       this.S.history.push(item);
-      if (this.S.history.length > 140) this.S.history.shift();
+      if (this.S.history.length > 160) this.S.history.shift();
       return item;
+    },
+
+    pushBroadcast(voiceKey, spokenText, displayText) {
+      if (global.AudioEngine && typeof global.AudioEngine.playSystemBroadcast === 'function') {
+        global.AudioEngine.playSystemBroadcast(voiceKey, spokenText || displayText);
+      } else if (global.AudioEngine) {
+        global.AudioEngine.playSfx('watch');
+      }
+      return this.pushLog({
+        type: 'broadcast',
+        voiceKey: voiceKey || '',
+        text: displayText || spokenText
+      });
+    },
+
+    classifyCallsign(raw) {
+      const cleaned = String(raw || '').replace(/[\r\n\t]+/g, '').trim();
+      if (!cleaned) {
+        return { kind: 'invalid', msg: '先报个称呼，空白没法喊人。' };
+      }
+      if (cleaned.length > 8) {
+        return { kind: 'invalid', msg: '称呼太长（限 8 字以内），危急关头念不完。' };
+      }
+      if (cleaned === '陆寻') {
+        return { kind: 'real', name: '陆寻' };
+      }
+      const npcList = Object.values(this.S.npcs || {});
+      const matchedNpc = npcList.find(n => n.name === cleaned);
+      if (matchedNpc) {
+        return { kind: 'npc_conflict', npcId: matchedNpc.id, name: cleaned };
+      }
+
+      // 恶趣味 / 侮辱性 / 伦理占便宜 / 18禁低俗词检测
+      const norm = cleaned.toLowerCase().replace(/[\s·\-_.,，。!！?？]/g, '');
+      const trollPattern = /(傻逼|煞笔|沙雕|智障|脑残|废物|垃圾|蠢货|混蛋|王八蛋|滚蛋|草泥马|操你|肏|日你|妈的|尼玛|你妈|你爹|你爸|爸爸|爹爹|爷爷|祖宗|太爷|儿子|孙子|老公|老婆|主人|大爷|狗东西|畜生|贱人|婊子|荡妇|骚货|妓女|鸡巴|几把|jb|jj|逼|屄|阴茎|阴道|乳房|奶子|屁眼|肛门|做爱|性交|口交|足交|自慰|手淫|射精|高潮|裸体|色情|黄片|av|porn|sex|fuck|shit|bitch|dick|cock|pussy|asshole|cunt|hentai|nsfw|18禁|拉屎|吃屎|大便|尿尿|狗屎|马桶|二狗子|铁柱|翠花|歪嘴龙王|龙傲天|叶良辰|日天|牛逼|装逼|sb|nmsl|cnm|tmd|wcnm|qnmd|rnm)/i;
+      if (trollPattern.test(norm) || /^[\d]+$/.test(norm) && norm.length >= 6) {
+        return { kind: 'troll', name: cleaned };
+      }
+      return { kind: 'alias', name: cleaned };
     },
 
     addContribution(pts, reason) {
@@ -916,7 +972,8 @@
 
       if (net < 0) {
         this.triggerGameOver(
-          `你虽逃出白雾古宅，但三轮基础分(+${base})＋贡献(+${bonus})扣除死考空间基础费(-${fee})与躯体修复费(-${repair})后，净积分跌破零点（${net} 分）！深红旋涡轰然暴涨，白光将你当场抹杀。`
+          `你虽逃出白雾古宅，但三轮基础分(+${base})＋贡献(+${bonus})扣除死考空间基础费(-${fee})与躯体修复费(-${repair})后，净积分跌破零点（${net} 分）。深红旋涡轰然压下，白光将你当场抹杀。`,
+          '结算净分低于零点，执行抹杀。'
         );
         return;
       }
@@ -943,15 +1000,24 @@
       if (global.AudioEngine) {
         global.AudioEngine.playBgm('manor_quiet');
         global.AudioEngine.playSfx('gate_unseal');
+        global.AudioEngine.playSystemBroadcast(
+          'sys_exam_clear',
+          '第三轮考核完成。正在传回死考空间，执行基础费用与躯体修复清算。'
+        );
       }
       this.emit();
     },
 
-    triggerGameOver(reason) {
+    triggerGameOver(reason, spokenOverride) {
       this.S.stage = 'gameover';
       this.S.modal = null;
       this.S.gameOverReason = reason;
-      if (global.AudioEngine) global.AudioEngine.playSfx('watch');
+      if (global.AudioEngine) {
+        global.AudioEngine.playSystemBroadcast(
+          'sys_dead_player',
+          spokenOverride || '考生，C-N-零九四七一，已死亡。'
+        );
+      }
       this.emit();
     },
 

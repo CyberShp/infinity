@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>全球死考 · 第一场《白雾古宅 · 裴宅买命契》v3.0</title>
+  <title>全球死考 · 第一场《白雾古宅 · 裴宅买命契》v3.1</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
@@ -26,7 +26,7 @@
   <div id="root"></div>
 
   <script>
-    // ======================== CODEX VISUAL / AUDIO / FX MANIFEST (v3.0) ========================
+    // ======================== CODEX VISUAL / AUDIO / FX MANIFEST (v3.1) ========================
     window.AV_MANIFEST = {
       scenes: {
         title: '../assets/hall-vortex.webp',
@@ -41,7 +41,6 @@
         well: 'assets/exam1_well.jpg',
         crisis_window: 'assets/scenes/exam1_crisis_window.webp',
         canal: 'assets/scenes/exam1_canal.webp',
-        // v3.0 二进内宅新增场景（Batch 3 未推图前自动平滑回退）
         coffin_hall: 'assets/scenes/exam1_coffin_hall.webp',
         inner_study: 'assets/scenes/exam1_inner_study.webp',
         embroidery_loft: 'assets/scenes/exam1_embroidery_loft.webp',
@@ -54,7 +53,6 @@
         prop_couch_jar: 'assets/props/prop_couch_jar.webp',
         prop_shrine_nail: 'assets/props/prop_shrine_nail.webp',
         prop_doll: 'assets/props/prop_doll.webp',
-        // v3.0 二进机关与 IF 线新增特写
         prop_lu_box: 'assets/props/prop_lu_box.webp',
         prop_sunken_box: 'assets/props/prop_sunken_box.webp',
         prop_blood_jade: 'assets/props/prop_blood_jade.webp'
@@ -90,10 +88,23 @@
         bell_ring: 'assets/audio/sfx/bell_ring.mp3',
         seal_tear: 'assets/audio/sfx/seal_tear.mp3',
         gate_unseal: 'assets/audio/sfx/gate_unseal.mp3',
-        // v3.0 增量实录拟音
         coffin_slide: 'assets/audio/sfx/coffin_slide.mp3',
         sluice_rush: 'assets/audio/sfx/sluice_rush.mp3',
         oar_water: 'assets/audio/sfx/oar_water.mp3'
+      },
+      voice: {
+        sys_intro_60s: 'assets/audio/voice/sys_intro_60s.mp3',
+        sys_intro_warn: 'assets/audio/voice/sys_intro_warn.mp3',
+        sys_intro_zero: 'assets/audio/voice/sys_intro_zero.mp3',
+        sys_round1_start: 'assets/audio/voice/sys_round1_start.mp3',
+        sys_protect_end: 'assets/audio/voice/sys_protect_end.mp3',
+        sys_dead_zhao: 'assets/audio/voice/sys_dead_zhao.mp3',
+        sys_dead_lin: 'assets/audio/voice/sys_dead_lin.mp3',
+        sys_dead_shen: 'assets/audio/voice/sys_dead_shen.mp3',
+        sys_r1_done_r2: 'assets/audio/voice/sys_r1_done_r2.mp3',
+        sys_r2_done_r3: 'assets/audio/voice/sys_r2_done_r3.mp3',
+        sys_exam_clear: 'assets/audio/voice/sys_exam_clear.mp3',
+        sys_dead_player: 'assets/audio/voice/sys_dead_player.mp3'
       }
     };
   </script>
