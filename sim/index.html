@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>无限·活体考场终端 // 零号回廊</title>
+  <link rel="stylesheet" href="sim.css">
+  <!-- Strict load order per sim/CONTRACT.md (classic defer scripts, zero ES-module CORS issues) -->
+  <script defer src="data/shop_catalog.js"></script>
+  <script defer src="data/world_cast.js"></script>
+  <script defer src="data/scenario_station_zero.js"></script>
+  <script defer src="engine/rule_engine.js"></script>
+  <script defer src="engine/ai_director.js"></script>
+  <script defer src="engine/audio_engine.js"></script>
+  <script defer src="ui/tactical_canvas.js"></script>
+  <script defer src="ui/app_ui.js"></script>
+</head>
+<body data-scene="hall">
+  <!-- Top Wristwatch Telemetry Bar -->
+  <header id="hud-bar" class="hud-bar">
+    <div class="hud-left">
+      <a class="hud-back" href="../legacy.html" title="访问旧版大厅与第一场《白雾古宅》">◈ 旧版大厅</a>
+      <span class="hud-divider"></span>
+      <button id="btn-player-profile" class="hud-callsign" type="button" title="点击修改代号">
+        <span class="hud-dot"></span>
+        <span id="hud-player-name">受试者</span>
+        <code id="hud-player-code">CN-00000</code>
+      </button>
+      <div class="hud-currency">
+        <span class="hud-label">积分</span>
+        <strong id="hud-points" class="mono accent-gold">0</strong>
+        <span class="hud-tier-pill" id="hud-permission">D级权限</span>
+      </div>
+    </div>
+
+    <div class="hud-vitals" aria-label="生命体征">
+      <div class="vital-chip">
+        <span class="vital-tag">HP</span>
+        <div class="vital-track"><div id="bar-hp" class="vital-fill fill-hp" style="width:100%"></div></div>
+        <span id="val-hp" class="mono vital-num">100</span>
+      </div>
+      <div class="vital-chip">
+        <span class="vital-tag">EN</span>
+        <div class="vital-track"><div id="bar-en" class="vital-fill fill-en" style="width:100%"></div></div>
+        <span id="val-en" class="mono vital-num">100</span>
+      </div>
+      <div class="vital-chip">
+        <span class="vital-tag">SAN</span>
+        <div class="vital-track"><div id="bar-san" class="vital-fill fill-san" style="width:100%"></div></div>
+        <span id="val-san" class="mono vital-num">100</span>
+      </div>
+    </div>
+
+    <div class="hud-right">
+      <button id="btn-ai-config" class="ai-status-pill offline" type="button" title="配置 DeepSeek / OpenAI / Ollama 接口">
+        <span class="ai-dot"></span>
+        <span id="ai-status-text">离线规则模式</span>
+      </button>
+      <div class="audio-ctl">
+        <button id="btn-audio-toggle" class="icon-btn" type="button" title="静音 / 开启环境音" aria-pressed="false">♪</button>
+        <input id="audio-volume" class="vol-slider" type="range" min="0" max="1" step="0.05" value="0.65" aria-label="音量">
+      </div>
+      <button id="btn-save" class="hud-btn" type="button" title="写入本地存档">存档</button>
+      <button id="btn-reset" class="hud-btn danger" type="button" title="重置模拟进度">重置</button>
+    </div>
+  </header>
+
+  <!-- Main Stage -->
+  <main id="sim-stage" class="sim-stage">
+    <!-- ================= SCENE 1: SPACE HALL ================= -->
+    <section id="scene-hall" class="scene-panel active" aria-label="主神空间大厅">
+      <div class="hall-backdrop">
+        <canvas id="hall-vortex-canvas" class="hall-vortex-canvas"></canvas>
+        <div class="hall-vignette"></div>
+      </div>
+
+      <div class="hall-grid">
+        <div class="hall-workspace">
+          <div class="hall-header">
+            <div>
+              <p class="eyebrow">CRIMSON VORTEX TERMINAL // 空间休整期</p>
+              <h1 class="scene-title">深红漩涡大厅</h1>
+            </div>
+            <nav class="hall-tabs" role="tablist" aria-label="大厅功能切换">
+              <button class="hall-tab active" data-hall-tab="shop" role="tab" aria-selected="true">深红商城 <span class="tab-badge mono" id="shop-total-badge">500</span></button>
+              <button class="hall-tab" data-hall-tab="fusion" role="tab" aria-selected="false">血统融合室</button>
+              <button class="hall-tab" data-hall-tab="living" role="tab" aria-selected="false">活体世界与碰头</button>
+              <button class="hall-tab" data-hall-tab="sparring" role="tab" aria-selected="false">训练场实测</button>
+            </nav>
+          </div>
+
+          <div id="hall-view-container" class="hall-view-container">
+            <!-- Dynamically rendered by ui/app_ui.js -->
+          </div>
+        </div>
+
+        <aside id="hall-loadout-rail" class="hall-loadout-rail">
+          <div class="rail-card">
+            <div class="rail-card-head">
+              <h2>当前受试者构筑</h2>
+              <span class="mono muted" id="rail-item-count">0 项武装</span>
+            </div>
+            <div id="rail-stats-grid" class="stats-grid">
+              <!-- phy / agi / obs / wil -->
+            </div>
+            <div class="rail-section-label">已装备血统 / 功法 / 武装</div>
+            <div id="rail-inventory" class="rail-inventory">
+              <!-- Owned item chips -->
+            </div>
+          </div>
+
+          <div class="rail-card rail-mission-card">
+            <p class="eyebrow crimson">NEXT DEPLOYMENT // 原创考场 02</p>
+            <h3>《零号回廊 · 停摆站台》</h3>
+            <p class="mission-brief">地下停摆轨道与假播报迷局。原创小队（严辞、陆烬、许檀）已先期抵近，原著线在远处平行推进。</p>
+            <button id="btn-enter-station-zero" class="cta-crimson" type="button">
+              <span class="cta-glow"></span>
+              <span class="cta-text">载入第二场原创考场：零号回廊</span>
+              <span class="cta-arrow">→</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= SCENE 2: EXAM TACTICAL TERMINAL ================= -->
+    <section id="scene-exam" class="scene-panel" aria-label="零号回廊战术终端">
+      <div class="exam-grid">
+        <!-- Left Column: Live Tactical Vision -->
+        <div class="exam-tactical-col">
+          <div class="exam-telemetry-strip">
+            <div class="tele-box">
+              <span class="tele-k">停摆列车倒计时</span>
+              <strong id="exam-countdown" class="mono accent-crimson">--</strong>
+            </div>
+            <div class="tele-box">
+              <span class="tele-k">轨控改写</span>
+              <strong id="exam-override" class="mono accent-cyan">0%</strong>
+            </div>
+            <div class="tele-box">
+              <span class="tele-k">已破译线索</span>
+              <strong id="exam-clues" class="mono accent-gold">0</strong>
+            </div>
+            <div class="tele-box tele-meters">
+              <div class="mini-meter">
+                <span>威胁</span>
+                <div class="mini-track"><div id="bar-threat" class="mini-fill fill-threat" style="width:15%"></div></div>
+                <span id="val-threat" class="mono">15</span>
+              </div>
+              <div class="mini-meter">
+                <span>声纹</span>
+                <div class="mini-track"><div id="bar-sound" class="mini-fill fill-sound" style="width:10%"></div></div>
+                <span id="val-sound" class="mono">10</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="tactical-map-frame">
+            <canvas id="exam-map-canvas" class="exam-map-canvas"></canvas>
+            <div id="map-hover-info" class="map-hover-info">
+              <span class="mono accent-cyan">TACTICAL LINK</span>
+              <span>悬停节点查看细目，点击相邻房间直接潜行移动。</span>
+            </div>
+          </div>
+
+          <div class="exam-subcard">
+            <div class="subcard-head">
+              <span>小队实时坐标与信赖</span>
+              <span class="mono muted" id="exam-current-node-badge">当前位置：--</span>
+            </div>
+            <div id="exam-squad-strip" class="squad-strip">
+              <!-- 严辞 / 陆烬 / 许檀 / 沈砚 pills -->
+            </div>
+          </div>
+
+          <div class="exam-subcard">
+            <div class="subcard-head">
+              <span>已装备能力卡槽</span>
+              <span class="muted small">点击注入指令或直接布阵留标</span>
+            </div>
+            <div id="exam-ability-deck" class="ability-deck">
+              <!-- Owned skills / weapons -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Cinematic Live Feed & Free-Action Bar -->
+        <div class="exam-console-col">
+          <div class="console-head">
+            <div>
+              <p class="eyebrow">LIVE TACTICAL STREAM // 零号回廊</p>
+              <h2 id="exam-node-title">停摆站台接入中…</h2>
+            </div>
+            <div class="console-actions">
+              <button id="btn-show-clues" class="ghost-btn" type="button">线索簿</button>
+              <button id="btn-extract-exam" class="ghost-btn accent" type="button">触发撤离 / 结算</button>
+            </div>
+          </div>
+
+          <div id="exam-feed" class="exam-feed" aria-live="polite">
+            <!-- Film-script narration, dialogue cards, broadcasts, spark callouts -->
+          </div>
+
+          <div id="exam-thinking-bar" class="thinking-bar hidden">
+            <span class="pulse-dot"></span>
+            <span id="exam-thinking-text">DeepSeek 导演与活体小队推演中…</span>
+          </div>
+
+          <div class="console-input-dock">
+            <div id="exam-quick-chips" class="quick-chips">
+              <button class="tactical-chip" data-quick-action="inspect" type="button">勘察节点</button>
+              <button class="tactical-chip" data-quick-action="stealth" type="button">屏息潜行</button>
+              <button class="tactical-chip" data-quick-action="ward" type="button">布阵留标</button>
+              <button class="tactical-chip" data-quick-action="decode_broadcast" type="button">拆解假播报</button>
+              <button class="tactical-chip" data-quick-action="override_track" type="button">改写轨控</button>
+            </div>
+
+            <form id="exam-command-form" class="command-form">
+              <textarea id="exam-input" rows="2" placeholder="输入自由行动、战术配合或对小队成员说的话…（Enter 发送，Shift+Enter 换行）"></textarea>
+              <button id="btn-exam-send" class="send-btn" type="submit">执行</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SCENE 3: SETTLEMENT ================= -->
+    <section id="scene-settlement" class="scene-panel" aria-label="考场结算终端">
+      <div id="settlement-container" class="settlement-container">
+        <!-- Rendered dynamically by ui/app_ui.js -->
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= CRISIS REACTION OVERLAY ================= -->
+  <div id="crisis-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="crisis-title">
+    <div class="crisis-card">
+      <div class="crisis-top">
+        <div class="crisis-ring-wrap">
+          <svg class="crisis-ring" viewBox="0 0 80 80">
+            <circle class="ring-bg" cx="40" cy="40" r="34"></circle>
+            <circle id="crisis-ring-fg" class="ring-fg" cx="40" cy="40" r="34"></circle>
+          </svg>
+          <span id="crisis-timer-text" class="mono crisis-seconds">8.0s</span>
+        </div>
+        <div class="crisis-headline">
+          <p class="eyebrow crimson">VACUUM FREEZE // 秒级危机反应窗口</p>
+          <h2 id="crisis-title">检票员锁定位移</h2>
+          <p id="crisis-threat-text" class="crisis-desc"></p>
+        </div>
+      </div>
+
+      <div class="crisis-counters-label">基于你当前构筑的瞬时应对：</div>
+      <div id="crisis-counter-buttons" class="crisis-counter-buttons">
+        <!-- Populated from player's owned items/skills + emergency options -->
+      </div>
+
+      <form id="crisis-custom-form" class="crisis-custom-form">
+        <input id="crisis-custom-input" type="text" placeholder="或直接输入你的临场反制动作（按 Enter 瞬间触发）…">
+        <button type="submit" class="cta-crimson compact">瞬时反制</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= DEEPSEEK / AI CONFIG MODAL ================= -->
+  <div id="ai-config-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">BYOK LIVING DIRECTOR // 模型接入配置</p>
+          <h2 id="ai-modal-title">AI 导演与活体对话引擎</h2>
+        </div>
+        <button id="btn-close-ai-modal" class="icon-btn" type="button" aria-label="关闭">✕</button>
+      </div>
+
+      <div class="preset-pills" id="ai-preset-pills">
+        <!-- Populated from INFINITY.AI.PRESETS -->
+      </div>
+
+      <div class="form-grid">
+        <label class="field">
+          <span>API Base URL</span>
+          <input id="ai-base-url" type="url" placeholder="https://api.deepseek.com">
+        </label>
+        <label class="field">
+          <span>Model 名称</span>
+          <input id="ai-model" type="text" placeholder="deepseek-chat">
+        </label>
+        <label class="field full">
+          <span>API Key（仅存于本机浏览器 localStorage，绝不上传第三方）</span>
+          <div class="password-row">
+            <input id="ai-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-...">
+            <button id="btn-toggle-key-vis" class="ghost-btn" type="button">显示</button>
+          </div>
+        </label>
+        <label class="checkbox-field full">
+          <input id="ai-enabled" type="checkbox" checked>
+          <span>启用实时 AI 裁决与活体 NPC 对话（关闭或未填 Key 时自动切换为高精离线规则推演）</span>
+        </label>
+      </div>
+
+      <div id="ai-test-result" class="test-result hidden"></div>
+
+      <div class="modal-foot">
+        <button id="btn-test-ai" class="ghost-btn accent" type="button">测试连接</button>
+        <div class="modal-foot-right">
+          <button id="btn-clear-ai-key" class="ghost-btn" type="button">清空密钥</button>
+          <button id="btn-save-ai" class="cta-crimson compact" type="button">保存配置</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CLUES DRAWER MODAL ================= -->
+  <div id="clues-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="clues-modal-title">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">STATION ZERO DOSSIER // 考场情报</p>
+          <h2 id="clues-modal-title">已获取线索与规则漏洞</h2>
+        </div>
+        <button id="btn-close-clues" class="icon-btn" type="button" aria-label="关闭">✕</button>
+      </div>
+      <div id="clues-modal-body" class="clues-list"></div>
+    </div>
+  </div>
+
+  <!-- Toast stack -->
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+</body>
+</html>
