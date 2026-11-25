@@ -1612,6 +1612,510 @@
   }
 
   /* --------------------------------------------------------------------------
+   * 2.5D Live Tactical Radio (DeepSeek / OpenAI / Ollama + Offline Chinese Parser)
+   * Strictly original Station Zero cast: yanci, lujin, xutan, shenyan (ZERO canon)
+   * -------------------------------------------------------------------------- */
+  var STATION_ZERO_RADIO_NPCS = ['yanci', 'lujin', 'xutan', 'shenyan'];
+
+  var LIVE_RADIO_ORDER_LABELS = {
+    follow: '跟随掩护',
+    goto_dispatch: '前往信号调度室',
+    goto_substation: '前往旧变电间',
+    goto_platform0: '前往0号站台',
+    goto_concourse: '回防检票大厅',
+    goto_corridor: '控制换乘长廊',
+    hold: '原地警戒防守',
+    engage: '牵制/攻击检票员',
+    regroup: '全员收拢汇合'
+  };
+
+  var ZONE_NAME_FALLBACK = {
+    concourse: 'B1 检票大厅',
+    corridor: 'B2 换乘长廊',
+    dispatch: '信号调度室',
+    substation: '旧变电间',
+    tunnel: '废弃应急通道',
+    platform0: '0号站台铁轨'
+  };
+
+  function getZoneLabel(zoneId) {
+    if (INFINITY.StationMap && INFINITY.StationMap.ZONES && INFINITY.StationMap.ZONES[zoneId]) {
+      return INFINITY.StationMap.ZONES[zoneId].name;
+    }
+    return ZONE_NAME_FALLBACK[zoneId] || zoneId || '未知区域';
+  }
+
+  function buildLiveRadioSystemPrompt() {
+    return [
+      '你是无限流实时2.5D考场《零号回廊 · 停摆站台》的加密短波小队通讯导演（Live Radio AI）。',
+      '玩家正在实时移动与战斗中通过加密短波呼叫队友或下达战术指令。你必须根据当前实时局势（坐标、轨控改写进度、检票员距离/状态、小队分布）给出冷峻、短促、活人感拉满的语音回复，并准确输出真实可执行的小队移动/战斗指令 squadOrders。',
+      '',
+      ANTI_CRINGE_CORE,
+      '',
+      '【允许出场人物（严禁原著角色夜林/李天阳/安可/贺铮/顾禾发声）】',
+      '- yanci（严辞｜执棋队长）：短句冷冽、结构化拆解规则与漏洞，盯调度室道岔、腕表校时与假播报。',
+      '- lujin（陆烬｜攻坚主C）：惜字如金、盯方位距离与执行，“收到”“我顶左翼”“三秒够了”，绝不废话。',
+      '- xutan（许檀｜侦察技术）：语速利落、爱报频段/读数/延迟/变电间和电路状态，关键时刻稳得住。',
+      '- shenyan（沈砚｜临时并场老生）：温和圆滑、七分真三分毒、暗藏自私条款；被质问时顺滑撇清，接到硬命令时会半真半假敷衍或勉强照办。',
+      '',
+      '【squadOrders 合法枚举（必须严格匹配）】',
+      'follow（跟随玩家掩护）| goto_dispatch（去信号调度室）| goto_substation（去旧变电间）| goto_platform0（去0号站台）| goto_concourse（去检票大厅）| goto_corridor（去换乘长廊）| hold（原地警戒防守）| engage（主动牵制/攻击检票员）| regroup（向玩家收拢汇合）',
+      '',
+      '【对话与指令纪律】',
+      '- 玩家点名某人做事（如“陆烬掩护我”“严辞去调度室”“全体跟我走”“许檀快撤”）时，必须给出对应 npcId 的 squadOrders，否则人物不会在 2.5D 地图里真正行动！',
+      '- dialogues 返回 1~2 句，每句严格 10~55 个中文字符（要能放进 2.5D 角色头顶气泡里清晰阅读）。',
+      '- 若玩家只是询问局势/试探沈砚/确认假播报，可让 squadOrders 为空数组 []，并基于真实 snapshot 数据作答。',
+      '',
+      '【严格 JSON Schema】',
+      '{',
+      '  "replyNpcId": "yanci|lujin|xutan|shenyan",',
+      '  "dialogues": [',
+      '    {"npcId": "yanci|lujin|xutan|shenyan", "line": "10-55字短促真实的加密短波语音", "trustDelta": -6到6, "cautionDelta": -6到6, "bondDelta": -3到5}',
+      '  ],',
+      '  "squadOrders": [',
+      '    {"npcId": "yanci|lujin|xutan|shenyan", "order": "合法枚举值", "label": "简短中文指令标签"}',
+      '  ],',
+      '  "narration": "可选：不超过48字的无线电电流/环境细节，否则null",',
+      '  "sparkNote": "可选：不超过28字的战术协同火花，否则null"',
+      '}'
+    ].join('\n');
+  }
+
+  function sanitizeLiveRadioResult(raw, fallbackUsed) {
+    var allowedSet = {};
+    for (var i = 0; i < STATION_ZERO_RADIO_NPCS.length; i++) {
+      allowedSet[STATION_ZERO_RADIO_NPCS[i]] = true;
+    }
+
+    var dialogues = [];
+    if (raw && Array.isArray(raw.dialogues)) {
+      for (var d = 0; d < raw.dialogues.length && dialogues.length < 2; d++) {
+        var entry = raw.dialogues[d];
+        if (!entry || typeof entry !== 'object') continue;
+        var nid = String(entry.npcId || '').trim();
+        if (!allowedSet[nid]) continue;
+        var line = String(entry.line || '').trim();
+        if (!line) continue;
+        dialogues.push({
+          npcId: nid,
+          line: line.slice(0, 96),
+          trustDelta: clamp(entry.trustDelta, -8, 8, 0),
+          cautionDelta: clamp(entry.cautionDelta, -8, 8, 0),
+          bondDelta: clamp(entry.bondDelta, -4, 6, 0)
+        });
+      }
+    }
+
+    var squadOrders = [];
+    var seenOrderNpc = {};
+    if (raw && Array.isArray(raw.squadOrders)) {
+      for (var o = 0; o < raw.squadOrders.length; o++) {
+        var ord = raw.squadOrders[o];
+        if (!ord || typeof ord !== 'object') continue;
+        var onid = String(ord.npcId || '').trim();
+        var ocode = String(ord.order || '').trim();
+        if (!allowedSet[onid] || !LIVE_RADIO_ORDER_LABELS[ocode] || seenOrderNpc[onid]) continue;
+        seenOrderNpc[onid] = true;
+        squadOrders.push({
+          npcId: onid,
+          order: ocode,
+          label: String(ord.label || LIVE_RADIO_ORDER_LABELS[ocode]).trim().slice(0, 20)
+        });
+      }
+    }
+
+    var replyNpcId = raw && typeof raw.replyNpcId === 'string' ? raw.replyNpcId.trim() : '';
+    if (!allowedSet[replyNpcId]) {
+      replyNpcId = (dialogues[0] && dialogues[0].npcId) || (squadOrders[0] && squadOrders[0].npcId) || 'yanci';
+    }
+
+    if (dialogues.length === 0) {
+      dialogues.push({
+        npcId: replyNpcId,
+        line: '“短波收到，保持频道静默，按指令推进。”',
+        trustDelta: 1,
+        cautionDelta: 0,
+        bondDelta: 0
+      });
+    }
+
+    return {
+      replyNpcId: replyNpcId,
+      dialogues: dialogues,
+      squadOrders: squadOrders,
+      narration: raw && raw.narration ? String(raw.narration).trim().slice(0, 80) : null,
+      sparkNote: raw && raw.sparkNote ? String(raw.sparkNote).trim().slice(0, 50) : null,
+      fallbackUsed: Boolean(fallbackUsed)
+    };
+  }
+
+  function detectOrderInClause(clause) {
+    if (/调度室|信号室|信号调度|主控|控制台|道岔|Z-03/i.test(clause)) return 'goto_dispatch';
+    if (/变电间|配电|闸刀|发电|逆极|B相|电源|Z-04/i.test(clause)) return 'goto_substation';
+    if (/0号站台|零号站台|主站台|站台|月台|铁轨|撤离点|出站|登车|Z-06|Z-00/i.test(clause)) return 'goto_platform0';
+    if (/检票大厅|检票厅|大厅|检票口|闸机|起点|Z-01/i.test(clause)) return 'goto_concourse';
+    if (/换乘长廊|长廊|走廊|中段|十字|Z-02/i.test(clause)) return 'goto_corridor';
+    if (/掩护我|跟我走|跟着我|过来帮|来我这|贴紧|跟紧|护卫|护送|掩护|跟我|随我/.test(clause)) return 'follow';
+    if (/快撤|撤退|撤回|汇合|集合|靠拢|退回|聚拢|别硬撑|撤过来|回来/.test(clause)) return 'regroup';
+    if (/攻击|击杀|打检票员|拖住|牵制|拦截|压制|吸引|开火|干掉|封印|顶住|迎击|缠住|上去打|帮我打/.test(clause)) return 'engage';
+    if (/原地|守住|警戒|别动|待命|盯住|看好|停下|架枪|蹲守|隐蔽|躲好|别露头/.test(clause)) return 'hold';
+    return null;
+  }
+
+  function detectTargetsInClause(clause) {
+    var targets = [];
+    if (/严辞|队长/.test(clause)) targets.push('yanci');
+    if (/陆烬|老陆/.test(clause)) targets.push('lujin');
+    if (/许檀|小许/.test(clause)) targets.push('xutan');
+    if (/沈砚|老生|掮客/.test(clause)) targets.push('shenyan');
+    if (/全体|全员|大家|所有人|全队|你们都|都跟我|一起/.test(clause)) {
+      ['yanci', 'lujin', 'xutan'].forEach(function (id) {
+        if (targets.indexOf(id) === -1) targets.push(id);
+      });
+    }
+    return targets;
+  }
+
+  function buildOfflineOrderReply(npcId, order, snap) {
+    var insp = (snap && snap.inspector) || {};
+    var dist = isFinite(Number(insp.distToPlayer)) ? Math.round(Number(insp.distToPlayer)) : 24;
+    var overridePct = Math.round(Number((snap && snap.overridePct) || 0));
+
+    var map = {
+      yanci: {
+        goto_dispatch: { line: '“收到，我切去信号调度室核对道岔联锁。你盯住检票员动向。”', trustDelta: 3, cautionDelta: -2, bondDelta: 1 },
+        goto_substation: { line: '“我去旧变电间合闸，断电前两秒会敲麦提醒。”', trustDelta: 2, cautionDelta: -1, bondDelta: 1 },
+        goto_platform0: { line: overridePct >= 100 ? '“道岔已反转，我向0号站台推进，别踩空黄线外缘。”' : '“轨控才改写到' + overridePct + '%，我先抵近0号站台边缘待命，别贸然越线。”', trustDelta: 2, cautionDelta: -1, bondDelta: 1 },
+        goto_concourse: { line: '“明白，我折返检票大厅卡住退路与闸机视野。”', trustDelta: 2, cautionDelta: -1, bondDelta: 0 },
+        goto_corridor: { line: '“我进换乘长廊控住十字通道，有回声立刻报点。”', trustDelta: 2, cautionDelta: -1, bondDelta: 1 },
+        follow: { line: '“收到，我补你侧后方两步位，随时对表核验播报。”', trustDelta: 3, cautionDelta: -2, bondDelta: 1 },
+        regroup: { line: '“向你坐标收拢。三十秒内别开麦制造额外噪点。”', trustDelta: 3, cautionDelta: -2, bondDelta: 1 },
+        engage: { line: '“我卡侧面封它退路，但别指望硬换血，抓紧做正事。”', trustDelta: 2, cautionDelta: 0, bondDelta: 1 },
+        hold: { line: '“原地架线警戒，有异常频段马上切短波。”', trustDelta: 2, cautionDelta: -1, bondDelta: 0 }
+      },
+      lujin: {
+        follow: { line: dist <= 12 ? '“收到，它在' + dist + '米内，我贴你左翼顶住。”' : '“收到，我紧跟掩护，前面交给我探。”', trustDelta: 4, cautionDelta: -2, bondDelta: 2 },
+        engage: { line: '“明白，我去正面拉住检票员仇恨。给你抢出空档，动作快。”', trustDelta: 4, cautionDelta: -2, bondDelta: 2 },
+        goto_dispatch: { line: '“收到，我过去替调度室清场守门。”', trustDelta: 2, cautionDelta: -1, bondDelta: 1 },
+        goto_substation: { line: '“我去变电间顶着，合闸响声大，引怪算我的。”', trustDelta: 3, cautionDelta: -2, bondDelta: 1 },
+        goto_platform0: { line: '“我先压去0号站台架枪清线，到了打手势。”', trustDelta: 3, cautionDelta: -1, bondDelta: 1 },
+        goto_concourse: { line: '“回检票大厅卡点，收到。”', trustDelta: 2, cautionDelta: -1, bondDelta: 0 },
+        goto_corridor: { line: '“换乘长廊归我钉死，它过不去。”', trustDelta: 3, cautionDelta: -1, bondDelta: 1 },
+        regroup: { line: '“我断后收拢，别回头，直奔汇合点。”', trustDelta: 3, cautionDelta: -2, bondDelta: 1 },
+        hold: { line: '“收到，原地压低身位警戒，谁靠近谁挨枪。”', trustDelta: 2, cautionDelta: -1, bondDelta: 0 }
+      },
+      xutan: {
+        goto_substation: { line: '“收到！旧变电间归我，B相逆极闸刀接通前我先测阻抗。”', trustDelta: 3, cautionDelta: -2, bondDelta: 1 },
+        goto_dispatch: { line: '“我去信号调度室接管终端，十秒内把频段读数同步给你。”', trustDelta: 3, cautionDelta: -2, bondDelta: 1 },
+        regroup: { line: '“收到，马上撤离当前死角，正往你坐标靠拢！”', trustDelta: 3, cautionDelta: -2, bondDelta: 2 },
+        follow: { line: '“我跟紧你后侧，PKE探头开着，有43.2Hz异常立刻报。”', trustDelta: 3, cautionDelta: -2, bondDelta: 1 },
+        goto_platform0: { line: '“正转向0号站台，我盯着铁轨共振读数。”', trustDelta: 2, cautionDelta: -1, bondDelta: 1 },
+        goto_concourse: { line: '“明白，先退回检票大厅拉低声纹。”', trustDelta: 2, cautionDelta: -1, bondDelta: 0 },
+        goto_corridor: { line: '“我去换乘长廊中继信号，顺手扫一遍盲区。”', trustDelta: 2, cautionDelta: -1, bondDelta: 1 },
+        engage: { line: '“我用频段脉冲干扰它胸口对讲机，正面硬拼别指望我！”', trustDelta: 2, cautionDelta: 0, bondDelta: 1 },
+        hold: { line: '“收到，原地静默架探头，呼吸压到最低了。”', trustDelta: 2, cautionDelta: -1, bondDelta: 0 }
+      },
+      shenyan: {
+        follow: { line: '“行啊，跟着活命几率高点——不过走前面探路的事，可别算我头上。”', trustDelta: 0, cautionDelta: 1, bondDelta: 0 },
+        goto_dispatch: { line: '“调度室啊……行，我顺路过去瞄一眼，真撞上检票员我可先撤。”', trustDelta: 1, cautionDelta: 2, bondDelta: 0 },
+        goto_substation: { line: '“变电间动静那么大？行吧，我去外围帮你们望风。”', trustDelta: 0, cautionDelta: 2, bondDelta: 0 },
+        goto_platform0: { line: '“早该去0号站台了嘛——我就说那儿离出路最近，马上到。”', trustDelta: 1, cautionDelta: 2, bondDelta: 0 },
+        regroup: { line: '“别催，正往你们那头挪呢，我这块机械表可比你们走得准。”', trustDelta: 0, cautionDelta: 1, bondDelta: 0 },
+        engage: { line: '“让我去正面缠检票员？小兄弟真会开玩笑——我最多在侧翼帮你扔个响动。”', trustDelta: -2, cautionDelta: 4, bondDelta: 0 },
+        hold: { line: '“正合我意，这柱子后面视野挺好，我替大家盯着。”', trustDelta: 0, cautionDelta: 1, bondDelta: 0 },
+        goto_concourse: { line: '“检票大厅灯光稳，我先退回去歇口气。”', trustDelta: 0, cautionDelta: 1, bondDelta: 0 },
+        goto_corridor: { line: '“换乘长廊四通八达，我去转一圈看有没有漏掉的车票。”', trustDelta: 0, cautionDelta: 2, bondDelta: 0 }
+      }
+    };
+
+    var byNpc = map[npcId] || map.yanci;
+    return byNpc[order] || { line: '“收到，按' + (LIVE_RADIO_ORDER_LABELS[order] || '指令') + '执行。”', trustDelta: 2, cautionDelta: -1, bondDelta: 1 };
+  }
+
+  function offlineHandleLiveRadio(ctx) {
+    var text = String((ctx && ctx.text) || '').trim();
+    var snap = (ctx && ctx.snapshot) || {};
+    var insp = snap.inspector || {};
+    var inspDist = isFinite(Number(insp.distToPlayer)) ? Math.round(Number(insp.distToPlayer)) : 28;
+    var inspZone = getZoneLabel(insp.zoneId);
+    var overridePct = Math.round(Number(snap.overridePct || 0));
+    var cluesCount = Number(snap.cluesFoundCount || 0);
+    var cluesTotal = Number(snap.cluesTotal || 6);
+
+    // Split multi-part commands like "陆烬掩护我，严辞去调度室"
+    var rawClauses = text.split(/[，,。；;！!、\n]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (rawClauses.length === 0) rawClauses = [text];
+
+    var squadOrders = [];
+    var orderByNpc = {};
+    var dialogues = [];
+    var talkedNpc = {};
+    var sparkNote = null;
+
+    function addOrder(npcId, order) {
+      if (!LIVE_RADIO_ORDER_LABELS[order]) return;
+      if (orderByNpc[npcId]) return;
+      orderByNpc[npcId] = order;
+      squadOrders.push({
+        npcId: npcId,
+        order: order,
+        label: LIVE_RADIO_ORDER_LABELS[order]
+      });
+    }
+
+    function addDialogue(npcId, line, td, cd, bd) {
+      if (talkedNpc[npcId] || dialogues.length >= 2) return;
+      talkedNpc[npcId] = true;
+      dialogues.push({
+        npcId: npcId,
+        line: line,
+        trustDelta: td || 0,
+        cautionDelta: cd || 0,
+        bondDelta: bd || 0
+      });
+    }
+
+    // 1. Parse tactical orders across clauses
+    for (var i = 0; i < rawClauses.length; i++) {
+      var clause = rawClauses[i];
+      var order = detectOrderInClause(clause);
+      var targets = detectTargetsInClause(clause);
+
+      if (order) {
+        if (targets.length === 0) {
+          if (order === 'goto_dispatch') targets = ['yanci'];
+          else if (order === 'goto_substation') targets = ['xutan'];
+          else if (order === 'follow' || order === 'engage') targets = ['lujin'];
+          else if (order === 'regroup' || order === 'goto_platform0' || order === 'hold') targets = ['yanci', 'lujin', 'xutan'];
+          else targets = ['yanci'];
+        }
+        for (var t = 0; t < targets.length; t++) {
+          addOrder(targets[t], order);
+        }
+      }
+    }
+
+    // Generate crisp replies for emitted orders
+    if (squadOrders.length > 0) {
+      var isAllSquad = squadOrders.length >= 3 && /全体|全员|大家|所有人|全队|一起/.test(text);
+      if (isAllSquad) {
+        var mainOrder = squadOrders[0].order;
+        var leadNpc = (mainOrder === 'follow' || mainOrder === 'engage') ? 'lujin' : 'yanci';
+        var secondNpc = leadNpc === 'lujin' ? 'yanci' : 'xutan';
+        var r1 = buildOfflineOrderReply(leadNpc, mainOrder, snap);
+        var r2 = buildOfflineOrderReply(secondNpc, mainOrder, snap);
+        addDialogue(leadNpc, r1.line, r1.trustDelta, r1.cautionDelta, r1.bondDelta);
+        addDialogue(secondNpc, r2.line, r2.trustDelta, r2.cautionDelta, r2.bondDelta);
+        sparkNote = '加密短波一键同步全队战术位，压缩了站台盲区风险。';
+      } else {
+        for (var s = 0; s < squadOrders.length && dialogues.length < 2; s++) {
+          var so = squadOrders[s];
+          var rep = buildOfflineOrderReply(so.npcId, so.order, snap);
+          addDialogue(so.npcId, rep.line, rep.trustDelta, rep.cautionDelta, rep.bondDelta);
+        }
+        if (squadOrders.length >= 2) {
+          sparkNote = '双线语音分派到位，小队进入实时协同推进状态。';
+        }
+      }
+
+      return sanitizeLiveRadioResult({
+        replyNpcId: dialogues[0].npcId,
+        dialogues: dialogues,
+        squadOrders: squadOrders,
+        narration: null,
+        sparkNote: sparkNote
+      }, true);
+    }
+
+    // 2. Interrogate / call out Shen Yan
+    if (/沈砚|老生/.test(text)) {
+      var suspicious = /干嘛|干什么|在哪|撒谎|骗|假票|伪造|背刺|动机|隐瞒|秒表|扣罚|条款/.test(text);
+      var shenZone = '回廊阴影里';
+      if (Array.isArray(snap.squad)) {
+        for (var k = 0; k < snap.squad.length; k++) {
+          if (snap.squad[k].id === 'shenyan') shenZone = snap.squad[k].zoneName || shenZone;
+        }
+      }
+      addDialogue(
+        'shenyan',
+        suspicious
+          ? '“哟，疑心这么重？我就在' + shenZone + '替你们盯梢呢——真要算账，不如先活着走出0号站台？”'
+          : '“我在' + shenZone + '听着呢。别把动静闹太大，检票员最喜欢挑爱喊话的新人下手。”',
+        suspicious ? -2 : 0,
+        suspicious ? 5 : 1,
+        0
+      );
+      if (suspicious) {
+        addDialogue('yanci', '“别跟他耗嘴皮，我记着他进场时间的误差。盯紧自己的表。”', 2, -1, 1);
+      }
+      return sanitizeLiveRadioResult({
+        replyNpcId: 'shenyan',
+        dialogues: dialogues,
+        squadOrders: [],
+        sparkNote: suspicious ? '在短波里正面敲打沈砚，迫使其收起一部分小动作。' : null
+      }, true);
+    }
+
+    // 3. Fake broadcast / wristwatch check
+    if (/广播|播报|真假|腕表|秒针|时间|喇叭|声音/.test(text)) {
+      addDialogue(
+        'yanci',
+        '“别信站台喇叭，那是43.2Hz副载波伪造的。只认腕表物理秒针，未反转道岔前绝不越黄线。”',
+        3, -2, 1
+      );
+      return sanitizeLiveRadioResult({
+        replyNpcId: 'yanci',
+        dialogues: dialogues,
+        squadOrders: [],
+        sparkNote: '短波校准腕表时间基准，彻底免疫假播报诱导。'
+      }, true);
+    }
+
+    // 4. Situation / Inspector / Objective / Clues report using LIVE 2.5D snapshot!
+    if (/检票员|怪物|在哪|位置|距离|状态|情况|进度|怎么赢|办法|线索|报告|汇报|报点/.test(text)) {
+      var inspLine = insp.hp <= 0 || insp.sealedPct >= 100
+        ? '“检票员已经失能，直接推进目标或者去0号站台撤离！”'
+        : '“检票员在' + inspZone + '，距你约' + inspDist + '米（' + (insp.state === 'chase' ? '正在追猎！' : '巡逻警戒中') + '）。轨控改写 ' + overridePct + '%，线索 ' + cluesCount + '/' + cluesTotal + '。”';
+      addDialogue('xutan', inspLine, 2, -1, 1);
+      if (overridePct < 100) {
+        addDialogue('yanci', '“调度室与变电间双端改写满100%即可在0号站台撤离；或者集中火力击杀/封印检票员。”', 2, -1, 0);
+      }
+      return sanitizeLiveRadioResult({
+        replyNpcId: 'xutan',
+        dialogues: dialogues,
+        squadOrders: [],
+        sparkNote: null
+      }, true);
+    }
+
+    // 5. Named NPC general ping
+    var named = detectTargetsInClause(text);
+    if (named.length > 0) {
+      var targetId = named[0];
+      var genericByNpc = {
+        yanci: '“短波在线。需要我切去调度室、变电间，还是贴身协同，直接报点。”',
+        lujin: inspDist <= 12 ? '“在听，它离你只有' + inspDist + '米。喊一声我立刻顶上去。”' : '“在听。需要掩护还是拉怪，直接下令。”',
+        xutan: '“频道延迟九毫秒，读数正常。当前轨控改写 ' + overridePct + '%，你定下一步。”',
+        shenyan: '“听得清清楚楚。你们年轻人节奏真快，有需要搭手的地方提前吱声。”'
+      };
+      addDialogue(targetId, genericByNpc[targetId] || genericByNpc.yanci, 1, -1, 0);
+      return sanitizeLiveRadioResult({
+        replyNpcId: targetId,
+        dialogues: dialogues,
+        squadOrders: []
+      }, true);
+    }
+
+    // 6. Default tactical response based on immediate danger
+    if (inspDist <= 11 && insp.hp > 0 && insp.sealedPct < 100) {
+      addDialogue('lujin', '“别废话，检票员距你不到' + inspDist + '米！喊‘掩护我’或‘拖住它’，我立刻切过来。”', 1, 0, 1);
+      return sanitizeLiveRadioResult({ replyNpcId: 'lujin', dialogues: dialogues, squadOrders: [] }, true);
+    }
+
+    addDialogue(
+      'yanci',
+      overridePct >= 100
+        ? '“收到。轨控已经改写完成，全员向0号站台靠拢即可脱出，说一声‘全员去站台’。”'
+        : '“收到。目前轨控 ' + overridePct + '%，可直接用短波指派我们去调度室、变电间或掩护你。”',
+      1, -1, 0
+    );
+    return sanitizeLiveRadioResult({ replyNpcId: 'yanci', dialogues: dialogues, squadOrders: [] }, true);
+  }
+
+  async function handleLiveRadio(ctx) {
+    var text = String((ctx && ctx.text) || '').trim();
+    if (!text) {
+      return sanitizeLiveRadioResult({
+        replyNpcId: 'yanci',
+        dialogues: [{ npcId: 'yanci', line: '“空载波？频道通着，有指令直说。”', trustDelta: 0, cautionDelta: 0, bondDelta: 0 }],
+        squadOrders: []
+      }, true);
+    }
+
+    var cfg = getConfig();
+    if (!canUseLiveAI(cfg)) {
+      return offlineHandleLiveRadio(ctx);
+    }
+
+    var snap = (ctx && ctx.snapshot) || {};
+    var player = (ctx && ctx.player) || {};
+    var rels = (ctx && ctx.relationships) || {};
+    var relSummary = {};
+    for (var i = 0; i < STATION_ZERO_RADIO_NPCS.length; i++) {
+      var id = STATION_ZERO_RADIO_NPCS[i];
+      var r = rels[id] || {};
+      relSummary[id] = {
+        trust: r.trust != null ? r.trust : 35,
+        caution: r.caution != null ? r.caution : 50,
+        bond: r.bond != null ? r.bond : 15
+      };
+    }
+
+    var userPayload = {
+      playerRadioText: text,
+      player: {
+        name: player.name || '受试者',
+        hp: snap.hp != null ? Math.round(snap.hp) : player.hp,
+        maxHp: snap.maxHp || player.maxHp || 100,
+        energy: snap.energy != null ? Math.round(snap.energy) : player.energy,
+        zoneId: snap.zoneId || 'concourse',
+        zoneName: snap.zoneName || getZoneLabel(snap.zoneId)
+      },
+      liveWorld: {
+        timeRemainingSec: snap.timeRemainingSec,
+        trainCountdownSec: snap.trainCountdownSec,
+        trainInStation: Boolean(snap.trainInStation),
+        overridePct: Math.round(Number(snap.overridePct || 0)),
+        cluesFoundCount: snap.cluesFoundCount || 0,
+        cluesTotal: snap.cluesTotal || 6,
+        soundLevel: Math.round(Number(snap.soundLevel || 0)),
+        threatLevel: Math.round(Number(snap.threatLevel || 0)),
+        inspector: snap.inspector || null,
+        squad: Array.isArray(snap.squad) ? snap.squad.map(function (m) {
+          return {
+            id: m.id,
+            name: m.name,
+            zoneId: m.zoneId,
+            zoneName: m.zoneName,
+            hp: Math.round(Number(m.hp || 0)),
+            maxHp: Math.round(Number(m.maxHp || 100)),
+            order: m.order,
+            alive: m.alive !== false
+          };
+        }) : []
+      },
+      relationships: relSummary,
+      recentRadio: Array.isArray(ctx && ctx.recentRadio) ? ctx.recentRadio.slice(-5) : []
+    };
+
+    try {
+      var res = await callChatCompletion(
+        cfg,
+        [
+          { role: 'system', content: buildLiveRadioSystemPrompt() },
+          { role: 'user', content: JSON.stringify(userPayload) }
+        ],
+        { expectJson: true, temperature: 0.65, maxTokens: 520, timeoutMs: 14000 }
+      );
+      var parsed = extractJsonObject(res.content);
+      if (!parsed || (!Array.isArray(parsed.dialogues) && !Array.isArray(parsed.squadOrders))) {
+        return offlineHandleLiveRadio(ctx);
+      }
+      var sanitized = sanitizeLiveRadioResult(parsed, false);
+      // Safety net: if player gave an unmistakable tactical movement order and LLM forgot squadOrders, merge parsed orders
+      if (sanitized.squadOrders.length === 0) {
+        var offlineCheck = offlineHandleLiveRadio(ctx);
+        if (offlineCheck.squadOrders && offlineCheck.squadOrders.length > 0) {
+          sanitized.squadOrders = offlineCheck.squadOrders;
+        }
+      }
+      return sanitized;
+    } catch (_) {
+      return offlineHandleLiveRadio(ctx);
+    }
+  }
+
+  /* --------------------------------------------------------------------------
    * Attach Public API to window.INFINITY.AI
    * -------------------------------------------------------------------------- */
   INFINITY.AI = {
@@ -1622,6 +2126,7 @@
     testConnection: testConnection,
     adjudicateExamAction: adjudicateExamAction,
     generateHallInteraction: generateHallInteraction,
-    adjudicateCrisis: adjudicateCrisis
+    adjudicateCrisis: adjudicateCrisis,
+    handleLiveRadio: handleLiveRadio
   };
 })(typeof window !== 'undefined' ? window : globalThis);

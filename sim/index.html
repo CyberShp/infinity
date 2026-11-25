@@ -4,16 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>无限·活体考场终端 // 零号回廊</title>
-  <link rel="stylesheet" href="sim.css?v=2">
-  <!-- Strict load order per sim/CONTRACT.md (classic defer scripts, zero ES-module CORS issues) -->
-  <script defer src="data/shop_catalog.js?v=2"></script>
-  <script defer src="data/world_cast.js?v=2"></script>
-  <script defer src="data/scenario_station_zero.js?v=2"></script>
-  <script defer src="engine/rule_engine.js?v=2"></script>
-  <script defer src="engine/ai_director.js?v=2"></script>
-  <script defer src="engine/audio_engine.js?v=2"></script>
-  <script defer src="ui/tactical_canvas.js?v=2"></script>
-  <script defer src="ui/app_ui.js?v=2"></script>
+  <link rel="stylesheet" href="sim.css?v=3">
+  <!-- Strict load order per world25d/CONTRACT_25D.md (classic defer scripts, zero ES-module CORS issues) -->
+  <script defer src="vendor/three.min.js?v=3"></script>
+  <script defer src="data/shop_catalog.js?v=3"></script>
+  <script defer src="data/world_cast.js?v=3"></script>
+  <script defer src="data/scenario_station_zero.js?v=3"></script>
+  <script defer src="engine/rule_engine.js?v=3"></script>
+  <script defer src="engine/ai_director.js?v=3"></script>
+  <script defer src="engine/audio_engine.js?v=3"></script>
+  <script defer src="world25d/pixel_sprites.js?v=3"></script>
+  <script defer src="world25d/station_map.js?v=3"></script>
+  <script defer src="world25d/skill_archetypes.js?v=3"></script>
+  <script defer src="world25d/engine_25d.js?v=3"></script>
+  <script defer src="ui/tactical_canvas.js?v=3"></script>
+  <script defer src="ui/app_ui.js?v=3"></script>
 </head>
 <body data-scene="hall">
   <!-- Top Wristwatch Telemetry Bar -->
@@ -123,102 +128,137 @@
       </div>
     </section>
 
-    <!-- ================= SCENE 2: EXAM TACTICAL TERMINAL ================= -->
-    <section id="scene-exam" class="scene-panel" aria-label="零号回廊战术终端">
-      <div class="exam-grid">
-        <!-- Left Column: Live Tactical Vision -->
-        <div class="exam-tactical-col">
-          <div class="exam-telemetry-strip">
-            <div class="tele-box">
-              <span class="tele-k">停摆列车倒计时</span>
-              <strong id="exam-countdown" class="mono accent-crimson">--</strong>
+    <!-- ================= SCENE 2: 2.5D HD-2D REAL-TIME EXAM ARENA ================= -->
+    <section id="scene-exam" class="scene-panel" aria-label="零号回廊 2.5D 实景考场">
+      <div class="exam25d-stage">
+        <!-- Full-Viewport Three.js 2.5D Tactical Arena -->
+        <div id="exam-25d-viewport" class="exam-25d-viewport" aria-label="2.5D 站台实时视口"></div>
+
+        <!-- Bullet-Time Edge Frame (NO backdrop-filter!) -->
+        <div id="exam-slowmo-frame" class="exam-slowmo-frame hidden" aria-hidden="true"></div>
+
+        <!-- TOP-LEFT: Objective Tracker, Zone, Clock & Inspector Status -->
+        <aside class="hud25d-panel hud25d-top-left" aria-label="考场任务与告警">
+          <div class="hud25d-tl-head">
+            <div class="hud25d-zone-group">
+              <span id="hud25d-zone-code" class="hud25d-code mono">Z-01</span>
+              <strong id="hud25d-zone-name" class="hud25d-zone-name">B1 检票大厅</strong>
             </div>
-            <div class="tele-box">
-              <span class="tele-k">轨控改写</span>
-              <strong id="exam-override" class="mono accent-cyan">0%</strong>
+            <div class="hud25d-tl-actions">
+              <button id="btn-show-clues" class="hud25d-mini-btn" type="button" title="查看已破译线索簿">线索簿</button>
+              <button id="btn-extract-exam" class="hud25d-mini-btn accent" type="button" title="提前撤离并结算">结算</button>
             </div>
-            <div class="tele-box">
-              <span class="tele-k">已破译线索</span>
-              <strong id="exam-clues" class="mono accent-gold">0</strong>
+          </div>
+
+          <div class="hud25d-clock-row" id="hud25d-clock-box">
+            <div class="hud25d-clock-cell">
+              <span class="hud25d-k">考场剩余</span>
+              <strong id="hud25d-clock-val" class="mono accent-gold">90:00</strong>
             </div>
-            <div class="tele-box tele-meters">
-              <div class="mini-meter">
-                <span>威胁</span>
-                <div class="mini-track"><div id="bar-threat" class="mini-fill fill-threat" style="width:15%"></div></div>
-                <span id="val-threat" class="mono">15</span>
+            <div class="hud25d-clock-cell">
+              <span class="hud25d-k">零号列车</span>
+              <strong id="hud25d-train-val" class="mono accent-crimson">15:00</strong>
+            </div>
+            <div class="hud25d-clock-cell">
+              <span class="hud25d-k">声纹 / 威胁</span>
+              <strong id="hud25d-threat-val" class="mono accent-cyan">10 / 15</strong>
+            </div>
+          </div>
+
+          <div class="hud25d-objectives">
+            <div class="hud25d-obj-row" id="hud25d-obj-override">
+              <span class="hud25d-obj-dot"></span>
+              <div class="hud25d-obj-main">
+                <div class="hud25d-obj-line">
+                  <span>1. 轨控改写（调度室+变电间）→ 0号站台撤离</span>
+                  <strong id="hud25d-override-pct" class="mono accent-cyan">0%</strong>
+                </div>
+                <div class="hud25d-progress-track">
+                  <div id="hud25d-override-bar" class="hud25d-progress-fill fill-cyan" style="width:0%"></div>
+                </div>
               </div>
-              <div class="mini-meter">
-                <span>声纹</span>
-                <div class="mini-track"><div id="bar-sound" class="mini-fill fill-sound" style="width:10%"></div></div>
-                <span id="val-sound" class="mono">10</span>
+            </div>
+
+            <div class="hud25d-obj-row" id="hud25d-obj-inspector">
+              <span class="hud25d-obj-dot crimson"></span>
+              <div class="hud25d-obj-main">
+                <div class="hud25d-obj-line">
+                  <span>2. 击杀或封印检票员</span>
+                  <strong id="hud25d-inspector-metric" class="mono accent-crimson">HP 160 · 封 0%</strong>
+                </div>
+                <div class="hud25d-progress-track">
+                  <div id="hud25d-inspector-bar" class="hud25d-progress-fill fill-crimson" style="width:100%"></div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="tactical-map-frame">
-            <canvas id="exam-map-canvas" class="exam-map-canvas"></canvas>
-            <div id="map-hover-info" class="map-hover-info">
-              <span class="mono accent-cyan">TACTICAL LINK</span>
-              <span>悬停节点查看细目，点击相邻房间直接潜行移动。</span>
+            <div class="hud25d-obj-meta">
+              <span class="hud25d-clue-pill">线索 <strong id="hud25d-clues-val" class="mono accent-gold">0/6</strong></span>
+              <span id="hud25d-inspector-status" class="hud25d-inspector-pill">检票员：巡逻中 · --m</span>
             </div>
           </div>
+        </aside>
 
-          <div class="exam-subcard">
-            <div class="subcard-head">
-              <span>小队实时坐标与信赖</span>
-              <span class="mono muted" id="exam-current-node-badge">当前位置：--</span>
-            </div>
-            <div id="exam-squad-strip" class="squad-strip">
-              <!-- 严辞 / 陆烬 / 许檀 / 沈砚 pills -->
-            </div>
+        <!-- TOP-RIGHT: Compact 2D Minimap + Squad Live Strip -->
+        <aside class="hud25d-panel hud25d-top-right" aria-label="小地图与小队状态">
+          <div class="hud25d-tr-head">
+            <span class="mono hud25d-tag">STATION-00 MAP</span>
+            <span id="hud25d-exit-badge" class="hud25d-exit-badge">出口锁定</span>
           </div>
-
-          <div class="exam-subcard">
-            <div class="subcard-head">
-              <span>已装备能力卡槽</span>
-              <span class="muted small">点击注入指令或直接布阵留标</span>
-            </div>
-            <div id="exam-ability-deck" class="ability-deck">
-              <!-- Owned skills / weapons -->
-            </div>
+          <div class="hud25d-minimap-wrap">
+            <canvas id="exam-minimap" class="exam-minimap" width="224" height="152"></canvas>
           </div>
-        </div>
-
-        <!-- Right Column: Cinematic Live Feed & Free-Action Bar -->
-        <div class="exam-console-col">
-          <div class="console-head">
-            <div>
-              <p class="eyebrow">LIVE TACTICAL STREAM // 零号回廊</p>
-              <h2 id="exam-node-title">停摆站台接入中…</h2>
-            </div>
-            <div class="console-actions">
-              <button id="btn-show-clues" class="ghost-btn" type="button">线索簿</button>
-              <button id="btn-extract-exam" class="ghost-btn accent" type="button">触发撤离 / 结算</button>
-            </div>
+          <div id="hud25d-squad-list" class="hud25d-squad-list">
+            <!-- Live 严辞 / 陆烬 / 许檀 / 沈砚 rows -->
           </div>
+        </aside>
 
-          <div id="exam-feed" class="exam-feed" aria-live="polite">
-            <!-- Film-script narration, dialogue cards, broadcasts, spark callouts -->
+        <!-- BOTTOM-LEFT: Compact Live Radio Log + [Enter] DeepSeek Radio Bar -->
+        <aside class="hud25d-panel hud25d-bottom-left" id="hud25d-radio-panel" aria-label="加密短波与活体小队通讯">
+          <div class="hud25d-radio-head">
+            <span class="hud25d-radio-title">
+              <span class="hud25d-radio-led"></span>
+              <span>加密短波 // LIVE RADIO</span>
+            </span>
+            <span id="hud25d-radio-mode" class="mono hud25d-radio-hint">按 Enter 呼叫小队</span>
           </div>
-
-          <div id="exam-thinking-bar" class="thinking-bar hidden">
+          <div id="hud25d-radio-log" class="hud25d-radio-log" aria-live="polite">
+            <!-- Live radio, broadcasts, sparks, squad orders -->
+          </div>
+          <div id="hud25d-radio-thinking" class="hud25d-radio-thinking hidden">
             <span class="pulse-dot"></span>
-            <span id="exam-thinking-text">DeepSeek 导演与活体小队推演中…</span>
+            <span id="hud25d-radio-thinking-text">无线电频段同步中…</span>
+          </div>
+          <form id="hud25d-radio-form" class="hud25d-radio-form">
+            <span class="hud25d-keycap">Enter</span>
+            <input id="hud25d-radio-input" type="text" autocomplete="off" placeholder="呼叫队友或下达指令（如：陆烬掩护我 / 严辞去调度室）…">
+            <button id="hud25d-radio-send" class="hud25d-send-btn" type="submit">发送</button>
+          </form>
+        </aside>
+
+        <!-- BOTTOM-CENTER: Contextual [E] Prompt + LMB / 1-4 Skill Hotbar + [Space] Bullet-Time -->
+        <div class="hud25d-bottom-center" aria-label="技能快捷栏与交互提示">
+          <div class="hud25d-prompts-row">
+            <button id="hud25d-interact-pill" class="hud25d-interact-pill hidden" type="button">
+              <span class="hud25d-keycap gold">E</span>
+              <span id="hud25d-interact-label">交互</span>
+              <span id="hud25d-interact-prog" class="hud25d-interact-prog mono hidden"></span>
+            </button>
+            <button id="hud25d-slowmo-pill" class="hud25d-slowmo-pill" type="button" title="切换子弹时间慢动作">
+              <span class="hud25d-keycap">Space</span>
+              <span id="hud25d-slowmo-label">子弹时间：关</span>
+            </button>
           </div>
 
-          <div class="console-input-dock">
-            <div id="exam-quick-chips" class="quick-chips">
-              <button class="tactical-chip" data-quick-action="inspect" type="button">勘察节点</button>
-              <button class="tactical-chip" data-quick-action="stealth" type="button">屏息潜行</button>
-              <button class="tactical-chip" data-quick-action="ward" type="button">布阵留标</button>
-              <button class="tactical-chip" data-quick-action="decode_broadcast" type="button">拆解假播报</button>
-              <button class="tactical-chip" data-quick-action="override_track" type="button">改写轨控</button>
-            </div>
+          <div id="hud25d-hotbar" class="hud25d-hotbar">
+            <!-- LMB Basic Attack + 4 Build-Mapped Skill Slots -->
+          </div>
 
-            <form id="exam-command-form" class="command-form">
-              <textarea id="exam-input" rows="2" placeholder="输入自由行动、战术配合或对小队成员说的话…（Enter 发送，Shift+Enter 换行）"></textarea>
-              <button id="btn-exam-send" class="send-btn" type="submit">执行</button>
-            </form>
+          <div class="hud25d-controls-legend">
+            <span><kbd>WASD</kbd> 移动</span>
+            <span><kbd>鼠标</kbd> 瞄准</span>
+            <span><kbd>Space</kbd> 子弹时间</span>
+            <span><kbd>Enter</kbd> 无线电</span>
           </div>
         </div>
       </div>

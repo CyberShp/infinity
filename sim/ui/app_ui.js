@@ -28,6 +28,16 @@
     hallChatBusy: false,
     sparringLog: [],
     examBusy: false,
+    world25dMounted: false,
+    lastSnapshot: null,
+    radioLog: [],
+    radioBusy: false,
+    radioFocused: false,
+    examEnded: false,
+    clockGlitchTimer: null,
+    minimapBaseCanvas: null,
+    hotbarSig: '',
+    lastAudioThreat: -1,
     crisisTimerId: null,
     crisisActiveKey: null,
     crisisDeadline: 0,
@@ -298,6 +308,22 @@
 
   /* ===================== SCENE SWITCHING ===================== */
 
+  function unmountWorld25DIfNeeded() {
+    if (uiState.world25dMounted) {
+      uiState.world25dMounted = false;
+      uiState.radioFocused = false;
+      if (uiState.clockGlitchTimer) {
+        clearTimeout(uiState.clockGlitchTimer);
+        uiState.clockGlitchTimer = null;
+      }
+      if (INFINITY.World25D && typeof INFINITY.World25D.unmount === 'function') {
+        try {
+          INFINITY.World25D.unmount();
+        } catch (_) {}
+      }
+    }
+  }
+
   function syncSceneContainers(state) {
     var scene = getSceneName(state);
     var prev = uiState.currentScene;
@@ -310,23 +336,29 @@
 
     if (prev !== scene) {
       uiState.currentScene = scene;
-      if (INFINITY.Canvas) {
-        if (scene === 'hall' && $('hall-vortex-canvas')) {
+
+      if (scene !== 'exam') {
+        unmountWorld25DIfNeeded();
+      }
+
+      if (scene === 'hall') {
+        if (INFINITY.Canvas && $('hall-vortex-canvas')) {
           INFINITY.Canvas.mountHallVortex($('hall-vortex-canvas'));
-        } else if (scene === 'exam' && $('exam-map-canvas')) {
-          INFINITY.Canvas.mountTacticalMap($('exam-map-canvas'), {
-            onNodeClick: handleMapNodeClick,
-            onNodeHover: handleMapNodeHover
-          });
-          INFINITY.Canvas.updateTacticalState(state);
-        } else {
+        }
+      } else if (scene === 'exam') {
+        if (INFINITY.Canvas) {
+          INFINITY.Canvas.destroy();
+        }
+        mountExam25DScene(state);
+      } else {
+        if (INFINITY.Canvas) {
           INFINITY.Canvas.destroy();
         }
       }
+
       syncAudioForState(state);
-    } else if (scene === 'exam' && INFINITY.Canvas) {
-      INFINITY.Canvas.updateTacticalState(state);
-      syncAudioForState(state);
+    } else if (scene === 'exam' && !uiState.world25dMounted) {
+      mountExam25DScene(state);
     }
   }
 
@@ -964,210 +996,758 @@
       '</div>';
   }
 
-  /* ===================== SCENE 2: EXAM TACTICAL CONSOLE ===================== */
+  /* ===================== SCENE 2: 2.5D HD-2D REAL-TIME EXAM ===================== */
 
   function getExamObj(state) {
     return (state && state.exam) || {};
   }
 
-  function renderExamConsole(state) {
-    var exam = getExamObj(state);
-    var scenario = getScenario();
-    var nodes = (scenario && scenario.nodes) || {};
-    var currentNodeId = exam.currentNode || exam.playerNode || (scenario && scenario.startNode) || 'concourse';
-    var currentNode = nodes[currentNodeId] || { name: '零号回廊', code: 'Z-01' };
-
-    var minsLeft = exam.timeRemainingMin != null
-      ? exam.timeRemainingMin
-      : (exam.minutesLeft != null ? exam.minutesLeft : Math.max(0, 90 - (Number(exam.turn) || 0) * 4));
-    var trainCycle = exam.nextTrainMin != null
-      ? exam.nextTrainMin
-      : (exam.trainCountdown != null ? exam.trainCountdown * 3 : (minsLeft % 15 || 15));
-    var overridePct = Number(exam.overrideProgress != null ? exam.overrideProgress : (exam.trackOverride || 0)) || 0;
-    var clues = Array.isArray(exam.cluesFound)
-      ? exam.cluesFound
-      : (Array.isArray(exam.unlockedClues) ? exam.unlockedClues : (Array.isArray(exam.clues) ? exam.clues : []));
-    var threat = clamp(Number(exam.threat != null ? exam.threat : 15) || 0, 0, 100);
-    var sound = clamp(Number(exam.sound != null ? exam.sound : 10) || 0, 0, 100);
-
-    if ($('exam-countdown')) $('exam-countdown').textContent = Math.max(0, Math.round(minsLeft)) + 'm (下班 ' + Math.max(0, Math.round(trainCycle)) + 'm)';
-    if ($('exam-override')) $('exam-override').textContent = Math.round(overridePct) + '%';
-    if ($('exam-clues')) $('exam-clues').textContent = clues.length + ' / ' + ((scenario && scenario.clues && scenario.clues.length) || 8);
-
-    if ($('bar-threat')) $('bar-threat').style.width = threat + '%';
-    if ($('val-threat')) $('val-threat').textContent = Math.round(threat);
-    if ($('bar-sound')) $('bar-sound').style.width = sound + '%';
-    if ($('val-sound')) $('val-sound').textContent = Math.round(sound);
-
-    if ($('exam-current-node-badge')) $('exam-current-node-badge').textContent = '当前位置：' + (currentNode.code ? currentNode.code + ' ' : '') + currentNode.name;
-    if ($('exam-node-title')) $('exam-node-title').textContent = currentNode.name + ' // ' + (currentNode.code || 'STATION-00');
-
-    // Squad strip
-    var squadStrip = $('exam-squad-strip');
-    if (squadStrip) {
-      var cast = getCast();
-      var npcPositions = exam.npcPositions || exam.squadPositions || {};
-      var squadIds = Object.keys(npcPositions).length ? Object.keys(npcPositions) : ['yanci', 'lujin', 'xutan', 'shenyan'];
-      squadStrip.innerHTML = squadIds.map(function (nid) {
-        var c = cast[nid] || { name: nid, accentColor: '#9fb8d4' };
-        var posId = typeof npcPositions[nid] === 'string' ? npcPositions[nid] : (npcPositions[nid] && npcPositions[nid].nodeId);
-        var posName = (nodes[posId] && nodes[posId].name) || '回廊深处';
-        var rel = getNpcRelation(state, nid);
-        return (
-          '<div class="squad-pill">' +
-            '<div class="squad-pill-top">' +
-              '<span class="squad-pill-name"><span class="cast-dot" style="background:' + esc(c.accentColor || '#9fb8d4') + ';"></span>' + esc(c.name) + '</span>' +
-              '<span class="mono small muted">' + esc(posName) + '</span>' +
-            '</div>' +
-            '<div class="squad-pill-meta"><span>信赖 ' + rel.trust + '</span><span>戒备 ' + rel.caution + '</span></div>' +
-          '</div>'
-        );
-      }).join('');
-    }
-
-    // Equipped Ability Deck
-    var deck = $('exam-ability-deck');
-    if (deck) {
-      var owned = getOwnedEntries(getPlayer(state));
-      if (!owned.length) {
-        deck.innerHTML = '<span class="muted small">无额外武装，仅依赖基础体能与环境交互。</span>';
-      } else {
-        deck.innerHTML = owned.map(function (it) {
-          return (
-            '<button class="ability-card-btn" type="button" data-use-item-id="' + esc(it.id) + '" data-use-item-name="' + esc(it.name) + '" title="' + esc(it.desc || '') + '">' +
-              '<span class="tier-badge tier-' + esc(it.tier) + '">' + esc(it.tier) + '</span>' +
-              '<span>' + esc(it.name) + '</span>' +
-            '</button>'
-          );
-        }).join('');
-      }
-    }
-
-    // Film-script live feed
-    renderExamFeed(state);
-
-    // Crisis Reaction Window
-    syncCrisisOverlay(state);
+  function formatClockMMSS(sec) {
+    var s = Math.max(0, Math.floor(Number(sec) || 0));
+    var mm = Math.floor(s / 60);
+    var ss = s % 60;
+    return String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
   }
 
-  function renderExamFeed(state) {
-    var feedEl = $('exam-feed');
-    if (!feedEl) return;
-    var exam = getExamObj(state);
-    var entries = Array.isArray(exam.feed) ? exam.feed : (Array.isArray(exam.log) ? exam.log : []);
-    var cast = getCast();
+  function triggerClockGlitch() {
+    var box = $('hud25d-clock-box');
+    if (!box) return;
+    box.classList.remove('glitch-crimson');
+    // Force reflow to restart animation on rapid broadcasts
+    void box.offsetWidth;
+    box.classList.add('glitch-crimson');
+    if (uiState.clockGlitchTimer) clearTimeout(uiState.clockGlitchTimer);
+    uiState.clockGlitchTimer = setTimeout(function () {
+      box.classList.remove('glitch-crimson');
+      uiState.clockGlitchTimer = null;
+    }, 360);
+  }
 
-    if (!entries.length) {
-      feedEl.innerHTML = '<div class="feed-narration">腕表屏幕亮起冷红微光，零号回廊的潮湿铁锈味扑面而来。你可以点击左侧战术地图中的相邻房间移动，或直接在下方输入自由行动与小队对话。</div>';
-      return;
+  function buildMinimapBase() {
+    var mapMod = INFINITY.StationMap;
+    if (!mapMod || typeof mapMod.getGrid !== 'function') return null;
+    var grid = mapMod.getGrid();
+    if (!Array.isArray(grid) || !grid.length) return null;
+
+    var W = mapMod.GRID_W || 56;
+    var H = mapMod.GRID_H || 38;
+    var scale = 4;
+    var off = document.createElement('canvas');
+    off.width = W * scale;
+    off.height = H * scale;
+    var ctx = off.getContext('2d');
+
+    ctx.fillStyle = '#07080d';
+    ctx.fillRect(0, 0, off.width, off.height);
+
+    for (var z = 0; z < H; z++) {
+      var row = grid[z];
+      if (!row) continue;
+      for (var x = 0; x < W; x++) {
+        var tile = row[x];
+        if (tile === 1) {
+          ctx.fillStyle = '#2d3344';
+        } else if (tile === 2) {
+          ctx.fillStyle = '#212735';
+        } else if (tile === 3) {
+          ctx.fillStyle = '#6f5522';
+        } else if (tile === 4) {
+          ctx.fillStyle = '#140c10';
+        } else {
+          ctx.fillStyle = '#131722';
+        }
+        ctx.fillRect(x * scale, z * scale, scale, scale);
+      }
     }
 
-    var html = entries.map(function (item) {
-      var kind = item.type || item.kind || 'narration';
-      if (kind === 'player' || kind === 'action') {
-        return '<div class="feed-entry feed-player-action">▸ ' + esc(item.text || item.content || '') + '</div>';
+    // Subtle zone center labels
+    if (mapMod.ZONES) {
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      Object.keys(mapMod.ZONES).forEach(function (zid) {
+        var zn = mapMod.ZONES[zid];
+        ctx.fillStyle = 'rgba(226, 212, 188, 0.34)';
+        ctx.fillText(zn.code || zid, zn.cx * scale, zn.cz * scale);
+      });
+    }
+
+    uiState.minimapBaseCanvas = off;
+    return off;
+  }
+
+  function renderMinimap25D(snapshot) {
+    var canvas = $('exam-minimap');
+    if (!canvas || !snapshot || !snapshot.minimap) return;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    var base = uiState.minimapBaseCanvas || buildMinimapBase();
+    var scale = 4;
+    if (base) {
+      if (canvas.width !== base.width || canvas.height !== base.height) {
+        canvas.width = base.width;
+        canvas.height = base.height;
+      }
+      ctx.drawImage(base, 0, 0);
+    } else {
+      ctx.fillStyle = '#08090e';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    var mm = snapshot.minimap;
+
+    // 1. Active Wards
+    if (Array.isArray(mm.wards)) {
+      for (var w = 0; w < mm.wards.length; w++) {
+        var ward = mm.wards[w];
+        ctx.beginPath();
+        ctx.arc(ward.x * scale, ward.z * scale, Math.max(4, (ward.r || 3) * scale), 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(214, 178, 116, 0.16)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(214, 178, 116, 0.72)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+
+    // 2. Consoles (Dispatch + Substation)
+    if (Array.isArray(mm.consoles)) {
+      for (var c = 0; c < mm.consoles.length; c++) {
+        var con = mm.consoles[c];
+        var cx = con.x * scale;
+        var cz = con.z * scale;
+        ctx.fillStyle = con.done ? '#58c4a6' : '#d6b274';
+        ctx.fillRect(cx - 3, cz - 3, 6, 6);
+        ctx.strokeStyle = '#090a0f';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(cx - 3, cz - 3, 6, 6);
+      }
+    }
+
+    // 3. Exit Gate beacon on Platform 0 when ready
+    if (mm.exitReady && INFINITY.StationMap && typeof INFINITY.StationMap.getInteractables === 'function') {
+      var ints = INFINITY.StationMap.getInteractables() || [];
+      for (var ei = 0; ei < ints.length; ei++) {
+        if (ints[ei].type === 'exit') {
+          var ex = ints[ei].x * scale;
+          var ez = ints[ei].z * scale;
+          var pulse = 4 + Math.sin(performance.now() * 0.008) * 2;
+          ctx.beginPath();
+          ctx.arc(ex, ez, pulse + 3, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(88, 196, 166, 0.85)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.fillStyle = '#84f5d5';
+          ctx.fillRect(ex - 3, ez - 3, 6, 6);
+        }
+      }
+    }
+
+    // 4. Squad dots
+    if (Array.isArray(mm.squad)) {
+      for (var s = 0; s < mm.squad.length; s++) {
+        var sq = mm.squad[s];
+        ctx.beginPath();
+        ctx.arc(sq.x * scale, sq.z * scale, 3, 0, Math.PI * 2);
+        ctx.fillStyle = sq.color || '#6fd8ea';
+        ctx.fill();
+        ctx.strokeStyle = '#07080d';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+
+    // 5. Inspector ping
+    if (mm.inspector && mm.inspector.visible) {
+      var ix = mm.inspector.x * scale;
+      var iz = mm.inspector.z * scale;
+      var ipulse = 5 + Math.sin(performance.now() * 0.012) * 2.5;
+      ctx.beginPath();
+      ctx.arc(ix, iz, ipulse, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(232, 93, 74, 0.85)';
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(ix, iz, 3.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff5447';
+      ctx.fill();
+    }
+
+    // 6. Player arrow/marker
+    if (mm.player) {
+      var px = mm.player.x * scale;
+      var pz = mm.player.z * scale;
+      ctx.beginPath();
+      ctx.arc(px, pz, 5.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 246, 224, 0.22)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(px, pz, 3.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff6e0';
+      ctx.fill();
+      ctx.strokeStyle = '#6fd8ea';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+  }
+
+  function renderHotbar25D(snapshot, state) {
+    var hotbar = $('hud25d-hotbar');
+    if (!hotbar) return;
+
+    var slots = (snapshot && Array.isArray(snapshot.slots)) ? snapshot.slots : [];
+    var basic = { name: '近战/射击', icon: '⚔', color: '#d6b274' };
+    if (INFINITY.Skills25D && typeof INFINITY.Skills25D.buildCombatLoadout === 'function') {
+      try {
+        var lo = INFINITY.Skills25D.buildCombatLoadout(getPlayer(state));
+        if (lo && lo.basicAttack) {
+          basic = {
+            name: lo.basicAttack.name || '基础攻击',
+            icon: lo.basicAttack.icon || '⚔',
+            color: lo.basicAttack.color || '#d6b274'
+          };
+        }
+      } catch (_) {}
+    }
+
+    var sig = basic.name + '|' + slots.map(function (sl) { return (sl.key || sl.index) + ':' + (sl.name || ''); }).join('|');
+    if (uiState.hotbarSig !== sig) {
+      uiState.hotbarSig = sig;
+      var html =
+        '<button class="hotbar-slot lmb-slot" type="button" data-lmb-hint="1" title="鼠标左键瞄准普攻">' +
+          '<div class="hotbar-top"><span class="hotbar-key">LMB</span><span class="hotbar-cost">普攻</span></div>' +
+          '<div class="hotbar-mid"><span class="hotbar-icon">' + esc(basic.icon) + '</span><span class="hotbar-name">' + esc(basic.name) + '</span></div>' +
+          '<div class="hotbar-accent-bar" style="background:' + esc(basic.color) + ';"></div>' +
+        '</button>';
+
+      for (var i = 0; i < 4; i++) {
+        var sl = slots[i] || { index: i, key: String(i + 1), name: '空槽位', icon: '◇', color: '#6fd8ea', energyCost: 0 };
+        html +=
+          '<button class="hotbar-slot" type="button" data-cast-slot="' + i + '" id="hotbar-slot-' + i + '" title="' + esc(sl.name || '') + ' (能耗 ' + (sl.energyCost || 0) + ')">' +
+            '<div class="hotbar-top">' +
+              '<span class="hotbar-key">' + esc(sl.key || String(i + 1)) + '</span>' +
+              '<span class="hotbar-cost">' + (sl.energyCost ? ('EN ' + Math.round(sl.energyCost)) : '免费') + '</span>' +
+            '</div>' +
+            '<div class="hotbar-mid">' +
+              '<span class="hotbar-icon">' + esc(sl.icon || '✦') + '</span>' +
+              '<span class="hotbar-name">' + esc(sl.name || '技能') + '</span>' +
+            '</div>' +
+            '<div class="hotbar-accent-bar" style="background:' + esc(sl.color || '#6fd8ea') + ';"></div>' +
+            '<div class="hotbar-cd-mask" id="hotbar-cd-mask-' + i + '"></div>' +
+            '<div class="hotbar-cd-text hidden" id="hotbar-cd-text-' + i + '"></div>' +
+          '</button>';
+      }
+      hotbar.innerHTML = html;
+    }
+
+    // Fast 10Hz cooldown & energy update without destroying click targets
+    var curEn = snapshot && snapshot.energy != null ? Number(snapshot.energy) : 100;
+    for (var j = 0; j < 4; j++) {
+      var s = slots[j];
+      var btn = $('hotbar-slot-' + j);
+      var mask = $('hotbar-cd-mask-' + j);
+      var txt = $('hotbar-cd-text-' + j);
+      if (!btn || !s) continue;
+      var cdLeft = Math.max(0, Number(s.cooldownLeft) || 0);
+      var cdMax = Math.max(0.1, Number(s.cooldownMax) || 1);
+      var onCd = cdLeft > 0.05;
+      var lowEn = curEn < (Number(s.energyCost) || 0);
+      btn.classList.toggle('on-cd', onCd);
+      btn.classList.toggle('no-energy', !onCd && lowEn);
+      if (mask) {
+        mask.style.height = onCd ? (clamp((cdLeft / cdMax) * 100, 0, 100).toFixed(1) + '%') : '0%';
+      }
+      if (txt) {
+        txt.classList.toggle('hidden', !onCd);
+        if (onCd) txt.textContent = cdLeft >= 10 ? String(Math.ceil(cdLeft)) : cdLeft.toFixed(1) + 's';
+      }
+    }
+  }
+
+  function renderSquad25D(snapshot) {
+    var listEl = $('hud25d-squad-list');
+    if (!listEl || !snapshot || !Array.isArray(snapshot.squad)) return;
+
+    listEl.innerHTML = snapshot.squad.map(function (m) {
+      var hpPct = clamp(((Number(m.hp) || 0) / Math.max(1, Number(m.maxHp) || 100)) * 100, 0, 100);
+      var alive = m.alive !== false && hpPct > 0;
+      return (
+        '<button class="hud25d-sq-row' + (alive ? '' : ' downed') + '" type="button" data-radio-target="' + esc(m.name) + '" title="点击呼叫 ' + esc(m.name) + '">' +
+          '<div class="hud25d-sq-top">' +
+            '<span class="hud25d-sq-name"><span class="cast-dot" style="background:' + esc(m.accentColor || '#6fd8ea') + ';"></span>' + esc(m.name) + '</span>' +
+            '<span class="hud25d-sq-zone">' + esc(m.zoneName || '回廊') + '</span>' +
+          '</div>' +
+          '<div class="hud25d-sq-bottom">' +
+            '<div class="hud25d-sq-hp-track"><div class="hud25d-sq-hp-fill' + (hpPct < 35 ? ' low' : '') + '" style="width:' + hpPct.toFixed(0) + '%"></div></div>' +
+            '<span class="hud25d-sq-order">' + esc(alive ? (m.orderLabel || '待命') : '失联') + '</span>' +
+          '</div>' +
+        '</button>'
+      );
+    }).join('');
+  }
+
+  function pushRadioEntry(entry) {
+    if (!entry) return;
+    uiState.radioLog.push(entry);
+    if (uiState.radioLog.length > 40) {
+      uiState.radioLog.shift();
+    }
+    renderRadioLog25D();
+  }
+
+  function renderRadioLog25D() {
+    var el = $('hud25d-radio-log');
+    if (!el) return;
+    var cast = getCast();
+
+    el.innerHTML = uiState.radioLog.map(function (item) {
+      var kind = item.type || 'system';
+      if (kind === 'player') {
+        return '<div class="radio-entry player">▸ ' + esc(item.text) + '</div>';
       }
       if (kind === 'broadcast') {
-        return '<div class="feed-entry feed-broadcast' + (item.fake ? ' fake' : '') + '">' +
-          '<strong>' + (item.fake ? '[异常/疑似伪造播报]' : '[站台广播]') + '</strong> ' + esc(item.text || item.content || '') +
-        '</div>';
+        return (
+          '<div class="radio-entry broadcast' + (item.fake ? ' fake' : '') + '">' +
+            '<strong>' + (item.fake ? '[伪造播报]' : '[站台广播]') + '</strong> ' + esc(item.text) +
+          '</div>'
+        );
+      }
+      if (kind === 'order') {
+        return '<div class="radio-entry order">▸ ' + esc(item.text) + '</div>';
       }
       if (kind === 'spark') {
-        return '<div class="feed-entry feed-spark">✦ <strong>战术火花</strong>：' + esc(item.text || item.content || '') + '</div>';
+        return '<div class="radio-entry spark">✦ ' + esc(item.text) + '</div>';
       }
       if (kind === 'dialogue') {
         var npc = cast[item.npcId] || { name: item.speaker || item.npcId || '队友', accentColor: '#6fd8ea' };
         var badges = [];
-        if (item.trustDelta) badges.push('<span class="delta-badge ' + (item.trustDelta > 0 ? 'delta-pos' : 'delta-neg') + '">信赖 ' + (item.trustDelta > 0 ? '+' : '') + item.trustDelta + '</span>');
-        if (item.cautionDelta) badges.push('<span class="delta-badge ' + (item.cautionDelta < 0 ? 'delta-pos' : 'delta-neg') + '">戒备 ' + (item.cautionDelta > 0 ? '+' : '') + item.cautionDelta + '</span>');
-        if (item.bondDelta) badges.push('<span class="delta-badge delta-gold">火花 +' + item.bondDelta + '</span>');
+        if (item.trustDelta) badges.push('<span class="delta-badge ' + (item.trustDelta > 0 ? 'delta-pos' : 'delta-neg') + '">信' + (item.trustDelta > 0 ? '+' : '') + item.trustDelta + '</span>');
+        if (item.cautionDelta) badges.push('<span class="delta-badge ' + (item.cautionDelta < 0 ? 'delta-pos' : 'delta-neg') + '">戒' + (item.cautionDelta > 0 ? '+' : '') + item.cautionDelta + '</span>');
+        if (item.bondDelta) badges.push('<span class="delta-badge delta-gold">绊+' + item.bondDelta + '</span>');
         return (
-          '<div class="feed-entry feed-dialogue" style="border-left-color:' + esc(npc.accentColor || '#6fd8ea') + ';">' +
-            '<div class="feed-dialogue-head">' +
-              '<span class="feed-speaker" style="color:' + esc(npc.accentColor || '#6fd8ea') + ';">' + esc(npc.name) + '</span>' +
-              '<div class="delta-badges">' + badges.join('') + '</div>' +
+          '<div class="radio-entry dialogue" style="border-left-color:' + esc(npc.accentColor || '#6fd8ea') + ';">' +
+            '<div class="radio-entry-head">' +
+              '<span class="radio-speaker" style="color:' + esc(npc.accentColor || '#6fd8ea') + ';">' + esc(npc.name) + '</span>' +
+              (badges.length ? '<div class="delta-badges">' + badges.join('') + '</div>' : '') +
             '</div>' +
-            '<div>' + esc(item.line || item.text || '') + '</div>' +
+            '<div>' + esc(item.text) + '</div>' +
           '</div>'
         );
       }
-      if (kind === 'meta' || kind === 'system') {
-        return '<div class="feed-entry feed-system-meta">' + esc(item.text || item.content || '') + '</div>';
-      }
-      return '<div class="feed-entry feed-narration">' + esc(item.text || item.content || item.narration || '').replace(/\n/g, '<br>') + '</div>';
+      return '<div class="radio-entry system">' + esc(item.text) + '</div>';
     }).join('');
 
-    feedEl.innerHTML = html;
-    if (entries.length !== uiState.lastFeedCount) {
-      uiState.lastFeedCount = entries.length;
-      feedEl.scrollTop = feedEl.scrollHeight;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function handleWorld25DHudTick(snapshot) {
+    if (!snapshot || uiState.currentScene !== 'exam') return;
+    uiState.lastSnapshot = snapshot;
+
+    // 1. Sync top wristwatch bar vitals at 10Hz
+    var hp = Number(snapshot.hp != null ? snapshot.hp : 100);
+    var maxHp = Math.max(1, Number(snapshot.maxHp || 100));
+    var en = Number(snapshot.energy != null ? snapshot.energy : 100);
+    var maxEn = Math.max(1, Number(snapshot.maxEnergy || 100));
+    var san = Number(snapshot.sanity != null ? snapshot.sanity : 100);
+    var maxSan = Math.max(1, Number(snapshot.maxSanity || 100));
+
+    if ($('bar-hp')) $('bar-hp').style.width = clamp((hp / maxHp) * 100, 0, 100) + '%';
+    if ($('val-hp')) $('val-hp').textContent = Math.round(hp);
+    if ($('bar-en')) $('bar-en').style.width = clamp((en / maxEn) * 100, 0, 100) + '%';
+    if ($('val-en')) $('val-en').textContent = Math.round(en);
+    if ($('bar-san')) $('bar-san').style.width = clamp((san / maxSan) * 100, 0, 100) + '%';
+    if ($('val-san')) $('val-san').textContent = Math.round(san);
+
+    // Keep state.exam.cluesFound synced silently so Clues Modal reflects 2.5D discoveries live
+    var st = getStateSafe();
+    if (st && st.exam && Array.isArray(snapshot.discoveredClueIds)) {
+      st.exam.cluesFound = snapshot.discoveredClueIds.slice();
+    }
+
+    // 2. Top-Left Objective Tracker & Zone
+    if ($('hud25d-zone-code')) $('hud25d-zone-code').textContent = snapshot.zoneCode || 'Z-01';
+    if ($('hud25d-zone-name')) $('hud25d-zone-name').textContent = snapshot.zoneName || '零号回廊';
+    if ($('hud25d-clock-val')) $('hud25d-clock-val').textContent = formatClockMMSS(snapshot.timeRemainingSec);
+
+    var trainEl = $('hud25d-train-val');
+    if (trainEl) {
+      trainEl.textContent = snapshot.trainInStation ? '进站停靠!' : formatClockMMSS(snapshot.trainCountdownSec);
+      trainEl.classList.toggle('train-hot', Boolean(snapshot.trainInStation) || Number(snapshot.trainCountdownSec) <= 15);
+    }
+
+    if ($('hud25d-threat-val')) {
+      $('hud25d-threat-val').textContent = Math.round(Number(snapshot.soundLevel || 0)) + ' / ' + Math.round(Number(snapshot.threatLevel || 0));
+    }
+
+    var ovPct = clamp(Number(snapshot.overridePct || 0), 0, 100);
+    if ($('hud25d-override-pct')) $('hud25d-override-pct').textContent = Math.round(ovPct) + '%';
+    if ($('hud25d-override-bar')) $('hud25d-override-bar').style.width = ovPct + '%';
+    if ($('hud25d-obj-override')) $('hud25d-obj-override').classList.toggle('done', ovPct >= 100);
+
+    var insp = snapshot.inspector || { hp: 160, maxHp: 160, sealedPct: 0, state: 'patrol', distToPlayer: 30 };
+    var inspHp = Math.max(0, Math.round(Number(insp.hp || 0)));
+    var inspMaxHp = Math.max(1, Number(insp.maxHp || 160));
+    var sealedPct = clamp(Math.round(Number(insp.sealedPct || 0)), 0, 100);
+    var inspDone = inspHp <= 0 || sealedPct >= 100;
+
+    if ($('hud25d-inspector-metric')) {
+      $('hud25d-inspector-metric').textContent = inspHp <= 0
+        ? '已击杀'
+        : (sealedPct >= 100 ? '已封印' : ('HP ' + inspHp + ' · 封 ' + sealedPct + '%'));
+    }
+    if ($('hud25d-inspector-bar')) {
+      $('hud25d-inspector-bar').style.width = (inspDone ? 0 : clamp((inspHp / inspMaxHp) * 100, 0, 100)) + '%';
+    }
+    if ($('hud25d-obj-inspector')) $('hud25d-obj-inspector').classList.toggle('done', inspDone);
+
+    if ($('hud25d-clues-val')) {
+      $('hud25d-clues-val').textContent = (snapshot.cluesFoundCount || 0) + '/' + (snapshot.cluesTotal || 6);
+    }
+
+    var inspStatusEl = $('hud25d-inspector-status');
+    if (inspStatusEl) {
+      var stateLabels = {
+        patrol: '巡逻中',
+        investigate: '循声搜查',
+        chase: '追猎锁定!',
+        stunned: '僵直受制',
+        sealed: '已封印',
+        defeated: '已击杀'
+      };
+      var distTxt = isFinite(Number(insp.distToPlayer)) ? (Math.round(Number(insp.distToPlayer)) + 'm') : '--m';
+      inspStatusEl.textContent = inspDone
+        ? '检票员：已肃清'
+        : ('检票员：' + (stateLabels[insp.state] || insp.state || '巡逻中') + ' · ' + distTxt);
+      inspStatusEl.classList.toggle('danger', !inspDone && (insp.state === 'chase' || Number(insp.distToPlayer) <= 10));
+      inspStatusEl.classList.toggle('neutralized', inspDone);
+    }
+
+    // 3. Top-Right Exit badge + 2D Minimap + Squad strip
+    var exitReady = Boolean((snapshot.minimap && snapshot.minimap.exitReady) || ovPct >= 100);
+    var exitBadge = $('hud25d-exit-badge');
+    if (exitBadge) {
+      exitBadge.textContent = exitReady ? '0号站台可撤离' : '出口锁定';
+      exitBadge.classList.toggle('ready', exitReady);
+    }
+    renderMinimap25D(snapshot);
+    renderSquad25D(snapshot);
+
+    // 4. Bottom-Center Contextual [E] Interact, [Space] Bullet-Time & Skill Hotbar
+    var intPill = $('hud25d-interact-pill');
+    var intLbl = $('hud25d-interact-label');
+    var intProg = $('hud25d-interact-prog');
+    if (intPill) {
+      var near = snapshot.nearbyInteractable;
+      if (near && near.label) {
+        intPill.classList.remove('hidden');
+        if (intLbl) intLbl.textContent = near.label;
+        if (intProg) {
+          var prog = Number(near.progress || 0);
+          intProg.classList.toggle('hidden', !(prog > 0.01 && prog < 1));
+          if (prog > 0.01 && prog < 1) intProg.textContent = Math.round(prog * 100) + '%';
+        }
+      } else {
+        intPill.classList.add('hidden');
+      }
+    }
+
+    var slowActive = Boolean(snapshot.slowMo);
+    var slowPill = $('hud25d-slowmo-pill');
+    var slowLbl = $('hud25d-slowmo-label');
+    var slowFrame = $('exam-slowmo-frame');
+    if (slowPill) slowPill.classList.toggle('active', slowActive || uiState.radioFocused);
+    if (slowLbl) slowLbl.textContent = slowActive ? '子弹时间：开启' : (uiState.radioFocused ? '无线电缓速' : '子弹时间：关');
+    if (slowFrame) slowFrame.classList.toggle('hidden', !(slowActive || uiState.radioFocused));
+
+    renderHotbar25D(snapshot, st);
+
+    // 5. Dynamic audio threat level sync
+    var threatRounded = Math.round(Number(snapshot.threatLevel || 0) / 5) * 5;
+    if (threatRounded !== uiState.lastAudioThreat && INFINITY.Audio) {
+      uiState.lastAudioThreat = threatRounded;
+      if (typeof INFINITY.Audio.setThreatLevel === 'function') {
+        INFINITY.Audio.setThreatLevel(threatRounded);
+      }
+      if (typeof INFINITY.Audio.setScene === 'function') {
+        INFINITY.Audio.setScene(threatRounded >= 50 ? 'station_tense' : 'station_calm');
+      }
     }
   }
 
-  function handleMapNodeHover(nodeId) {
-    var info = $('map-hover-info');
-    if (!info) return;
-    if (!nodeId) {
-      info.innerHTML = '<span class="mono accent-cyan">TACTICAL LINK</span><span>悬停节点查看细目，点击相邻房间直接潜行移动。</span>';
-      return;
+  function handleWorld25DRadioEvent(entry) {
+    if (!entry) return;
+    if (entry.timeGlitch || (entry.type === 'broadcast' && entry.fake)) {
+      triggerClockGlitch();
+      playSfx('broadcast_static');
+    } else if (entry.type === 'broadcast') {
+      playSfx('broadcast_static');
+    } else if (entry.type === 'spark') {
+      playSfx('ui_tick');
     }
-    var scenario = getScenario();
-    var node = scenario && scenario.nodes && scenario.nodes[nodeId];
-    if (!node) return;
-    info.innerHTML = '<span class="mono accent-gold">' + esc(node.code || nodeId) + ' ' + esc(node.name) + '</span><span>' + esc(node.desc || '') + '</span>';
+    pushRadioEntry(entry);
   }
 
-  function handleMapNodeClick(nodeId) {
-    if (uiState.examBusy) return;
-    if (!INFINITY.Engine || typeof INFINITY.Engine.moveToNode !== 'function') return;
-    var res = INFINITY.Engine.moveToNode(nodeId);
-    if (res && res.ok === false) {
-      showToast(res.error || '该区域不与当前位置直接相连。', 'crimson');
-      playSfx('alert');
-    } else {
-      playSfx('footstep');
-      if (INFINITY.Canvas) INFINITY.Canvas.triggerPulse(nodeId, '#6fd8ea', 'MOVE');
+  function setRadioFocused(focused) {
+    uiState.radioFocused = Boolean(focused);
+    var panel = $('hud25d-radio-panel');
+    var modeEl = $('hud25d-radio-mode');
+    var slowFrame = $('exam-slowmo-frame');
+    if (panel) panel.classList.toggle('radio-active', uiState.radioFocused);
+    if (modeEl) modeEl.textContent = uiState.radioFocused ? '时间缓速 · Enter 发送 / Esc 返回' : '按 Enter 呼叫小队';
+    if (slowFrame && !(uiState.lastSnapshot && uiState.lastSnapshot.slowMo)) {
+      slowFrame.classList.toggle('hidden', !uiState.radioFocused);
     }
+    if (INFINITY.World25D && typeof INFINITY.World25D.setInputPaused === 'function') {
+      INFINITY.World25D.setInputPaused(uiState.radioFocused);
+    }
+  }
+
+  function applyLiveRadioRelationships(dialogues) {
+    var st = getStateSafe();
+    if (!st || !st.relationships || !Array.isArray(dialogues)) return;
+    var changed = false;
+    for (var i = 0; i < dialogues.length; i++) {
+      var d = dialogues[i];
+      if (!d || !d.npcId) continue;
+      var rel = st.relationships[d.npcId];
+      if (!rel) continue;
+      var td = Number(d.trustDelta) || 0;
+      var cd = Number(d.cautionDelta) || 0;
+      var bd = Number(d.bondDelta) || 0;
+      if (td || cd || bd) {
+        rel.trust = clamp((rel.trust != null ? rel.trust : 35) + td, 0, 100);
+        rel.caution = clamp((rel.caution != null ? rel.caution : 50) + cd, 0, 100);
+        rel.bond = clamp((rel.bond != null ? rel.bond : 15) + bd, 0, 100);
+        rel.interactions = (rel.interactions || 0) + 1;
+        changed = true;
+      }
+    }
+    if (changed && INFINITY.Engine && typeof INFINITY.Engine.save === 'function') {
+      INFINITY.Engine.save();
+    }
+  }
+
+  function submitLiveRadio(text) {
+    var clean = String(text || '').trim();
+    if (!clean || uiState.radioBusy) return;
+
+    playSfx('ui_tick');
+    uiState.radioBusy = true;
+    pushRadioEntry({ type: 'player', text: clean });
+
+    var thinking = $('hud25d-radio-thinking');
+    var sendBtn = $('hud25d-radio-send');
+    if (thinking) thinking.classList.remove('hidden');
+    if (sendBtn) sendBtn.disabled = true;
+
+    var st = getStateSafe();
+    var snap = (INFINITY.World25D && typeof INFINITY.World25D.getSnapshot === 'function' && INFINITY.World25D.getSnapshot()) || uiState.lastSnapshot || {};
+    var recent = uiState.radioLog.slice(-6).map(function (r) {
+      return { type: r.type, npcId: r.npcId || null, text: r.text };
+    });
+
+    var aiCall = (INFINITY.AI && typeof INFINITY.AI.handleLiveRadio === 'function')
+      ? INFINITY.AI.handleLiveRadio({
+          text: clean,
+          snapshot: snap,
+          player: getPlayer(st),
+          relationships: getRelMap(st),
+          recentRadio: recent
+        })
+      : Promise.resolve({
+          replyNpcId: 'yanci',
+          dialogues: [{ npcId: 'yanci', line: '“短波在线，收到。”', trustDelta: 1, cautionDelta: 0, bondDelta: 0 }],
+          squadOrders: []
+        });
+
+    Promise.resolve(aiCall).then(function (res) {
+      uiState.radioBusy = false;
+      if (thinking) thinking.classList.add('hidden');
+      if (sendBtn) sendBtn.disabled = false;
+      if (!res || uiState.currentScene !== 'exam') return;
+
+      if (res.narration) {
+        pushRadioEntry({ type: 'system', text: res.narration });
+      }
+
+      var bubbleMap = {};
+      if (Array.isArray(res.dialogues)) {
+        applyLiveRadioRelationships(res.dialogues);
+        for (var i = 0; i < res.dialogues.length; i++) {
+          var d = res.dialogues[i];
+          if (!d || !d.line) continue;
+          bubbleMap[d.npcId] = d.line;
+          pushRadioEntry({
+            type: 'dialogue',
+            npcId: d.npcId,
+            text: d.line,
+            trustDelta: d.trustDelta || 0,
+            cautionDelta: d.cautionDelta || 0,
+            bondDelta: d.bondDelta || 0
+          });
+          if (INFINITY.World25D && typeof INFINITY.World25D.showSpeechBubble === 'function') {
+            INFINITY.World25D.showSpeechBubble(d.npcId, d.line);
+          }
+        }
+      }
+
+      if (Array.isArray(res.squadOrders) && res.squadOrders.length > 0) {
+        var ordersPayload = res.squadOrders.map(function (o) {
+          return {
+            npcId: o.npcId,
+            order: o.order,
+            label: o.label,
+            bubble: bubbleMap[o.npcId] || undefined
+          };
+        });
+        if (INFINITY.World25D && typeof INFINITY.World25D.applySquadOrders === 'function') {
+          INFINITY.World25D.applySquadOrders(ordersPayload);
+        }
+        var cast = getCast();
+        var summary = ordersPayload.map(function (o) {
+          var cname = (cast[o.npcId] && cast[o.npcId].name) || o.npcId;
+          return cname + ' → ' + (o.label || o.order);
+        }).join(' · ');
+        pushRadioEntry({ type: 'order', text: '战术指令：' + summary });
+        playSfx('ui_tick');
+      }
+
+      if (res.sparkNote) {
+        pushRadioEntry({ type: 'spark', text: res.sparkNote });
+        if (st && st.exam && Array.isArray(st.exam.sparkNotes)) {
+          st.exam.sparkNotes.push(res.sparkNote);
+        }
+      }
+    }).catch(function () {
+      uiState.radioBusy = false;
+      if (thinking) thinking.classList.add('hidden');
+      if (sendBtn) sendBtn.disabled = false;
+      pushRadioEntry({ type: 'system', text: '短波杂音干扰，请重新呼叫。' });
+    });
+  }
+
+  function handleExam25DEnd(endingType, stats) {
+    if (uiState.examEnded) return;
+    uiState.examEnded = true;
+    unmountWorld25DIfNeeded();
+
+    var st = getStateSafe();
+    var snap = uiState.lastSnapshot || {};
+    var endStats = stats || {};
+
+    // Sync 2.5D discoveries & vitals back into deterministic Rule Engine state before settlement
+    if (st && st.player) {
+      if (endStats.hp != null || snap.hp != null) {
+        st.player.hp = clamp(Math.round(Number(endStats.hp != null ? endStats.hp : snap.hp)), 0, st.player.maxHp || 100);
+      }
+      if (endStats.energy != null || snap.energy != null) {
+        st.player.energy = clamp(Math.round(Number(endStats.energy != null ? endStats.energy : snap.energy)), 0, st.player.maxEnergy || 100);
+      }
+      if (endStats.sanity != null || snap.sanity != null) {
+        st.player.sanity = clamp(Math.round(Number(endStats.sanity != null ? endStats.sanity : snap.sanity)), 0, st.player.maxSanity || 100);
+      }
+    }
+    if (st && st.exam) {
+      var foundIds = Array.isArray(endStats.discoveredClueIds)
+        ? endStats.discoveredClueIds
+        : (Array.isArray(snap.discoveredClueIds) ? snap.discoveredClueIds : []);
+      if (foundIds.length) {
+        st.exam.cluesFound = foundIds.slice();
+      }
+    }
+
+    var mappedEnding = 'manual';
+    var customMeta = {
+      perfect_override: {
+        mapped: 'true_break',
+        title: '轨控改写 · 真破局撤离',
+        summary: '你与原创小队联动信号调度室与旧变电间完成了100%轨控改写，在零号列车第三次鸣笛前切出幽灵环线，全员从0号站台成功脱出！'
+      },
+      kill_inspector: {
+        mapped: 'true_break',
+        title: '斩断规则 · 肃清零号检票员',
+        summary: '你们正面击溃或彻底封印了无面规则体【零号检票员】，强行撕开了零号回廊的封闭闭环，以压倒性战绩结束本场死考！'
+      },
+      forced_board_survive: {
+        mapped: 'tactical_extract',
+        title: '强行登车 · 险象撤离',
+        summary: '未能在轨控改写完成前脱身，你在高压追猎下强行卡着门缝登车撤离，带回了部分站台情报并保住了性命。'
+      },
+      wipeout: {
+        mapped: 'fallen',
+        title: '体征归零 · 空间紧急拉回',
+        summary: '你在零号回廊的高烈度规则猎杀中力竭倒下，腕表触发紧急拉回程序并扣除了高额空间修复费。'
+      }
+    }[endingType] || null;
+
+    if (customMeta) {
+      mappedEnding = customMeta.mapped;
+    }
+
+    if (INFINITY.Engine && typeof INFINITY.Engine.extractFromScenario === 'function') {
+      INFINITY.Engine.extractFromScenario(mappedEnding);
+      var postState = getStateSafe();
+      if (postState && postState.lastSettlement && customMeta) {
+        postState.lastSettlement.endingType = endingType;
+        postState.lastSettlement.endingTitle = customMeta.title;
+        postState.lastSettlement.endingLabel = customMeta.title;
+        postState.lastSettlement.summary = customMeta.summary;
+        postState.lastSettlement.overridePct = Math.round(Number(endStats.overridePct != null ? endStats.overridePct : (snap.overridePct || 0)));
+        if (typeof INFINITY.Engine.save === 'function') {
+          INFINITY.Engine.save();
+        }
+      }
+    }
+
+    playSfx(endingType === 'wipeout' ? 'alert' : 'vortex_buy');
     renderAll(getStateSafe());
   }
 
-  function setExamThinking(busy, label) {
-    uiState.examBusy = busy;
-    var bar = $('exam-thinking-bar');
-    var txt = $('exam-thinking-text');
-    var btn = $('btn-exam-send');
-    if (bar) bar.classList.toggle('hidden', !busy);
-    if (txt && label) txt.textContent = label;
-    if (btn) btn.disabled = busy;
+  function mountExam25DScene(state) {
+    var viewport = $('exam-25d-viewport');
+    if (!viewport) return;
+
+    unmountWorld25DIfNeeded();
+    uiState.examEnded = false;
+    uiState.radioBusy = false;
+    uiState.radioFocused = false;
+    uiState.lastSnapshot = null;
+    uiState.hotbarSig = '';
+    uiState.lastAudioThreat = -1;
+    uiState.radioLog = [
+      {
+        type: 'system',
+        text: '已接入《零号回廊 · 停摆站台》2.5D 实景。WASD 移动，左键瞄准普攻，1-4 释放构筑技能，接近线索/控制台按 E，按 Enter 实时呼叫小队下令。'
+      }
+    ];
+    renderRadioLog25D();
+    setRadioFocused(false);
+
+    if (INFINITY.World25D && typeof INFINITY.World25D.mount === 'function') {
+      uiState.world25dMounted = true;
+      INFINITY.World25D.mount(viewport, state, {
+        onHudTick: handleWorld25DHudTick,
+        onRadioEvent: handleWorld25DRadioEvent,
+        onExamEnd: handleExam25DEnd
+      });
+      var initialSnap = typeof INFINITY.World25D.getSnapshot === 'function' ? INFINITY.World25D.getSnapshot() : null;
+      if (initialSnap) {
+        handleWorld25DHudTick(initialSnap);
+      }
+    } else {
+      pushRadioEntry({ type: 'system', text: '2.5D 实景引擎模块尚未就绪，请刷新重试。' });
+    }
   }
 
-  function submitExamAction(text) {
-    if (!text || uiState.examBusy) return;
-    if (!INFINITY.Engine || typeof INFINITY.Engine.submitFreeAction !== 'function') return;
-    playSfx('ui_tick');
-    setExamThinking(true, '导演与活体小队推演中…');
-
-    Promise.resolve(INFINITY.Engine.submitFreeAction(text))
-      .then(function (res) {
-        setExamThinking(false);
-        if (res && res.adjudication) {
-          var adj = res.adjudication;
-          if (adj.systemBroadcast) playSfx('broadcast_static');
-          if (adj.nodeEffect && INFINITY.Canvas) {
-            playSfx('ward_place');
-            INFINITY.Canvas.triggerPulse(adj.nodeEffect.nodeId, '#e8ba62', adj.nodeEffect.effect || 'FX');
-          }
-          if (adj.hpDelta && adj.hpDelta < 0 && INFINITY.Canvas) {
-            INFINITY.Canvas.triggerShake(8);
-          }
-        }
-        renderAll(getStateSafe());
-      })
-      .catch(function (err) {
-        setExamThinking(false);
-        showToast('行动裁决异常：' + (err && err.message ? err.message : '请重试'), 'crimson');
-        renderAll(getStateSafe());
-      });
+  function renderExamConsole(state) {
+    // 2.5D HUD is driven at ~10Hz via World25D onHudTick; ensure mount & keep hotbar ready
+    if (!uiState.world25dMounted) {
+      mountExam25DScene(state);
+    } else if (uiState.lastSnapshot) {
+      renderHotbar25D(uiState.lastSnapshot, state);
+    }
   }
 
   /* ===================== CRISIS REACTION WINDOW ===================== */
@@ -1266,8 +1846,10 @@
     if (!container) return;
     var s = state.lastSettlement || state.settlement || {};
     var grade = s.grade || 'B';
-    var earned = s.pointsAwarded != null ? s.pointsAwarded : (s.pointsEarned != null ? s.pointsEarned : (s.rewardPoints || 120));
-    var endingTitle = s.endingTitle || s.title || '《零号回廊 · 停摆站台》结算完成';
+    var earned = s.pointsReward != null
+      ? s.pointsReward
+      : (s.pointsAwarded != null ? s.pointsAwarded : (s.pointsEarned != null ? s.pointsEarned : (s.rewardPoints || 120)));
+    var endingTitle = s.endingTitle || s.endingLabel || s.title || '《零号回廊 · 停摆站台》结算完成';
     var summary = s.summary || s.epilogue || '你们在零号列车第三次鸣笛前改写了死局，活着回到了深红漩涡大厅。';
     var cluesTotal = s.cluesFoundCount != null ? s.cluesFoundCount : (s.cluesFound != null ? s.cluesFound : 0);
 
@@ -1307,6 +1889,17 @@
 
   /* ===================== MODALS: DEEPSEEK CONFIG & CLUES ===================== */
 
+  function isAnyModalOpen() {
+    var aiM = $('ai-config-modal');
+    var clM = $('clues-modal');
+    return Boolean((aiM && !aiM.classList.contains('hidden')) || (clM && !clM.classList.contains('hidden')));
+  }
+
+  function syncModalPause25D() {
+    if (uiState.currentScene !== 'exam' || !INFINITY.World25D || typeof INFINITY.World25D.setInputPaused !== 'function') return;
+    INFINITY.World25D.setInputPaused(isAnyModalOpen() || uiState.radioFocused);
+  }
+
   function openAiModal() {
     var modal = $('ai-config-modal');
     if (!modal) return;
@@ -1338,6 +1931,7 @@
     if ($('ai-test-result')) $('ai-test-result').classList.add('hidden');
 
     modal.classList.remove('hidden');
+    syncModalPause25D();
   }
 
   function openCluesModal() {
@@ -1346,13 +1940,15 @@
     if (!modal || !body) return;
     var state = getStateSafe();
     var exam = getExamObj(state);
-    var unlocked = Array.isArray(exam.cluesFound) ? exam.cluesFound : (Array.isArray(exam.unlockedClues) ? exam.unlockedClues : (Array.isArray(exam.clues) ? exam.clues : []));
+    var unlocked = (uiState.lastSnapshot && Array.isArray(uiState.lastSnapshot.discoveredClueIds))
+      ? uiState.lastSnapshot.discoveredClueIds
+      : (Array.isArray(exam.cluesFound) ? exam.cluesFound : (Array.isArray(exam.unlockedClues) ? exam.unlockedClues : (Array.isArray(exam.clues) ? exam.clues : [])));
     var scenario = getScenario();
     var allClues = (scenario && scenario.clues) || [];
 
     var matched = allClues.filter(function (c) { return unlocked.indexOf(c.id) !== -1; });
     if (!matched.length) {
-      body.innerHTML = '<div class="muted small">尚未破译任何关键线索。可在各节点执行「勘察节点」或结合侦察类装备自由行动。</div>';
+      body.innerHTML = '<div class="muted small">尚未破译任何关键线索。在 2.5D 站台中靠近发光物证并按 E 即可破译收集。</div>';
     } else {
       body.innerHTML = matched.map(function (c) {
         return (
@@ -1364,6 +1960,7 @@
       }).join('');
     }
     modal.classList.remove('hidden');
+    syncModalPause25D();
   }
 
   /* ===================== MASTER RENDER & EVENT WIRING ===================== */
@@ -1431,11 +2028,13 @@
       $('btn-reset').addEventListener('click', function () {
         if (!window.confirm('确认重置当前受试者进度与考场状态？（AI 密钥配置会保留）')) return;
         playSfx('alert');
+        unmountWorld25DIfNeeded();
         uiState.hallChats = {};
         uiState.sparringLog = [];
         uiState.fusionSlotA = null;
         uiState.fusionSlotB = null;
         uiState.lastFeedCount = 0;
+        uiState.radioLog = [];
         if (INFINITY.Engine && typeof INFINITY.Engine.reset === 'function') {
           INFINITY.Engine.reset();
         }
@@ -1571,32 +2170,23 @@
         return;
       }
 
-      // Exam Quick Chips
-      if (target.hasAttribute('data-quick-action')) {
-        if (uiState.examBusy) return;
-        var act = target.getAttribute('data-quick-action');
-        playSfx(act === 'ward' ? 'ward_place' : 'ui_tick');
-        if (INFINITY.Engine && typeof INFINITY.Engine.performQuickAction === 'function') {
-          setExamThinking(true, '执行战术动作中…');
-          Promise.resolve(INFINITY.Engine.performQuickAction(act)).then(function () {
-            setExamThinking(false);
-            renderAll(getStateSafe());
-          }).catch(function () {
-            setExamThinking(false);
-            renderAll(getStateSafe());
-          });
+      // 2.5D Hotbar skill cast (clickable)
+      if (target.hasAttribute('data-cast-slot')) {
+        var slotIdx = parseInt(target.getAttribute('data-cast-slot'), 10);
+        if (!isNaN(slotIdx) && INFINITY.World25D && typeof INFINITY.World25D.castSlot === 'function') {
+          INFINITY.World25D.castSlot(slotIdx);
         }
         return;
       }
 
-      // Exam Ability Deck click -> inject into input
-      if (target.hasAttribute('data-use-item-id')) {
-        playSfx('ui_tick');
-        var itemName = target.getAttribute('data-use-item-name');
-        var inp = $('exam-input');
-        if (inp) {
-          inp.value = (inp.value ? inp.value + ' ' : '') + '动用【' + itemName + '】';
-          inp.focus();
+      // Click squad row -> prefill radio callsign & slow-mo focus
+      if (target.hasAttribute('data-radio-target')) {
+        var npcName = target.getAttribute('data-radio-target');
+        var radioInp = $('hud25d-radio-input');
+        if (radioInp && npcName) {
+          radioInp.value = npcName + ' ';
+          radioInp.focus();
+          radioInp.setSelectionRange(radioInp.value.length, radioInp.value.length);
         }
         return;
       }
@@ -1622,31 +2212,90 @@
       }
     });
 
-    // Exam free-text form (Enter submits, Shift+Enter newline)
-    var examForm = $('exam-command-form');
-    var examInput = $('exam-input');
-    if (examInput) {
-      examInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
+    // 2.5D Contextual [E] Interact & [Space] Bullet-Time clickable pills
+    if ($('hud25d-interact-pill')) {
+      $('hud25d-interact-pill').addEventListener('click', function () {
+        if (INFINITY.World25D && typeof INFINITY.World25D.triggerInteract === 'function') {
+          INFINITY.World25D.triggerInteract();
+        }
+      });
+    }
+    if ($('hud25d-slowmo-pill')) {
+      $('hud25d-slowmo-pill').addEventListener('click', function () {
+        if (INFINITY.World25D && typeof INFINITY.World25D.toggleSlowMo === 'function') {
+          INFINITY.World25D.toggleSlowMo();
+        }
+      });
+    }
+
+    // 2.5D Live Radio focus/blur (slow-mo while typing) & submit
+    var radioForm = $('hud25d-radio-form');
+    var radioInput = $('hud25d-radio-input');
+    if (radioInput) {
+      radioInput.addEventListener('focus', function () {
+        if (uiState.currentScene === 'exam') {
+          setRadioFocused(true);
+        }
+      });
+      radioInput.addEventListener('blur', function () {
+        if (uiState.currentScene === 'exam') {
+          setRadioFocused(false);
+          syncModalPause25D();
+        }
+      });
+      radioInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
           e.preventDefault();
-          var text = examInput.value.trim();
-          if (text) {
-            examInput.value = '';
-            submitExamAction(text);
+          e.stopPropagation();
+          radioInput.blur();
+          setRadioFocused(false);
+        }
+      });
+    }
+    if (radioForm) {
+      radioForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var text = radioInput ? radioInput.value.trim() : '';
+        if (radioInput) {
+          radioInput.value = '';
+          radioInput.blur();
+        }
+        setRadioFocused(false);
+        if (text) {
+          submitLiveRadio(text);
+        }
+      });
+    }
+
+    // Global Enter / Escape shortcuts during 2.5D Exam
+    document.addEventListener('keydown', function (e) {
+      if (uiState.currentScene !== 'exam') return;
+
+      if (e.key === 'Escape') {
+        if ($('ai-config-modal') && !$('ai-config-modal').classList.contains('hidden')) {
+          $('ai-config-modal').classList.add('hidden');
+          syncModalPause25D();
+          return;
+        }
+        if ($('clues-modal') && !$('clues-modal').classList.contains('hidden')) {
+          $('clues-modal').classList.add('hidden');
+          syncModalPause25D();
+          return;
+        }
+      }
+
+      if (e.key === 'Enter' && !isAnyModalOpen()) {
+        var activeTag = document.activeElement && document.activeElement.tagName;
+        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA' && activeTag !== 'SELECT') {
+          var inp = $('hud25d-radio-input');
+          if (inp) {
+            e.preventDefault();
+            inp.focus();
+            setRadioFocused(true);
           }
         }
-      });
-    }
-    if (examForm) {
-      examForm.addEventListener('submit', function (e) {
-        e.preventDefault();
-        var text = examInput ? examInput.value.trim() : '';
-        if (text) {
-          examInput.value = '';
-          submitExamAction(text);
-        }
-      });
-    }
+      }
+    });
 
     // Crisis custom counter form
     if ($('crisis-custom-form')) {
@@ -1666,16 +2315,34 @@
     if ($('btn-close-clues')) {
       $('btn-close-clues').addEventListener('click', function () {
         if ($('clues-modal')) $('clues-modal').classList.add('hidden');
+        syncModalPause25D();
       });
     }
     if ($('btn-extract-exam')) {
       $('btn-extract-exam').addEventListener('click', function () {
-        if (!window.confirm('确认现在触发撤离并进行本场考场结算？')) return;
-        playSfx('vortex_buy');
-        if (INFINITY.Engine && typeof INFINITY.Engine.extractFromScenario === 'function') {
-          INFINITY.Engine.extractFromScenario('manual');
+        if (INFINITY.World25D && typeof INFINITY.World25D.setInputPaused === 'function') {
+          INFINITY.World25D.setInputPaused(true);
         }
-        renderAll(getStateSafe());
+        var confirmed = window.confirm('确认现在触发撤离并进行本场考场结算？');
+        if (!confirmed) {
+          syncModalPause25D();
+          return;
+        }
+        var snap = uiState.lastSnapshot || {};
+        var insp = snap.inspector || {};
+        var ending = 'forced_board_survive';
+        if (Number(snap.overridePct || 0) >= 100) {
+          ending = 'perfect_override';
+        } else if (Number(insp.hp) <= 0 || Number(insp.sealedPct) >= 100) {
+          ending = 'kill_inspector';
+        }
+        handleExam25DEnd(ending, {
+          hp: snap.hp,
+          energy: snap.energy,
+          sanity: snap.sanity,
+          overridePct: snap.overridePct,
+          discoveredClueIds: snap.discoveredClueIds
+        });
       });
     }
 
@@ -1684,6 +2351,7 @@
     if ($('btn-close-ai-modal')) {
       $('btn-close-ai-modal').addEventListener('click', function () {
         if ($('ai-config-modal')) $('ai-config-modal').classList.add('hidden');
+        syncModalPause25D();
       });
     }
     if ($('btn-toggle-key-vis')) {
@@ -1720,6 +2388,7 @@
         });
         renderAiStatusPill();
         if ($('ai-config-modal')) $('ai-config-modal').classList.add('hidden');
+        syncModalPause25D();
         showToast('AI 导演配置已保存至本机 localStorage。', 'emerald');
       });
     }
