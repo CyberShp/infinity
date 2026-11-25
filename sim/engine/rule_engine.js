@@ -1301,6 +1301,7 @@
       sound: 10,
       threat: 15,
       cluesFound: [],
+      overrideProgress: 0,
       rulesVerified: [],
       falseBroadcastsSeen: 0,
       crisisSurvived: 0,
@@ -1643,12 +1644,49 @@
       );
       safeAudio('playSfx', 'ui_tick');
       safeCanvas('triggerPulse', state.exam.enemy.nodeId, '#e07a5f', '敌情锁定');
-    } else if (act === 'hide' || act === 'suppress') {
+    } else if (act === 'hide' || act === 'suppress' || act === 'stealth') {
       state.exam.sound = clampInt(state.exam.sound - 16, 0, 100);
       state.exam.threat = clampInt(state.exam.threat - 8, 0, 100);
       state.player.energy = clampInt(state.player.energy + 10, 0, state.player.maxEnergy);
-      pushExamLog('narration', '敛息静默', '你贴近承重柱阴影调整呼吸，压低一切能量外泄（声响 -16，威胁 -8，能量 +10）。');
+      pushExamLog('narration', '屏息潜行', '你贴近承重柱阴影调整呼吸，压低一切能量外泄（声响 -16，威胁 -8，能量 +10）。');
       safeAudio('playSfx', 'ui_tick');
+    } else if (act === 'decode_broadcast' || act === 'expose_broadcast') {
+      var hasFreqClue = state.exam.cluesFound.indexOf('clue_broadcast_freq') >= 0;
+      state.exam.falseBroadcastsSeen = (state.exam.falseBroadcastsSeen || 0) + 1;
+      state.exam.threat = clampInt(state.exam.threat - (hasFreqClue ? 12 : 6), 0, 100);
+      state.player.sanity = clampInt(state.player.sanity + 6, 0, state.player.maxSanity);
+      if (!hasFreqClue && normClues.byId.clue_broadcast_freq) {
+        state.exam.cluesFound.push('clue_broadcast_freq');
+      }
+      pushExamLog(
+        'broadcast',
+        '频段比对 · 拆解假播报',
+        '你将腕表基准时钟与站台广播声纹做了 0.3 秒延迟比对：确认进站提示混杂 43.2Hz 拟态载波，属于异常体诱导登车的伪造口播！全队认知抗性提升（威胁下降，理智 +6）。'
+      );
+      safeAudio('playSfx', 'broadcast_static');
+    } else if (act === 'override_track' || act === 'override') {
+      var canOverrideHere = !!(curNode && curNode.canOverrideTrack) || curId === 'dispatch' || curId === 'substation' || curId === 'control_booth';
+      if (!canOverrideHere) {
+        pushExamLog(
+          'narration',
+          '轨控接入失败 · ' + (curNode ? curNode.name : curId),
+          '当前区域没有道岔或供电接口。需前往「信号调度室」或「旧变电间」改写零号轨道极性（当前改写进度 ' + (state.exam.overrideProgress || 0) + '%）。'
+        );
+        safeAudio('playSfx', 'alert');
+      } else {
+        var boost = findOwnedByRoleOrTag(['recon'], ['黑客', '破解', '算力', '机关', '阵']) ? 50 : 35;
+        state.exam.overrideProgress = clampInt((state.exam.overrideProgress || 0) + boost, 0, 100);
+        state.exam.sound = clampInt(state.exam.sound + 12, 0, 100);
+        state.exam.threat = clampInt(state.exam.threat + 8, 0, 100);
+        pushExamLog(
+          'action',
+          '轨控改写 · ' + state.exam.overrideProgress + '%',
+          state.exam.overrideProgress >= 100
+            ? '信号继电器发出清脆合闸声！零号回廊循环轨道已被强行反接至逃生侧线——现在前往「0号站台铁轨」或点击上方撤离即可完美破局！'
+            : '你切入「' + (curNode ? curNode.name : curId) + '」手动总线，强行反写道岔极性（进度推进至 ' + state.exam.overrideProgress + '%，注意声响上升）。'
+        );
+        safeAudio('playSfx', 'ward_place');
+      }
     } else if (act === 'consult' || act === 'comms') {
       var cast = getCast();
       var nearbyNpc = null;

@@ -104,18 +104,26 @@
     shakeIntensity = 0;
   }
 
-  function syncSize() {
+  var lastDrawNow = 0;
+
+  function syncSize(forceDraw) {
     if (!currentCanvas) return;
     var rect = currentCanvas.getBoundingClientRect();
     if (rect.width < 10 || rect.height < 10) return;
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    width = rect.width;
-    height = rect.height;
-    var targetW = Math.round(width * dpr);
-    var targetH = Math.round(height * dpr);
-    if (currentCanvas.width !== targetW || currentCanvas.height !== targetH) {
+    var nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+    var targetW = Math.round(rect.width * nextDpr);
+    var targetH = Math.round(rect.height * nextDpr);
+    if (Math.abs(currentCanvas.width - targetW) >= 2 || Math.abs(currentCanvas.height - targetH) >= 2 || !width || !height) {
+      dpr = nextDpr;
+      width = rect.width;
+      height = rect.height;
       currentCanvas.width = targetW;
       currentCanvas.height = targetH;
+      if (forceDraw && currentCtx) {
+        var t = (performance.now() - startTime) * 0.001;
+        if (currentMode === 'vortex') renderHallVortex(t);
+        else if (currentMode === 'tactical') renderTacticalMap(t);
+      }
     }
   }
 
@@ -822,13 +830,16 @@
 
   function loop(now) {
     if (!currentCanvas || !currentCtx) return;
-    syncSize();
-    if (width > 10 && height > 10) {
-      var t = (now - startTime) * 0.001;
-      if (currentMode === 'vortex') {
-        renderHallVortex(t);
-      } else if (currentMode === 'tactical') {
-        renderTacticalMap(t);
+    var minInterval = currentMode === 'vortex' ? 33 : 20;
+    if (now - lastDrawNow >= minInterval) {
+      lastDrawNow = now;
+      if (width > 10 && height > 10) {
+        var t = (now - startTime) * 0.001;
+        if (currentMode === 'vortex') {
+          renderHallVortex(t);
+        } else if (currentMode === 'tactical') {
+          renderTacticalMap(t);
+        }
       }
     }
     rafId = requestAnimationFrame(loop);
@@ -838,16 +849,18 @@
     cleanup();
     if (!canvasEl) return;
     currentCanvas = canvasEl;
-    currentCtx = canvasEl.getContext('2d');
+    currentCtx = canvasEl.getContext('2d', { alpha: false }) || canvasEl.getContext('2d');
     currentMode = mode;
     startTime = performance.now();
+    lastDrawNow = 0;
 
-    syncSize();
+    syncSize(true);
+    var onResize = function () { syncSize(true); };
     if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(syncSize);
+      resizeObserver = new ResizeObserver(onResize);
       resizeObserver.observe(canvasEl);
     } else {
-      addListener(window, 'resize', syncSize);
+      addListener(window, 'resize', onResize);
     }
 
     rafId = requestAnimationFrame(loop);

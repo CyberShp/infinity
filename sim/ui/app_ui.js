@@ -20,6 +20,7 @@
     },
     shopPage: 1,
     shopPageSize: 24,
+    pendingPresetId: null,
     fusionSlotA: null,
     fusionSlotB: null,
     selectedNpcId: 'yanci',
@@ -37,25 +38,22 @@
 
   var STARTER_PRESETS = [
     {
-      id: 'sword_array',
-      label: '剑阵控防起手',
-      desc: '低耗控场 + 空间预警',
-      preferIds: ['B002', 'C001', 'C008', 'G011'],
-      fallbackTags: ['剑修', '阵法', '控场', '防具']
+      id: 'sword_guard',
+      label: '剑意控防流 (148分)',
+      desc: '先天剑骨雏形 + 宵练剑意 + 青铜古法剑 + 画地界 + 抗声模因耳塞 + 治疗喷雾',
+      preferIds: ['B026', 'C001', 'C002', 'C005', 'A008', 'G001']
     },
     {
       id: 'cyber_recon',
-      label: '赛博侦察起手',
-      desc: '声纹探测 + 机动突围',
-      preferIds: ['B001', 'T004', 'T008', 'T017'],
-      fallbackTags: ['侦察', '科技', '机动', '电磁']
+      label: '赛博侦察流 (148分)',
+      desc: '军用赛博神经底盘 + PKE监测仪 + 门禁破解器 + 电磁脉冲手雷 + 战术闪光弹 + 急救包',
+      preferIds: ['B041', 'T004', 'T008', 'T015', 'T010', 'G001']
     },
     {
-      id: 'anomaly_rule',
-      label: '规则抗异起手',
-      desc: '抗模因 + 假播报拆解',
-      preferIds: ['B009', 'A001', 'M021', 'G001'],
-      fallbackTags: ['抗模因', '规则', '灵异', '医疗']
+      id: 'occult_control',
+      label: '规则抗异流 (143分)',
+      desc: '道门守心体 + 观察者（可融双C或换防具）+ 抗声模因耳塞 + 灵异控场件',
+      preferIds: ['B027', 'B023', 'A008', 'A005', 'G001']
     }
   ];
 
@@ -158,7 +156,7 @@
   }
 
   function getOwnedEntries(player) {
-    var raw = player.ownedItems || player.inventory || player.items || [];
+    var raw = player.loadout || player.ownedItems || player.inventory || player.items || [];
     var catMap = getCatalogMap();
     return raw.map(function (entry) {
       if (typeof entry === 'string') {
@@ -337,7 +335,7 @@
   function renderLoadoutRail(state) {
     var p = getPlayer(state);
     var owned = getOwnedEntries(p);
-    var stats = p.stats || { phy: 10, agi: 10, obs: 10, wil: 10 };
+    var stats = p.derivedStats || p.stats || { phy: 10, agi: 10, obs: 10, wil: 10 };
 
     if ($('rail-item-count')) $('rail-item-count').textContent = owned.length + ' 项武装';
     if ($('shop-total-badge')) $('shop-total-badge').textContent = String(getCatalog().length || 500);
@@ -440,8 +438,31 @@
     var pageItems = items.slice(start, start + uiState.shopPageSize);
 
     var presetsHtml = STARTER_PRESETS.map(function (pr) {
-      return '<button class="preset-build-btn" type="button" data-preset-build="' + pr.id + '" title="' + esc(pr.desc) + '">' + esc(pr.label) + '</button>';
+      var activeCls = uiState.pendingPresetId === pr.id ? ' active' : '';
+      return '<button class="preset-build-btn' + activeCls + '" type="button" data-preset-build="' + pr.id + '" title="' + esc(pr.desc) + '">' + esc(pr.label) + '</button>';
     }).join('');
+    var presetConfirmHtml = '';
+    if (uiState.pendingPresetId) {
+      var pendingPr = STARTER_PRESETS.filter(function (x) { return x.id === uiState.pendingPresetId; })[0];
+      if (pendingPr) {
+        var catMap = getCatalogMap();
+        var itemListText = pendingPr.preferIds.map(function (id) {
+          var it = catMap[id];
+          return it ? (it.name + '(' + it.price + ')') : id;
+        }).join(' + ');
+        presetConfirmHtml =
+          '<div class="preset-confirm-bar">' +
+            '<div class="preset-confirm-info">' +
+              '<div><strong class="accent-gold">预览构筑：' + esc(pendingPr.label) + '</strong> <span class="small muted">（将自动全额退还本轮已选备战装备并购入以下整套）</span></div>' +
+              '<div class="small" style="color:var(--text-secondary);">' + esc(itemListText) + '</div>' +
+            '</div>' +
+            '<div class="preset-confirm-actions">' +
+              '<button class="cta-crimson compact" type="button" data-preset-confirm="' + esc(pendingPr.id) + '">确认套用构筑</button>' +
+              '<button class="ghost-btn" type="button" data-preset-cancel="1">取消</button>' +
+            '</div>' +
+          '</div>';
+      }
+    }
 
     var catOptions = Object.keys(CATEGORY_LABELS).map(function (k) {
       return '<option value="' + k + '"' + (uiState.shopFilters.category === k ? ' selected' : '') + '>' + CATEGORY_LABELS[k] + '</option>';
@@ -503,6 +524,7 @@
           '<span class="shop-presets-label">快速起手构筑：</span>' +
           presetsHtml +
         '</div>' +
+        presetConfirmHtml +
         '<div class="shop-filter-row">' +
           '<input id="shop-search-input" class="shop-search" type="search" placeholder="检索 500 项血统 / 功法 / 阵牌 / 军械 / 规则道具（名称、标签、编号）…" value="' + esc(uiState.shopFilters.q) + '">' +
           '<select id="shop-cat-select" class="shop-select">' + catOptions + '</select>' +
@@ -568,29 +590,37 @@
   }
 
   function applyStarterPreset(presetId) {
-    if (!INFINITY.Engine || typeof INFINITY.Engine.buyItem !== 'function') return;
     var preset = STARTER_PRESETS.filter(function (x) { return x.id === presetId; })[0];
     if (!preset) return;
+    uiState.pendingPresetId = null;
 
+    if (INFINITY.Engine && typeof INFINITY.Engine.applyPresetBuild === 'function') {
+      var res = INFINITY.Engine.applyPresetBuild(presetId);
+      if (res && res.ok) {
+        playSfx('vortex_buy');
+        var count = (res.bought && res.bought.length) || 0;
+        showToast('已套用「' + preset.label + '」，右侧构筑栏已入库 ' + count + ' 项武装（花费 ' + (res.totalSpent || 0) + ' 积分）。', 'emerald');
+        renderAll(getStateSafe());
+        return;
+      }
+    }
+
+    if (!INFINITY.Engine || typeof INFINITY.Engine.buyItem !== 'function') return;
     var catMap = getCatalogMap();
-    var state = getStateSafe();
     var bought = 0;
-
     for (var i = 0; i < preset.preferIds.length; i++) {
       var id = preset.preferIds[i];
       var item = catMap[id];
       if (!item) continue;
-      state = getStateSafe();
-      var p = getPlayer(state);
+      var p = getPlayer(getStateSafe());
       if (hasOwnedId(p, id)) continue;
       var useDisc = (p.points || 0) < item.price && item.discountable;
-      var res = INFINITY.Engine.buyItem(id, useDisc);
-      if (res && res.ok !== false) bought++;
+      var r = INFINITY.Engine.buyItem(id, useDisc);
+      if (r && r.ok !== false) bought++;
     }
-
     if (bought > 0) {
       playSfx('vortex_buy');
-      showToast('已套用「' + preset.label + '」，入库 ' + bought + ' 项装备。', 'emerald');
+      showToast('已套用「' + preset.label + '」，入库 ' + bought + ' 项武装。', 'emerald');
     } else {
       showToast('积分不足或该构筑核心组件已装备。', 'crimson');
     }
@@ -638,13 +668,17 @@
             '<button id="btn-execute-fusion" class="cta-crimson compact" type="button">消耗 ' + (curated.extraCost || 30) + ' 积分执行融合</button>' +
           '</div>';
       } else {
-        var estCost = Math.max(25, Math.round(((itemA.price || 20) + (itemB.price || 20)) * 0.45));
+        var tierCosts = { D: 30, C: 90, B: 270, A: 500 };
+        var sameTier = itemA.tier === itemB.tier;
+        var estCost = tierCosts[itemA.tier] || 30;
         previewHtml =
           '<div class="fusion-preview-card">' +
-            '<p class="eyebrow">PROCEDURAL FUSION // 自由跨体系拼合</p>' +
+            '<p class="eyebrow">PROCEDURAL FUSION // 自由同阶跨体系拼合</p>' +
             '<h4>' + esc(itemA.name) + ' × ' + esc(itemB.name) + '</h4>' +
-            '<p class="item-desc" style="margin:6px 0;">未命中固定秘方，将通过主神基因熔炉生成同阶复合血统（保留双体系特性并附带可控排异代价）。</p>' +
-            '<button id="btn-execute-fusion" class="cta-crimson compact" type="button">预计消耗 ' + estCost + ' 积分执行融合</button>' +
+            (sameTier
+              ? '<p class="item-desc" style="margin:6px 0;">未命中固定秘方，将通过主神基因熔炉合成高一阶定制复合血统（D+D→C需30分，C+C→B需90分）。</p>' +
+                '<button id="btn-execute-fusion" class="cta-crimson compact" type="button">消耗 ' + estCost + ' 积分执行动态融合</button>'
+              : '<p class="small accent-crimson" style="margin:6px 0;">动态融合要求两项血统为同一评级（当前为 ' + esc(itemA.tier) + ' 级与 ' + esc(itemB.tier) + ' 级）。请再购入同级血统或凑齐右侧秘传配方。</p>') +
           '</div>';
       }
     } else {
@@ -737,15 +771,24 @@
       uiState.selectedNpcId = castIds[0];
     }
 
-    var worldFeed = state.worldFeed || INFINITY.WORLD_FEED || [];
-    var visibleFeed = worldFeed.slice(0, Math.max(4, state.worldFeedIndex || 6));
+    var baseFeed = Array.isArray(INFINITY.WORLD_FEED) ? INFINITY.WORLD_FEED : [];
+    var visibleFeed = [];
+    if (Array.isArray(state.worldFeed)) {
+      visibleFeed = state.worldFeed.slice(0, Math.max(4, state.worldFeedIndex || 6));
+    } else if (state.worldFeed && typeof state.worldFeed === 'object') {
+      var custom = Array.isArray(state.worldFeed.customBulletins) ? state.worldFeed.customBulletins : [];
+      var count = Math.max(4, Number(state.worldFeed.unlockedCount) || 6);
+      visibleFeed = custom.concat(baseFeed.slice(0, count));
+    } else {
+      visibleFeed = baseFeed.slice(0, 6);
+    }
 
     var radarHtml = visibleFeed.map(function (ev) {
       return (
         '<div class="radar-card">' +
-          '<div class="radar-card-head"><span>' + esc(ev.source || '空间广播') + '</span><span class="accent-gold">' + esc(ev.tag || '动态') + '</span></div>' +
-          '<h4>' + esc(ev.title) + '</h4>' +
-          '<p>' + esc(ev.body) + '</p>' +
+          '<div class="radar-card-head"><span>' + esc(ev.source || ev.channel || '空间暗流') + '</span><span class="accent-gold">' + esc(ev.tag || ev.time || '动态') + '</span></div>' +
+          '<h4>' + esc(ev.title || '死考世界动态') + '</h4>' +
+          '<p>' + esc(ev.body || ev.text || ev.summary || '') + '</p>' +
         '</div>'
       );
     }).join('');
@@ -818,6 +861,11 @@
             '</div>' +
           '</div>' +
           '<div id="hall-chat-log" class="hall-chat-log">' + chatHtml + '</div>' +
+          '<div class="hall-chat-prompts">' +
+            '<button class="hall-prompt-chip" type="button" data-hall-prompt="我刚换完这一轮装备，你怎么评价我这套构筑的短板？">点评我的当前构筑</button>' +
+            '<button class="hall-prompt-chip" type="button" data-hall-prompt="下一场考场你打算怎么打？有没有需要我兜底的环节？">试探下场战术分工</button>' +
+            '<button class="hall-prompt-chip" type="button" data-hall-prompt="听说最近空间里其他队伍出了不少变故，你知道内情吗？">打听平行队伍暗流</button>' +
+          '</div>' +
           '<form id="hall-chat-form" class="hall-chat-form">' +
             '<input id="hall-chat-input" type="text" placeholder="向 ' + esc(npc.name) + ' 自由发言、试探情报或约定战术分工…"' + (uiState.hallChatBusy ? ' disabled' : '') + '>' +
             '<button class="cta-crimson compact" type="submit"' + (uiState.hallChatBusy ? ' disabled' : '') + '>' + (uiState.hallChatBusy ? '推演中…' : '交谈') + '</button>' +
@@ -929,16 +977,22 @@
     var currentNodeId = exam.currentNode || exam.playerNode || (scenario && scenario.startNode) || 'concourse';
     var currentNode = nodes[currentNodeId] || { name: '零号回廊', code: 'Z-01' };
 
-    var minsLeft = exam.timeRemainingMin != null ? exam.timeRemainingMin : (exam.minutesLeft != null ? exam.minutesLeft : 90);
-    var trainCycle = exam.nextTrainMin != null ? exam.nextTrainMin : (minsLeft % 15 || 15);
+    var minsLeft = exam.timeRemainingMin != null
+      ? exam.timeRemainingMin
+      : (exam.minutesLeft != null ? exam.minutesLeft : Math.max(0, 90 - (Number(exam.turn) || 0) * 4));
+    var trainCycle = exam.nextTrainMin != null
+      ? exam.nextTrainMin
+      : (exam.trainCountdown != null ? exam.trainCountdown * 3 : (minsLeft % 15 || 15));
     var overridePct = Number(exam.overrideProgress != null ? exam.overrideProgress : (exam.trackOverride || 0)) || 0;
-    var clues = Array.isArray(exam.unlockedClues) ? exam.unlockedClues : (Array.isArray(exam.clues) ? exam.clues : []);
+    var clues = Array.isArray(exam.cluesFound)
+      ? exam.cluesFound
+      : (Array.isArray(exam.unlockedClues) ? exam.unlockedClues : (Array.isArray(exam.clues) ? exam.clues : []));
     var threat = clamp(Number(exam.threat != null ? exam.threat : 15) || 0, 0, 100);
     var sound = clamp(Number(exam.sound != null ? exam.sound : 10) || 0, 0, 100);
 
     if ($('exam-countdown')) $('exam-countdown').textContent = Math.max(0, Math.round(minsLeft)) + 'm (下班 ' + Math.max(0, Math.round(trainCycle)) + 'm)';
     if ($('exam-override')) $('exam-override').textContent = Math.round(overridePct) + '%';
-    if ($('exam-clues')) $('exam-clues').textContent = clues.length + ' / ' + ((scenario && scenario.clues && scenario.clues.length) || 7);
+    if ($('exam-clues')) $('exam-clues').textContent = clues.length + ' / ' + ((scenario && scenario.clues && scenario.clues.length) || 8);
 
     if ($('bar-threat')) $('bar-threat').style.width = threat + '%';
     if ($('val-threat')) $('val-threat').textContent = Math.round(threat);
@@ -1292,7 +1346,7 @@
     if (!modal || !body) return;
     var state = getStateSafe();
     var exam = getExamObj(state);
-    var unlocked = Array.isArray(exam.unlockedClues) ? exam.unlockedClues : (Array.isArray(exam.clues) ? exam.clues : []);
+    var unlocked = Array.isArray(exam.cluesFound) ? exam.cluesFound : (Array.isArray(exam.unlockedClues) ? exam.unlockedClues : (Array.isArray(exam.clues) ? exam.clues : []));
     var scenario = getScenario();
     var allClues = (scenario && scenario.clues) || [];
 
@@ -1450,9 +1504,29 @@
         return;
       }
 
-      // Starter preset
+      // Starter preset preview toggle (never stealth-spend!)
       if (target.hasAttribute('data-preset-build')) {
-        applyStarterPreset(target.getAttribute('data-preset-build'));
+        playSfx('ui_tick');
+        var pid = target.getAttribute('data-preset-build');
+        uiState.pendingPresetId = uiState.pendingPresetId === pid ? null : pid;
+        renderHallWorkspace(getStateSafe());
+        return;
+      }
+      if (target.hasAttribute('data-preset-confirm')) {
+        applyStarterPreset(target.getAttribute('data-preset-confirm'));
+        return;
+      }
+      if (target.hasAttribute('data-preset-cancel')) {
+        playSfx('ui_tick');
+        uiState.pendingPresetId = null;
+        renderHallWorkspace(getStateSafe());
+        return;
+      }
+      if (target.hasAttribute('data-hall-prompt')) {
+        var promptText = target.getAttribute('data-hall-prompt');
+        if (promptText && !uiState.hallChatBusy) {
+          submitHallChat(uiState.selectedNpcId, promptText);
+        }
         return;
       }
 
@@ -1491,7 +1565,7 @@
         var sres = INFINITY.Engine && typeof INFINITY.Engine.runSparringTest === 'function'
           ? INFINITY.Engine.runSparringTest(sid)
           : { summary: '靶场测试完成，灵力与体能输出曲线稳定。' };
-        var msg = (sres && (sres.summary || sres.report || sres.text)) || '靶场实测完成。';
+        var msg = (sres && ((sres.result && sres.result.summary) || sres.summary || sres.report || sres.text)) || '靶场实测完成。';
         uiState.sparringLog.unshift(msg);
         renderHallWorkspace(getStateSafe());
         return;
