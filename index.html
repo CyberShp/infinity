@@ -5,21 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>无限·活体考场终端 // 零号回廊</title>
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="sim/sim.css?v=3">
+  <link rel="stylesheet" href="sim/sim.css?v=4">
   <!-- Strict load order per sim/world25d/CONTRACT_25D.md (classic defer scripts, zero ES-module CORS issues) -->
-  <script defer src="sim/vendor/three.min.js?v=3"></script>
-  <script defer src="sim/data/shop_catalog.js?v=3"></script>
-  <script defer src="sim/data/world_cast.js?v=3"></script>
-  <script defer src="sim/data/scenario_station_zero.js?v=3"></script>
-  <script defer src="sim/engine/rule_engine.js?v=3"></script>
-  <script defer src="sim/engine/ai_director.js?v=3"></script>
-  <script defer src="sim/engine/audio_engine.js?v=3"></script>
-  <script defer src="sim/world25d/pixel_sprites.js?v=3"></script>
-  <script defer src="sim/world25d/station_map.js?v=3"></script>
-  <script defer src="sim/world25d/skill_archetypes.js?v=3"></script>
-  <script defer src="sim/world25d/engine_25d.js?v=3"></script>
-  <script defer src="sim/ui/tactical_canvas.js?v=3"></script>
-  <script defer src="sim/ui/app_ui.js?v=3"></script>
+  <script defer src="sim/vendor/three.min.js?v=4"></script>
+  <script defer src="sim/data/shop_catalog.js?v=4"></script>
+  <script defer src="sim/data/world_cast.js?v=4"></script>
+  <script defer src="sim/data/scenario_station_zero.js?v=4"></script>
+  <script defer src="sim/engine/rule_engine.js?v=4"></script>
+  <script defer src="sim/engine/ai_director.js?v=4"></script>
+  <script defer src="sim/engine/audio_engine.js?v=4"></script>
+  <script defer src="sim/data/asset_manifest.js?v=4"></script>
+  <script defer src="sim/world25d/pixel_sprites.js?v=4"></script>
+  <script defer src="sim/world25d/station_map.js?v=4"></script>
+  <script defer src="sim/world25d/skill_archetypes.js?v=4"></script>
+  <script defer src="sim/world25d/engine_25d.js?v=4"></script>
+  <script defer src="sim/ui/tactical_canvas.js?v=4"></script>
+  <script defer src="sim/ui/app_ui.js?v=4"></script>
 </head>
 <body data-scene="hall">
   <!-- Top Wristwatch Telemetry Bar -->
@@ -66,6 +67,7 @@
         <button id="btn-audio-toggle" class="icon-btn" type="button" title="静音 / 开启环境音" aria-pressed="false">♪</button>
         <input id="audio-volume" class="vol-slider" type="range" min="0" max="1" step="0.05" value="0.65" aria-label="音量">
       </div>
+      <button id="btn-fx-toggle" class="hud-btn fx-toggle-btn active mono" type="button" title="切换 2.5D 霓虹泛光与后期特效 (Bloom / PostFX)" aria-pressed="true">FX: 开</button>
       <button id="btn-save" class="hud-btn" type="button" title="写入本地存档">存档</button>
       <button id="btn-reset" class="hud-btn danger" type="button" title="重置模拟进度">重置</button>
     </div>
@@ -222,6 +224,23 @@
               <span>加密短波 // LIVE RADIO</span>
             </span>
             <span id="hud25d-radio-mode" class="mono hud25d-radio-hint">按 Enter 呼叫小队</span>
+          </div>
+          <div id="hud25d-speaker-bar" class="hud25d-speaker-bar" data-speaker="yanci">
+            <div id="hud25d-speaker-frame" class="crt-portrait-frame">
+              <img id="hud25d-speaker-img" class="crt-portrait-img" alt="严辞" />
+              <span id="hud25d-speaker-fallback" class="crt-portrait-fallback" aria-hidden="true">严</span>
+              <div class="crt-scanlines" aria-hidden="true"></div>
+            </div>
+            <div class="hud25d-speaker-info">
+              <div class="hud25d-speaker-row">
+                <strong id="hud25d-speaker-name" class="hud25d-speaker-name">严辞</strong>
+                <span id="hud25d-speaker-signal" class="hud25d-speaker-signal mono">
+                  <span id="hud25d-speaker-led" class="crt-signal-led"></span>
+                  <span id="hud25d-speaker-signal-text">CH-01 · 加密待命</span>
+                </span>
+              </div>
+              <div id="hud25d-speaker-meta" class="hud25d-speaker-meta mono">CN-10284 · 执棋队长 · 律法破局</div>
+            </div>
           </div>
           <div id="hud25d-radio-log" class="hud25d-radio-log" aria-live="polite">
             <!-- Live radio, broadcasts, sparks, squad orders -->

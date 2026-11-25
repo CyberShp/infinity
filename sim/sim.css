@@ -470,6 +470,25 @@ button {
   color: #ffc5bd;
 }
 
+.fx-toggle-btn {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 5px 9px;
+}
+
+.fx-toggle-btn.active {
+  border-color: rgba(111, 216, 234, 0.45);
+  background: rgba(111, 216, 234, 0.12);
+  color: var(--cyan);
+  box-shadow: inset 0 0 10px rgba(111, 216, 234, 0.14);
+}
+
+.fx-toggle-btn.active:hover {
+  border-color: rgba(111, 216, 234, 0.72);
+  background: rgba(111, 216, 234, 0.2);
+  color: #cbf6ff;
+}
+
 .ghost-btn.accent {
   border-color: var(--border-gold);
   color: var(--gold);
@@ -1272,6 +1291,126 @@ button {
   flex-shrink: 0;
 }
 
+/* Signalis-style CRT Pixel Portrait Frames (contained scanlines ONLY, GPU-safe opaque fills) */
+.crt-portrait-frame {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #07080d;
+  border: 1.5px solid var(--crt-accent, rgba(111, 216, 234, 0.55));
+  box-shadow:
+    inset 0 0 12px rgba(0, 0, 0, 0.85),
+    0 0 10px rgba(0, 0, 0, 0.55);
+}
+
+.crt-portrait-img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center top;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: contrast(1.06) saturate(0.96);
+}
+
+.crt-portrait-frame.no-img .crt-portrait-img {
+  display: none;
+}
+
+.crt-portrait-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--crt-accent, var(--gold));
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.08), rgba(7, 8, 13, 0.96));
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
+  user-select: none;
+}
+
+.crt-portrait-frame:not(.no-img) .crt-portrait-fallback {
+  display: none;
+}
+
+.crt-scanlines {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.28) 2px,
+    rgba(0, 0, 0, 0.28) 3px
+  );
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.55);
+}
+
+.crt-portrait-frame.glitch {
+  border-color: #ff3b3b;
+  box-shadow:
+    -2px 0 0 rgba(255, 42, 42, 0.8),
+    2px 0 0 rgba(70, 230, 255, 0.65),
+    0 0 14px rgba(232, 58, 58, 0.65);
+  animation: crtPortraitGlitch 0.34s steps(2, end) infinite;
+}
+
+.crt-portrait-frame.glitch .crt-scanlines {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 48, 48, 0.08) 0px,
+    rgba(255, 48, 48, 0.08) 2px,
+    rgba(0, 0, 0, 0.42) 2px,
+    rgba(0, 0, 0, 0.42) 3px
+  );
+}
+
+/* Living Hall compact CRT avatars */
+.cast-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+}
+
+.cast-avatar .crt-portrait-fallback {
+  font-size: 16px;
+}
+
+.cast-btn.active .cast-avatar {
+  box-shadow:
+    inset 0 0 8px rgba(0, 0, 0, 0.8),
+    0 0 10px rgba(232, 93, 74, 0.36);
+}
+
+.hall-chat-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 4px;
+}
+
+.hall-chat-avatar .crt-portrait-fallback {
+  font-size: 20px;
+}
+
+.hall-chat-head-id {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
 .hall-chat-box {
   display: flex;
   flex-direction: column;
@@ -1283,12 +1422,12 @@ button {
 }
 
 .hall-chat-head {
-  padding: 13px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border-subtle);
   background: rgba(255, 255, 255, 0.02);
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
 }
 
@@ -1882,11 +2021,106 @@ body[data-scene="exam"] {
   color: var(--cyan);
 }
 
+/* Signalis-style CRT Active Speaker Strip inside 2.5D Radio Panel */
+.hud25d-speaker-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: rgba(8, 9, 14, 0.96);
+  border-bottom: 1px solid rgba(226, 212, 188, 0.12);
+  border-left: 3px solid var(--crt-accent, #7ca7d9);
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.hud25d-speaker-bar.glitch {
+  background: rgba(44, 10, 14, 0.95);
+  border-left-color: #ff3b3b;
+  border-bottom-color: rgba(255, 72, 72, 0.42);
+}
+
+.hud25d-speaker-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hud25d-speaker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.hud25d-speaker-name {
+  font-family: var(--font-serif);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud25d-speaker-bar.glitch .hud25d-speaker-name {
+  color: #ffb8b0;
+}
+
+.hud25d-speaker-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(226, 212, 188, 0.14);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.hud25d-speaker-bar.glitch .hud25d-speaker-signal {
+  background: rgba(200, 35, 35, 0.28);
+  border-color: rgba(255, 78, 66, 0.65);
+  color: #ffaca2;
+}
+
+.crt-signal-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--crt-accent, var(--emerald));
+  box-shadow: 0 0 7px var(--crt-accent, var(--emerald));
+  flex-shrink: 0;
+}
+
+.hud25d-speaker-bar.glitch .crt-signal-led {
+  background: #ff3b3b;
+  box-shadow: 0 0 9px #ff3b3b;
+  animation: pulseGlow 0.55s ease-in-out infinite;
+}
+
+.hud25d-speaker-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud25d-speaker-bar.glitch .hud25d-speaker-meta {
+  color: #e6958d;
+}
+
 .hud25d-radio-log {
-  max-height: 152px;
-  min-height: 76px;
+  max-height: 132px;
+  min-height: 64px;
   overflow-y: auto;
-  padding: 8px 10px;
+  padding: 7px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -2311,6 +2545,14 @@ body[data-scene="exam"] {
   50% { transform: translate(2px, -1px); filter: brightness(1.5); }
   75% { transform: translate(-1px, 0); }
   100% { transform: translate(0, 0); filter: brightness(1); }
+}
+
+@keyframes crtPortraitGlitch {
+  0% { transform: translate(0, 0); filter: contrast(1.25) saturate(1.2); }
+  25% { transform: translate(-1.5px, 0.5px); filter: hue-rotate(-14deg) contrast(1.4); }
+  50% { transform: translate(1.5px, -0.5px); filter: brightness(1.2) contrast(1.35); }
+  75% { transform: translate(-1px, 0); filter: hue-rotate(8deg) contrast(1.2); }
+  100% { transform: translate(0, 0); filter: contrast(1.25) saturate(1.2); }
 }
 
 /* ============================================================================

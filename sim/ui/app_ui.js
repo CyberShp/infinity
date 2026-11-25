@@ -35,6 +35,9 @@
     radioFocused: false,
     examEnded: false,
     clockGlitchTimer: null,
+    speakerGlitchTimer: null,
+    activeSpeakerId: 'yanci',
+    postFxEnabled: true,
     minimapBaseCanvas: null,
     hotbarSig: '',
     lastAudioThreat: -1,
@@ -135,6 +138,45 @@
 
   function getCast() {
     return INFINITY.CAST || {};
+  }
+
+  function getPortraitUrlSafe(id) {
+    if (INFINITY.ASSETS && typeof INFINITY.ASSETS.getPortraitUrl === 'function') {
+      return INFINITY.ASSETS.getPortraitUrl(id);
+    }
+    return null;
+  }
+
+  function renderCrtAvatarHtml(id, name, accentColor, extraClass) {
+    var url = getPortraitUrlSafe(id);
+    var accent = accentColor || '#d6b274';
+    var initial = String(name || id || '?').slice(0, 1);
+    var cls = 'crt-portrait-frame' + (extraClass ? ' ' + extraClass : '') + (url ? '' : ' no-img');
+    var imgHtml = url
+      ? '<img class="crt-portrait-img" src="' + esc(url) + '" alt="' + esc(name || id || '') + '" loading="lazy" onerror="this.style.display=\'none\';if(this.parentNode){this.parentNode.classList.add(\'no-img\');}" />'
+      : '';
+    return (
+      '<div class="' + cls + '" style="--crt-accent:' + esc(accent) + ';">' +
+        imgHtml +
+        '<span class="crt-portrait-fallback" aria-hidden="true">' + esc(initial) + '</span>' +
+        '<div class="crt-scanlines" aria-hidden="true"></div>' +
+      '</div>'
+    );
+  }
+
+  function syncFxToggleUi() {
+    var btn = $('btn-fx-toggle');
+    if (!btn) return;
+    var enabled = uiState.postFxEnabled;
+    if (INFINITY.World25D && typeof INFINITY.World25D.isPostFxEnabled === 'function') {
+      try {
+        enabled = Boolean(INFINITY.World25D.isPostFxEnabled());
+        uiState.postFxEnabled = enabled;
+      } catch (_) {}
+    }
+    btn.textContent = enabled ? 'FX: 开' : 'FX: 关';
+    btn.classList.toggle('active', enabled);
+    btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   }
 
   function getScenario() {
@@ -315,6 +357,10 @@
       if (uiState.clockGlitchTimer) {
         clearTimeout(uiState.clockGlitchTimer);
         uiState.clockGlitchTimer = null;
+      }
+      if (uiState.speakerGlitchTimer) {
+        clearTimeout(uiState.speakerGlitchTimer);
+        uiState.speakerGlitchTimer = null;
       }
       if (INFINITY.World25D && typeof INFINITY.World25D.unmount === 'function') {
         try {
@@ -831,8 +877,8 @@
       var groupTag = c.group === 'canon' ? '原著线' : '原创队';
       return (
         '<button class="cast-btn' + (id === uiState.selectedNpcId ? ' active' : '') + '" type="button" data-select-npc="' + esc(id) + '">' +
-          '<div style="display:flex;align-items:center;gap:9px;min-width:0;">' +
-            '<span class="cast-dot" style="background:' + esc(c.accentColor || '#d6b274') + ';"></span>' +
+          '<div style="display:flex;align-items:center;gap:10px;min-width:0;">' +
+            renderCrtAvatarHtml(id, c.name, c.accentColor, 'cast-avatar') +
             '<div style="min-width:0;">' +
               '<div style="font-weight:600;font-size:13px;">' + esc(c.name) + ' <span class="mono muted small">' + esc(c.tier || '') + '</span></div>' +
               '<div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(c.role || '') + '</div>' +
@@ -879,12 +925,14 @@
         '</div>' +
         '<div class="hall-chat-box">' +
           '<div class="hall-chat-head">' +
-            '<div>' +
-              '<div style="display:flex;align-items:center;gap:8px;">' +
-                '<span class="cast-dot" style="background:' + esc(npc.accentColor || '#d6b274') + ';"></span>' +
-                '<h3>' + esc(npc.name) + ' <span class="mono muted small">' + esc(npc.codename || '') + '</span></h3>' +
+            '<div class="hall-chat-head-id">' +
+              renderCrtAvatarHtml(npc.id, npc.name, npc.accentColor, 'hall-chat-avatar') +
+              '<div style="min-width:0;">' +
+                '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                  '<h3>' + esc(npc.name) + ' <span class="mono muted small">' + esc(npc.codename || '') + '</span></h3>' +
+                '</div>' +
+                '<div class="small muted" style="margin-top:3px;">' + esc(npc.statusText || npc.role || '') + '</div>' +
               '</div>' +
-              '<div class="small muted" style="margin-top:3px;">' + esc(npc.statusText || npc.role || '') + '</div>' +
             '</div>' +
             '<div class="rel-pills">' +
               '<span class="rel-pill accent-emerald">信赖 ' + npcRel.trust + '</span>' +
@@ -1287,11 +1335,165 @@
     }).join('');
   }
 
+  var SPEAKER_CHANNELS = {
+    yanci: 'CH-01 · 执棋频段',
+    lujin: 'CH-02 · 突击频段',
+    xutan: 'CH-03 · 侦察频段',
+    shenyan: 'CH-09 · 未知频段',
+    inspector: '伪造信号 · 频段劫持'
+  };
+
+  function getRadioSpeakerMeta(speakerId) {
+    var id = String(speakerId || 'yanci').toLowerCase();
+    if (id === 'inspector') {
+      return {
+        id: 'inspector',
+        name: '零号检票员',
+        codename: 'ANOMALY-00',
+        role: '无面规则体 · 频段劫持源',
+        accentColor: '#ff3b3b',
+        signalText: SPEAKER_CHANNELS.inspector
+      };
+    }
+    var cast = getCast();
+    var c = cast[id];
+    if (c) {
+      return {
+        id: c.id || id,
+        name: c.name || id,
+        codename: c.codename || 'LIVE',
+        role: c.role || '考场联络员',
+        accentColor: c.accentColor || '#6fd8ea',
+        signalText: SPEAKER_CHANNELS[id] || 'CH-00 · 加密在线'
+      };
+    }
+    return {
+      id: id,
+      name: id,
+      codename: 'RADIO',
+      role: '加密短波频段',
+      accentColor: '#6fd8ea',
+      signalText: 'CH-00 · 信号在线'
+    };
+  }
+
+  function resolveSpeakerIdFromEntry(entry) {
+    if (!entry) return null;
+    if (entry.type === 'broadcast' && (entry.fake || entry.timeGlitch)) {
+      return 'inspector';
+    }
+    var raw = entry.npcId || entry.speakerId || '';
+    if (raw) {
+      var low = String(raw).trim().toLowerCase();
+      if (low === 'inspector' || getCast()[low]) return low;
+    }
+    var spName = String(entry.speaker || '').trim();
+    if (spName) {
+      if (spName.indexOf('检票员') !== -1) return 'inspector';
+      var cast = getCast();
+      var ids = Object.keys(cast);
+      for (var i = 0; i < ids.length; i++) {
+        if (cast[ids[i]].name && spName.indexOf(cast[ids[i]].name) !== -1) {
+          return ids[i];
+        }
+      }
+    }
+    return null;
+  }
+
+  function setActiveRadioSpeaker(speakerId, opts) {
+    var bar = $('hud25d-speaker-bar');
+    var frame = $('hud25d-speaker-frame');
+    var img = $('hud25d-speaker-img');
+    var fallback = $('hud25d-speaker-fallback');
+    var nameEl = $('hud25d-speaker-name');
+    var metaEl = $('hud25d-speaker-meta');
+    var sigTextEl = $('hud25d-speaker-signal-text');
+    var sigEl = $('hud25d-speaker-signal');
+    if (!bar) return;
+
+    var o = opts || {};
+    var meta = getRadioSpeakerMeta(speakerId);
+    var isGlitch = Boolean(o.glitch || meta.id === 'inspector');
+    var accent = isGlitch ? '#ff3b3b' : (meta.accentColor || '#6fd8ea');
+
+    uiState.activeSpeakerId = meta.id;
+    bar.setAttribute('data-speaker', meta.id);
+    bar.style.setProperty('--crt-accent', accent);
+    if (frame) frame.style.setProperty('--crt-accent', accent);
+
+    if (nameEl) nameEl.textContent = meta.name;
+    if (metaEl) metaEl.textContent = meta.codename + ' · ' + meta.role;
+
+    var label = o.signalText || meta.signalText || 'CH-01 · 加密在线';
+    if (sigTextEl) {
+      sigTextEl.textContent = label;
+    } else if (sigEl) {
+      sigEl.textContent = label;
+    }
+
+    if (fallback) {
+      fallback.textContent = String(meta.name || '?').slice(0, 1);
+    }
+
+    if (img && frame) {
+      var url = getPortraitUrlSafe(meta.id);
+      if (url) {
+        img.alt = meta.name;
+        img.onerror = function () {
+          img.style.display = 'none';
+          frame.classList.add('no-img');
+        };
+        img.onload = function () {
+          img.style.display = 'block';
+          frame.classList.remove('no-img');
+        };
+        if (img.getAttribute('src') !== url) {
+          img.style.display = 'block';
+          frame.classList.remove('no-img');
+          img.src = url;
+        } else if (img.complete && img.naturalWidth === 0) {
+          img.style.display = 'none';
+          frame.classList.add('no-img');
+        }
+      } else {
+        img.removeAttribute('src');
+        img.style.display = 'none';
+        frame.classList.add('no-img');
+      }
+    }
+
+    if (uiState.speakerGlitchTimer) {
+      clearTimeout(uiState.speakerGlitchTimer);
+      uiState.speakerGlitchTimer = null;
+    }
+
+    if (isGlitch) {
+      bar.classList.add('glitch');
+      if (frame) frame.classList.add('glitch');
+      uiState.speakerGlitchTimer = setTimeout(function () {
+        if (frame) frame.classList.remove('glitch');
+        uiState.speakerGlitchTimer = null;
+      }, 3600);
+    } else {
+      bar.classList.remove('glitch');
+      if (frame) frame.classList.remove('glitch');
+    }
+  }
+
   function pushRadioEntry(entry) {
     if (!entry) return;
     uiState.radioLog.push(entry);
     if (uiState.radioLog.length > 40) {
       uiState.radioLog.shift();
+    }
+    var spId = resolveSpeakerIdFromEntry(entry);
+    if (spId) {
+      var isFake = Boolean(entry.type === 'broadcast' && (entry.fake || entry.timeGlitch));
+      setActiveRadioSpeaker(spId, {
+        glitch: isFake || spId === 'inspector',
+        signalText: isFake ? '伪造播报 · 信号劫持' : undefined
+      });
     }
     renderRadioLog25D();
   }
@@ -1723,6 +1925,7 @@
       }
     ];
     renderRadioLog25D();
+    setActiveRadioSpeaker('yanci', { glitch: false, signalText: 'CH-01 · 加密待命' });
     setRadioFocused(false);
 
     if (INFINITY.World25D && typeof INFINITY.World25D.mount === 'function') {
@@ -1732,6 +1935,10 @@
         onRadioEvent: handleWorld25DRadioEvent,
         onExamEnd: handleExam25DEnd
       });
+      if (typeof INFINITY.World25D.setPostFxEnabled === 'function') {
+        INFINITY.World25D.setPostFxEnabled(uiState.postFxEnabled);
+      }
+      syncFxToggleUi();
       var initialSnap = typeof INFINITY.World25D.getSnapshot === 'function' ? INFINITY.World25D.getSnapshot() : null;
       if (initialSnap) {
         handleWorld25DHudTick(initialSnap);
@@ -2011,6 +2218,26 @@
         if (!INFINITY.Audio) return;
         INFINITY.Audio.unlock();
         INFINITY.Audio.setVolume(parseFloat(e.target.value));
+      });
+    }
+
+    // 2.5D PostFX / Bloom toggle
+    if ($('btn-fx-toggle')) {
+      $('btn-fx-toggle').addEventListener('click', function () {
+        playSfx('ui_tick');
+        var cur = uiState.postFxEnabled;
+        if (INFINITY.World25D && typeof INFINITY.World25D.isPostFxEnabled === 'function') {
+          try {
+            cur = Boolean(INFINITY.World25D.isPostFxEnabled());
+          } catch (_) {}
+        }
+        var next = !cur;
+        uiState.postFxEnabled = next;
+        if (INFINITY.World25D && typeof INFINITY.World25D.setPostFxEnabled === 'function') {
+          INFINITY.World25D.setPostFxEnabled(next);
+        }
+        syncFxToggleUi();
+        showToast(next ? '2.5D 霓虹泛光与后期特效已开启。' : '2.5D 后期特效已关闭（纯像素直出）。');
       });
     }
 
@@ -2440,6 +2667,7 @@
       }
     }
 
+    syncFxToggleUi();
     renderAll(getStateSafe());
   }
 

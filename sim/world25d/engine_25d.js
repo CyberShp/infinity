@@ -61,6 +61,7 @@
 
   // Active engine session (single active mount)
   var activeSession = null;
+  var postFxGlobalEnabled = true;
 
   // ---------------------------------------------------------------------------
   // Math & Utility Helpers
@@ -92,20 +93,21 @@
     return fallback !== undefined ? fallback : 0x6fd8ea;
   }
 
-  function playSfxSafe(name) {
+  function safeAudio(method) {
     try {
-      if (INFINITY.Audio && typeof INFINITY.Audio.playSfx === 'function') {
-        INFINITY.Audio.playSfx(name);
+      if (INFINITY.Audio && typeof INFINITY.Audio[method] === 'function') {
+        var args = Array.prototype.slice.call(arguments, 1);
+        INFINITY.Audio[method].apply(INFINITY.Audio, args);
       }
     } catch (_) {}
   }
 
+  function playSfxSafe(name) {
+    safeAudio('playSfx', name);
+  }
+
   function setAudioThreatSafe(level) {
-    try {
-      if (INFINITY.Audio && typeof INFINITY.Audio.setThreatLevel === 'function') {
-        INFINITY.Audio.setThreatLevel(clamp(level, 0, 100));
-      }
-    } catch (_) {}
+    safeAudio('setThreatLevel', clamp(level, 0, 100));
   }
 
   function getMapApi() {
@@ -253,18 +255,35 @@
     // Camera state
     this.camPos = { x: 10, z: 10 };
     this.camLook = { x: 10, z: 10 };
+    this.camKickX = 0;
+    this.camKickZ = 0;
     this.shakeIntensity = 0;
     this.shakeTimer = 0;
 
     // Station & lighting pools
     this.stationLightDefs = [];
     this.stationLightPool = [];
+    this.stationBulbMat = null;
     this.flashLight = null;
     this.flashTarget = null;
     this.playerGlow = null;
     this.inspectorLantern = null;
     this.inspectorLanternOrb = null;
     this.dustPoints = null;
+
+    // EMP blackout, Fog-of-War LOS shadow & 2-pass WebGL PostFX
+    this.empBlackoutTimer = 0;
+    this.empBlackoutPos = { x: 0, z: 0 };
+    this.empSparkAccum = 0;
+    this.fogOfWar = null;
+    this.fogGrid = null;
+    this.fogRayPts = null;
+    this.postFxEnabled = postFxGlobalEnabled;
+    this.postFx = null;
+    this.glitchAmount = 0;
+    this.slowMoBlend = 0;
+    this.lowHpBlend = 0;
+    this.parryFlashTimer = 0;
 
     // Entities & Gameplay
     this.loadout = null;
@@ -475,6 +494,8 @@
     this.buildActors();
     this.buildReticle();
     this.buildAtmosphericDust();
+    this.buildFogOfWar();
+    this.buildPostFx(width, height);
 
     // Snap camera immediately to player
     this.camPos.x = this.player.x;
@@ -484,6 +505,7 @@
     this.aimWorld.x = this.player.x + 2.5;
     this.aimWorld.z = this.player.z;
     this.updateCamera(0.016);
+    this.updateFogOfWar(1.0);
 
     // Bind input & resize observers
     this.bindInputs();
@@ -681,6 +703,7 @@
     if (this.stationLightDefs.length > 0) {
       var bulbGeo = this.trackGeo(new THREE.BoxGeometry(0.45, 0.12, 0.45));
       var bulbMat = this.trackMat(new THREE.MeshBasicMaterial({ color: 0xbfe8ff }));
+      this.stationBulbMat = bulbMat;
       var bulbMesh = new THREE.InstancedMesh(bulbGeo, bulbMat, this.stationLightDefs.length);
       var col = new THREE.Color();
       for (var bi = 0; bi < this.stationLightDefs.length; bi++) {
@@ -1346,6 +1369,7 @@
       chainMeshes: [],
       lungeCd: 2.0,
       lungeTelegraph: 0,
+      lungeWindup: 0,
       lungeActive: 0,
       lungeDirX: 0,
       lungeDirZ: 1,
@@ -1357,6 +1381,7 @@
       animTimer: 0,
       actionTimer: 0,
       hitFlash: 0,
+      whiteFlash: 0,
       vis: bossVis
     };
 
@@ -1451,6 +1476,431 @@
     }));
     this.dustPoints = new THREE.Points(geo, mat);
     this.scene.add(this.dustPoints);
+  };
+
+  // ---------------------------------------------------------------------------
+  // True Wall-Occluded Line-of-Sight Shadow / Fog-of-War (72-Ray 2D DDA)
+  // ---------------------------------------------------------------------------
+  EngineSession.prototype.buildFogOfWar = function () {
+    var THREE = this.THREE;
+    var gridW = this.mapApi.GRID_W || 56;
+    var gridH = this.mapApi.GRID_H || 38;
+    var scale = 4; // 224x152 offscreen canvas (4x station grid)
+    var cw = gridW * scale;
+    var ch = gridH * scale;
+
+    var canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(6, 7, 11, 0.78)';
+    ctx.fillRect(0, 0, cw, ch);
+
+    var tex = this.trackTex(new THREE.CanvasTexture(canvas));
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+
+    var geo = this.trackGeo(new THREE.PlaneGeometry(gridW, gridH));
+    geo.rotateX(-Math.PI / 2);
+    var mat = this.trackMat(new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      opacity: 1.0
+    }));
+
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(gridW * 0.5, 2.68, gridH * 0.5);
+    mesh.renderOrder = 5;
+    this.scene.add(mesh);
+
+    this.fogGrid = (typeof this.mapApi.getGrid === 'function' ? this.mapApi.getGrid() : null) || [];
+    this.fogRayPts = new Float32Array(72 * 2);
+    this.fogOfWar = {
+      canvas: canvas,
+      ctx: ctx,
+      tex: tex,
+      mesh: mesh,
+      w: cw,
+      h: ch,
+      gridW: gridW,
+      gridH: gridH,
+      scale: scale,
+      accum: 1.0,
+      lastX: -999,
+      lastZ: -999,
+      lastAimAngle: -999
+    };
+  };
+
+  EngineSession.prototype.updateFogOfWar = function (realDt) {
+    var fog = this.fogOfWar;
+    var p = this.player;
+    if (!fog || !p) return;
+
+    fog.accum += realDt;
+    var aimAngle = Math.atan2(this.aimWorld.z - p.z, this.aimWorld.x - p.x);
+    var movedSq = (p.x - fog.lastX) * (p.x - fog.lastX) + (p.z - fog.lastZ) * (p.z - fog.lastZ);
+    var aimDiff = Math.abs(Math.atan2(Math.sin(aimAngle - fog.lastAimAngle), Math.cos(aimAngle - fog.lastAimAngle)));
+
+    var shouldUpdate = (fog.accum >= 0.06) || (movedSq > 0.04) || (aimDiff > 0.14 && fog.accum >= 0.032);
+    if (!shouldUpdate) return;
+
+    fog.accum = 0;
+    fog.lastX = p.x;
+    fog.lastZ = p.z;
+    fog.lastAimAngle = aimAngle;
+
+    var ctx = fog.ctx;
+    var sc = fog.scale;
+    var gridW = fog.gridW;
+    var gridH = fog.gridH;
+    var grid = this.fogGrid;
+    var pts = this.fogRayPts;
+    var rayCount = 72;
+    var coneHalf = 0.61086524; // +-35 deg flashlight cone
+    var coneOuter = 0.76794487; // smooth outer feather to ~44 deg
+
+    // 1. Fill deep obsidian shadow veil
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, fog.w, fog.h);
+    ctx.fillStyle = 'rgba(6, 7, 11, 0.78)';
+    ctx.fillRect(0, 0, fog.w, fog.h);
+
+    // 2. Cast 72 true 2D DDA rays from player position against StationMap walls
+    for (var i = 0; i < rayCount; i++) {
+      var angle = (i / rayCount) * Math.PI * 2;
+      var diff = Math.abs(Math.atan2(Math.sin(angle - aimAngle), Math.cos(angle - aimAngle)));
+      var maxDist = 15.0;
+      if (diff <= coneHalf) {
+        maxDist = 20.0;
+      } else if (diff < coneOuter) {
+        maxDist = lerp(20.0, 15.0, (diff - coneHalf) / (coneOuter - coneHalf));
+      }
+
+      var rdx = Math.cos(angle);
+      var rdz = Math.sin(angle);
+      var mapX = Math.floor(p.x);
+      var mapZ = Math.floor(p.z);
+      var deltaDistX = Math.abs(rdx) < 1e-6 ? 1e30 : Math.abs(1.0 / rdx);
+      var deltaDistZ = Math.abs(rdz) < 1e-6 ? 1e30 : Math.abs(1.0 / rdz);
+      var stepX, sideDistX, stepZ, sideDistZ;
+
+      if (rdx < 0) {
+        stepX = -1;
+        sideDistX = (p.x - mapX) * deltaDistX;
+      } else {
+        stepX = 1;
+        sideDistX = (mapX + 1.0 - p.x) * deltaDistX;
+      }
+      if (rdz < 0) {
+        stepZ = -1;
+        sideDistZ = (p.z - mapZ) * deltaDistZ;
+      } else {
+        stepZ = 1;
+        sideDistZ = (mapZ + 1.0 - p.z) * deltaDistZ;
+      }
+
+      var hitDist = maxDist;
+      var steps = 0;
+      while (steps < 48) {
+        steps++;
+        var currDist;
+        if (sideDistX < sideDistZ) {
+          currDist = sideDistX;
+          sideDistX += deltaDistX;
+          mapX += stepX;
+        } else {
+          currDist = sideDistZ;
+          sideDistZ += deltaDistZ;
+          mapZ += stepZ;
+        }
+        if (currDist >= maxDist) {
+          hitDist = maxDist;
+          break;
+        }
+        if (mapX < 0 || mapZ < 0 || mapX >= gridW || mapZ >= gridH) {
+          hitDist = currDist;
+          break;
+        }
+        if (readGridCell(grid, mapX, mapZ, gridW, gridH) === 1) {
+          // Reveal front lit face of visible wall while keeping behind-wall spaces dark
+          hitDist = Math.min(maxDist, currDist + 0.35);
+          break;
+        }
+      }
+
+      pts[i * 2] = (p.x + rdx * hitDist) * sc;
+      pts[i * 2 + 1] = (p.z + rdz * hitDist) * sc;
+    }
+
+    // 3. Punch smooth glowing LOS visibility polygon out of the obsidian veil
+    var px = p.x * sc;
+    var pz = p.z * sc;
+    ctx.globalCompositeOperation = 'destination-out';
+
+    var visGrad = ctx.createRadialGradient(px, pz, 1.5 * sc, px, pz, 20.5 * sc);
+    visGrad.addColorStop(0.0, 'rgba(0, 0, 0, 1.0)');
+    visGrad.addColorStop(0.55, 'rgba(0, 0, 0, 0.96)');
+    visGrad.addColorStop(0.80, 'rgba(0, 0, 0, 0.72)');
+    visGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.08)');
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0], pts[1]);
+    for (var j = 1; j < rayCount; j++) {
+      ctx.lineTo(pts[j * 2], pts[j * 2 + 1]);
+    }
+    ctx.closePath();
+    ctx.fillStyle = visGrad;
+    ctx.fill();
+
+    // Guaranteed personal visibility halo around player silhouette
+    var haloGrad = ctx.createRadialGradient(px, pz, 0.5 * sc, px, pz, 3.2 * sc);
+    haloGrad.addColorStop(0.0, 'rgba(0, 0, 0, 1.0)');
+    haloGrad.addColorStop(0.7, 'rgba(0, 0, 0, 0.85)');
+    haloGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+    ctx.beginPath();
+    ctx.arc(px, pz, 3.2 * sc, 0, Math.PI * 2);
+    ctx.fillStyle = haloGrad;
+    ctx.fill();
+
+    // 4. Ominous crimson lantern dim cutout around Inspector ONLY when within 16 tiles
+    var ins = this.inspector;
+    if (ins && ins.alive) {
+      var dIns = dist2D(p.x, p.z, ins.x, ins.z);
+      if (dIns <= 16.0) {
+        var ix = ins.x * sc;
+        var iz = ins.z * sc;
+        var ir = 3.5 * sc;
+        var lanternAlpha = ins.stunTimer > 0 ? 0.18 : 0.45;
+        var lanGrad = ctx.createRadialGradient(ix, iz, 0.2 * sc, ix, iz, ir);
+        lanGrad.addColorStop(0.0, 'rgba(0, 0, 0, ' + lanternAlpha + ')');
+        lanGrad.addColorStop(0.55, 'rgba(0, 0, 0, ' + (lanternAlpha * 0.48).toFixed(3) + ')');
+        lanGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+        ctx.beginPath();
+        ctx.arc(ix, iz, ir, 0, Math.PI * 2);
+        ctx.fillStyle = lanGrad;
+        ctx.fill();
+      }
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+    fog.tex.needsUpdate = true;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Lightweight 2-Pass WebGL Post-Processing (Selective Bloom + Vignette + Glitch)
+  // ---------------------------------------------------------------------------
+  EngineSession.prototype.buildPostFx = function (width, height) {
+    var THREE = this.THREE;
+    if (!THREE || !this.renderer) return;
+
+    try {
+      var pr = typeof this.renderer.getPixelRatio === 'function' ? this.renderer.getPixelRatio() : 1;
+      var rtW = Math.max(1, Math.floor(width * pr));
+      var rtH = Math.max(1, Math.floor(height * pr));
+
+      var rt = new THREE.WebGLRenderTarget(rtW, rtH, {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        format: THREE.RGBAFormat,
+        depthBuffer: true,
+        stencilBuffer: false
+      });
+      if (rt.texture) {
+        rt.texture.generateMipmaps = false;
+      }
+
+      var vertShader = [
+        'varying vec2 vUv;',
+        'void main() {',
+        '  vUv = uv;',
+        '  gl_Position = vec4(position.xy, 0.0, 1.0);',
+        '}'
+      ].join('\n');
+
+      var fragShader = [
+        'precision mediump float;',
+        'uniform sampler2D tDiffuse;',
+        'uniform vec2 uResolution;',
+        'uniform float uTime;',
+        'uniform float uGlitch;',
+        'uniform float uSlowMo;',
+        'uniform float uLowHp;',
+        'uniform float uFlash;',
+        'varying vec2 vUv;',
+        '',
+        'vec3 brightPass(vec3 c) {',
+        '  float luma = dot(c, vec3(0.299, 0.587, 0.114));',
+        '  return c * smoothstep(0.56, 0.86, luma);',
+        '}',
+        '',
+        'void main() {',
+        '  vec2 uv = vUv;',
+        '  vec2 texel = 1.0 / max(uResolution, vec2(1.0));',
+        '  float glitch = clamp(uGlitch, 0.0, 1.0);',
+        '',
+        '  // Real-time horizontal scanline tear when uGlitch > 0',
+        '  if (glitch > 0.005) {',
+        '    float row = floor(uv.y * 56.0);',
+        '    float tStep = floor(uTime * 34.0);',
+        '    float rnd = fract(sin(row * 127.1 + tStep * 311.7) * 43758.5453);',
+        '    float tear = step(0.66, rnd) * (rnd - 0.83) * 0.16 * glitch;',
+        '    uv.x = clamp(uv.x + tear, 0.001, 0.999);',
+        '  }',
+        '',
+        '  // Base sample + RGB chromatic aberration split during glitch',
+        '  vec4 baseSample = texture2D(tDiffuse, uv);',
+        '  vec3 col = baseSample.rgb;',
+        '  if (glitch > 0.005) {',
+        '    float ca = (0.003 + 0.016 * glitch) * (0.65 + 0.35 * sin(uTime * 46.0));',
+        '    float rCh = texture2D(tDiffuse, clamp(uv + vec2(ca, 0.0), 0.001, 0.999)).r;',
+        '    float bCh = texture2D(tDiffuse, clamp(uv - vec2(ca, 0.0), 0.001, 0.999)).b;',
+        '    col = vec3(rCh, col.g, bCh);',
+        '    float scanBar = 0.5 + 0.5 * sin(uv.y * uResolution.y * 1.5 + uTime * 30.0);',
+        '    col += vec3(0.06, 0.09, 0.12) * scanBar * glitch * 0.45;',
+        '  }',
+        '',
+        '  // Selective 9-tap bright-pass neon bloom (luma > 0.56)',
+        '  float spread = clamp(min(uResolution.x, uResolution.y) / 340.0, 1.2, 3.0);',
+        '  vec2 o1 = texel * (1.8 * spread);',
+        '  vec2 o2 = texel * (3.1 * spread);',
+        '  vec3 bloom = brightPass(col) * 0.20;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(o1.x, 0.0), 0.0, 1.0)).rgb) * 0.12;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv - vec2(o1.x, 0.0), 0.0, 1.0)).rgb) * 0.12;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(0.0, o1.y), 0.0, 1.0)).rgb) * 0.12;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv - vec2(0.0, o1.y), 0.0, 1.0)).rgb) * 0.12;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(o2.x, o2.y), 0.0, 1.0)).rgb) * 0.08;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(-o2.x, o2.y), 0.0, 1.0)).rgb) * 0.08;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(o2.x, -o2.y), 0.0, 1.0)).rgb) * 0.08;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(-o2.x, -o2.y), 0.0, 1.0)).rgb) * 0.08;',
+        '  col += bloom * vec3(1.08, 1.03, 1.06) * 0.68;',
+        '',
+        '  // Obsidian vignette + subtle micro film grain',
+        '  vec2 centered = vUv * 2.0 - 1.0;',
+        '  float distSq = dot(centered, centered);',
+        '  float vig = smoothstep(0.55, 1.95, distSq);',
+        '  col = mix(col, vec3(0.015, 0.018, 0.030), vig * 0.44);',
+        '',
+        '  float grain = (fract(sin(dot(vUv * uResolution + fract(uTime * 13.0) * 97.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.022;',
+        '  col += grain;',
+        '',
+        '  // Bullet-time cool cyan rim tint',
+        '  if (uSlowMo > 0.01) {',
+        '    col += vec3(0.06, 0.30, 0.42) * vig * uSlowMo * 0.72;',
+        '  }',
+        '',
+        '  // Low-HP pulsing crimson border (< 35% HP)',
+        '  if (uLowHp > 0.01) {',
+        '    float pulse = 0.52 + 0.48 * sin(uTime * 7.5);',
+        '    col = mix(col, vec3(0.76, 0.05, 0.11), vig * uLowHp * pulse * 0.65);',
+        '  }',
+        '',
+        '  // Golden parry flash punch',
+        '  if (uFlash > 0.005) {',
+        '    col += vec3(1.0, 0.88, 0.52) * uFlash * 0.24;',
+        '  }',
+        '',
+        '  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);',
+        '}'
+      ].join('\n');
+
+      var quadGeo = new THREE.PlaneGeometry(2, 2);
+      var quadMat = new THREE.ShaderMaterial({
+        uniforms: {
+          tDiffuse: { value: rt.texture },
+          uResolution: { value: new THREE.Vector2(rtW, rtH) },
+          uTime: { value: 0 },
+          uGlitch: { value: 0 },
+          uSlowMo: { value: 0 },
+          uLowHp: { value: 0 },
+          uFlash: { value: 0 }
+        },
+        vertexShader: vertShader,
+        fragmentShader: fragShader,
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false
+      });
+
+      var postScene = new THREE.Scene();
+      var postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      var quadMesh = new THREE.Mesh(quadGeo, quadMat);
+      quadMesh.frustumCulled = false;
+      postScene.add(quadMesh);
+
+      this.postFx = {
+        rt: rt,
+        scene: postScene,
+        camera: postCamera,
+        quadGeo: quadGeo,
+        quadMat: quadMat,
+        quadMesh: quadMesh
+      };
+    } catch (_) {
+      this.postFx = null;
+    }
+  };
+
+  EngineSession.prototype.resizePostFx = function (width, height) {
+    if (!this.postFx || !this.postFx.rt || !this.renderer) return;
+    try {
+      var pr = typeof this.renderer.getPixelRatio === 'function' ? this.renderer.getPixelRatio() : 1;
+      var rtW = Math.max(1, Math.floor(width * pr));
+      var rtH = Math.max(1, Math.floor(height * pr));
+      this.postFx.rt.setSize(rtW, rtH);
+      if (this.postFx.quadMat && this.postFx.quadMat.uniforms && this.postFx.quadMat.uniforms.uResolution) {
+        this.postFx.quadMat.uniforms.uResolution.value.set(rtW, rtH);
+      }
+    } catch (_) {}
+  };
+
+  EngineSession.prototype.renderPostFx = function (realDt) {
+    var fx = this.postFx;
+    if (!fx || !fx.rt || !this.postFxEnabled) {
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
+    try {
+      var targetSlow = (this.slowMo || this.inputPaused) ? 1.0 : 0.0;
+      this.slowMoBlend = lerp(this.slowMoBlend, targetSlow, 1 - Math.exp(-10 * realDt));
+
+      var hpRatio = this.player ? (this.player.hp / Math.max(1, this.player.maxHp)) : 1.0;
+      var targetLowHp = hpRatio < 0.35 ? clamp((0.35 - hpRatio) / 0.35, 0.25, 1.0) : 0.0;
+      this.lowHpBlend = lerp(this.lowHpBlend, targetLowHp, 1 - Math.exp(-6 * realDt));
+
+      var u = fx.quadMat.uniforms;
+      u.tDiffuse.value = fx.rt.texture;
+      u.uTime.value = this.elapsedReal;
+      u.uGlitch.value = clamp(this.glitchAmount, 0, 1);
+      u.uSlowMo.value = this.slowMoBlend;
+      u.uLowHp.value = this.lowHpBlend;
+      u.uFlash.value = clamp(this.parryFlashTimer / 0.22, 0, 1);
+
+      this.renderer.setRenderTarget(fx.rt);
+      this.renderer.render(this.scene, this.camera);
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(fx.scene, fx.camera);
+    } catch (_) {
+      // Automatic graceful fallback if RenderTarget fails at runtime
+      this.disposePostFx();
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.scene, this.camera);
+    }
+  };
+
+  EngineSession.prototype.disposePostFx = function () {
+    if (!this.postFx) return;
+    try { if (this.postFx.rt) this.postFx.rt.dispose(); } catch (_) {}
+    try { if (this.postFx.quadGeo) this.postFx.quadGeo.dispose(); } catch (_) {}
+    try { if (this.postFx.quadMat) this.postFx.quadMat.dispose(); } catch (_) {}
+    this.postFx = null;
   };
 
   // ---------------------------------------------------------------------------
@@ -1553,6 +2003,7 @@
       self.camera.aspect = w / h;
       self.camera.updateProjectionMatrix();
       self.renderer.setSize(w, h, false);
+      self.resizePostFx(w, h);
     }
     this.addListener(global, 'resize', handleResize);
     if (typeof global.ResizeObserver === 'function') {
@@ -1602,13 +2053,31 @@
       this.checkWinLoss();
     }
 
+    // Smooth real-time decay for PostFX glitch, parry flash & inspector white hit-flash
+    if (this.glitchAmount > 0) {
+      this.glitchAmount = Math.max(0, this.glitchAmount * Math.exp(-4.2 * realDt) - 0.04 * realDt);
+    }
+    if (this.parryFlashTimer > 0) {
+      this.parryFlashTimer = Math.max(0, this.parryFlashTimer - realDt);
+    }
+    if (this.inspector && this.inspector.whiteFlash > 0) {
+      this.inspector.whiteFlash = Math.max(0, this.inspector.whiteFlash - realDt);
+    }
+
     this.updateVfx(simDt, realDt);
     this.updateSoundRipples(simDt);
     this.updateLights(realDt);
+    this.updateFogOfWar(realDt);
+    this.updateSpatialAudio();
     this.updateDust(simDt);
     this.updateCamera(realDt);
 
-    this.renderer.render(this.scene, this.camera);
+    if (this.postFxEnabled && this.postFx && this.postFx.rt) {
+      this.renderPostFx(realDt);
+    } else {
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.scene, this.camera);
+    }
 
     // Project 3D HTML overlays (bubbles, floating numbers, HP bars, [E] prompt)
     this.updateHtmlOverlays(realDt);
@@ -1645,6 +2114,11 @@
     this.shakeTimer = Math.max(this.shakeTimer, duration || 0.22);
   };
 
+  EngineSession.prototype.addCameraKick = function (kx, kz) {
+    this.camKickX = clamp(this.camKickX + (kx || 0), -1.2, 1.2);
+    this.camKickZ = clamp(this.camKickZ + (kz || 0), -1.2, 1.2);
+  };
+
   EngineSession.prototype.updateCamera = function (realDt) {
     var p = this.player;
     var leadX = clamp((this.aimWorld.x - p.x) * 0.22, -2.2, 2.2);
@@ -1655,6 +2129,12 @@
     this.camPos.z = lerp(this.camPos.z, p.z + leadZ * 0.65, smooth);
     this.camLook.x = lerp(this.camLook.x, p.x + leadX, smooth);
     this.camLook.z = lerp(this.camLook.z, p.z + leadZ, smooth);
+
+    var kickDecay = Math.exp(-14.0 * realDt);
+    this.camKickX *= kickDecay;
+    this.camKickZ *= kickDecay;
+    if (Math.abs(this.camKickX) < 0.002) this.camKickX = 0;
+    if (Math.abs(this.camKickZ) < 0.002) this.camKickZ = 0;
 
     var sx = 0;
     var sy = 0;
@@ -1667,8 +2147,8 @@
     }
 
     // Elevated angled 2.5D perspective offset (0, 16.5, 13.5)
-    this.camera.position.set(this.camPos.x + sx, 16.5 + sy, this.camPos.z + 13.5);
-    this.camera.lookAt(this.camLook.x, 0.6, this.camLook.z);
+    this.camera.position.set(this.camPos.x + sx + this.camKickX, 16.5 + sy, this.camPos.z + 13.5 + this.camKickZ);
+    this.camera.lookAt(this.camLook.x + this.camKickX * 0.35, 0.6, this.camLook.z + this.camKickZ * 0.35);
 
     // Subtle dynamic FOV modulation for Bullet-Time / Overclock
     var targetFov = (this.slowMo || this.inputPaused) ? 35.8 : (p.overclockTimer > 0 ? 40.5 : 38.0);
@@ -1858,8 +2338,11 @@
     var baseY = (actor.id === 'inspector' ? 2.6 : 1.85) * 0.5 + 0.05;
     actor.vis.sprite.position.y = baseY + (moving ? Math.abs(Math.sin(actor.animTimer * Math.PI)) * 0.08 : 0);
 
-    // Hit flash tint
-    if (actor.hitFlash > 0) {
+    // Hit flash tint (pure-white emissive impact flash takes top priority!)
+    if (actor.whiteFlash > 0) {
+      actor.vis.mat.emissive.setHex(0xffffff);
+      actor.vis.mat.emissiveIntensity = 3.2;
+    } else if (actor.hitFlash > 0) {
       actor.vis.mat.emissive.setHex(0xff7788);
       actor.vis.mat.emissiveIntensity = 0.95;
     } else if (actor.id === 'inspector' && actor.stunTimer > 0) {
@@ -1917,13 +2400,15 @@
       var range = Number(basic.range) || 3.2;
       this.spawnSlashArc(p.x, p.z, dir.angle, range, colorHex, 0.22, false);
       this.emitSoundRipple(p.x, p.z, 30 * this.passives.noiseMult, 'attack');
-      playSfxSafe('blade_ring');
+      playSfxSafe('sword_slash');
 
       // Hit check against Inspector
       if (this.inspector.alive && this.isPointInArc(p.x, p.z, dir.x, dir.z, this.inspector.x, this.inspector.z, range + this.inspector.radius, 0.35)) {
-        this.damageInspector(dmg, dir.x * Math.max(2.2, kb), dir.z * Math.max(2.2, kb), false);
-        this.hitStopTimer = 0.045;
-        this.addCameraShake(0.14, 0.14);
+        this.damageInspector(dmg, dir.x * Math.max(2.2, kb), dir.z * Math.max(2.2, kb), false, {
+          playerImpact: true,
+          hitStop: 0.05
+        });
+        this.addCameraShake(0.16, 0.15);
       }
     }
   };
@@ -1974,32 +2459,45 @@
       case 'sword_arc': {
         var arcRange = Math.max(3.8, radius);
         this.spawnSlashArc(p.x, p.z, dir.angle, arcRange, colorHex, 0.34, true);
-        playSfxSafe('blade_ring');
+        this.spawnScorchDecal(p.x, p.z, dir.angle, arcRange);
+        playSfxSafe('sword_slash');
         this.emitSoundRipple(p.x, p.z, 46 * this.passives.noiseMult, 'skill');
 
-        // Check PERFECT PARRY during Inspector red lunge telegraph or active lunge!
+        // Check PERFECT PARRY during Inspector red lunge telegraph (lungeWindup > 0) or active lunge!
         var dIns = dist2D(p.x, p.z, ins.x, ins.z);
-        if (ins.alive && (ins.lungeTelegraph > 0 || ins.lungeActive > 0) && dIns <= arcRange + 1.1) {
+        if (ins.alive && (ins.lungeWindup > 0 || ins.lungeTelegraph > 0 || ins.lungeActive > 0) && dIns <= arcRange + 1.1) {
           ins.lungeTelegraph = 0;
+          ins.lungeWindup = 0;
           ins.lungeActive = 0;
           ins.teleMesh.visible = false;
           ins.teleFill.visible = false;
-          ins.stunTimer = Math.max(ins.stunTimer, 2.5);
+          ins.stunTimer = Math.max(ins.stunTimer, 2.8);
+          p.energy = Math.min(p.maxEnergy, p.energy + 25);
           this.stats.parries += 1;
           var parryDmg = Math.round(power * 1.8);
-          this.damageInspector(parryDmg, dir.x * 6.5, dir.z * 6.5, true);
-          this.hitStopTimer = 0.10;
-          this.addCameraShake(0.45, 0.32);
-          this.spawnShockRing(ins.x, ins.z, 4.2, 0xffe07d, 0.45);
-          this.spawnFloatingText(ins.x, 2.9, ins.z, 'PERFECT PARRY! 眩晕2.5s', '#ffe07d');
+          this.damageInspector(parryDmg, dir.x * 6.5, dir.z * 6.5, true, {
+            playerImpact: true,
+            hitStop: 0.075
+          });
+          this.hitStopTimer = 0.075;
+          this.parryFlashTimer = 0.22;
+          this.addCameraShake(0.48, 0.34);
+          this.addCameraKick(dir.x * 0.62, dir.z * 0.62);
+          this.spawnShockRing(ins.x, ins.z, 4.8, 0xffe484, 0.48);
+          this.spawnShockRing(ins.x, ins.z, 2.6, 0xffffff, 0.28);
+          this.spawnSparkBurst(ins.x, 1.35, ins.z, 0xffe07d, 22);
+          playSfxSafe('parry_clang');
+          this.spawnFloatingText(ins.x, 3.0, ins.z, '✦ 完美弹反! 宵练断势', '#ffe484', true);
           this.emitRadio({
             type: 'spark',
             speaker: '系统校验',
-            text: '【完美弹反】你以剑弧截断了零号检票员的处决突刺，使其陷入 2.5 秒硬直！'
+            text: '【完美弹反】你以宵练剑弧截断了零号检票员的处决突刺，使其陷入 2.8 秒硬直并返还 25 点能量！'
           });
         } else if (ins.alive && this.isPointInArc(p.x, p.z, dir.x, dir.z, ins.x, ins.z, arcRange + ins.radius, 0.15)) {
-          this.damageInspector(power, dir.x * 5.0, dir.z * 5.0, false);
-          this.hitStopTimer = 0.06;
+          this.damageInspector(power, dir.x * 5.0, dir.z * 5.0, false, {
+            playerImpact: true,
+            hitStop: 0.05
+          });
           this.addCameraShake(0.24, 0.18);
         }
         sl.cooldownLeft = sl.cooldownMax;
@@ -2011,7 +2509,7 @@
         var wz = p.z + dir.z * 1.1;
         var wSafe = this.mapApi.resolveCircleWallCollision(wx, wz, 0.5);
         this.spawnWardCircle(wSafe.x, wSafe.z, Math.max(3.0, radius), Math.max(6.5, duration), colorHex);
-        playSfxSafe('ward_place');
+        playSfxSafe('ward_hum');
         this.spawnFloatingText(wSafe.x, 2.1, wSafe.z, '结界展开 · 阻断追踪', '#f0c46c');
         sl.cooldownLeft = sl.cooldownMax;
         break;
@@ -2045,11 +2543,14 @@
         this.spawnLaserBeam(p.x, p.z, endPt.x, endPt.z, colorHex, 0.36);
         this.emitSoundRipple(p.x, p.z, 76 * this.passives.noiseMult, 'skill');
         this.addCameraShake(0.32, 0.22);
-        playSfxSafe('fusion');
+        this.addCameraKick(-dir.x * 0.45, -dir.z * 0.45);
+        playSfxSafe('rail_fire');
 
         if (ins.alive && this.segmentCircleHit(p.x, p.z, endPt.x, endPt.z, ins.x, ins.z, ins.radius + 0.5)) {
-          this.damageInspector(Math.round(power * 1.35), dir.x * 7.2, dir.z * 7.2, true);
-          this.hitStopTimer = 0.075;
+          this.damageInspector(Math.round(power * 1.35), dir.x * 7.2, dir.z * 7.2, true, {
+            playerImpact: true,
+            hitStop: 0.05
+          });
         }
         sl.cooldownLeft = sl.cooldownMax;
         break;
@@ -2131,6 +2632,7 @@
           ins.investigateTarget = { x: p.x, z: p.z };
           ins.investigateTimer = 4.5;
           ins.lungeTelegraph = 0;
+          ins.lungeWindup = 0;
           ins.teleMesh.visible = false;
           ins.teleFill.visible = false;
         }
@@ -2234,9 +2736,11 @@
                 var bx = ins.x - p.x;
                 var bz = ins.z - p.z;
                 var bl = Math.max(0.01, Math.sqrt(bx * bx + bz * bz));
-                self.damageInspector(slamDmg, (bx / bl) * 6.8, (bz / bl) * 6.8, true);
+                self.damageInspector(slamDmg, (bx / bl) * 6.8, (bz / bl) * 6.8, true, {
+                  playerImpact: true,
+                  hitStop: 0.05
+                });
                 ins.stunTimer = Math.max(ins.stunTimer, 1.0);
-                self.hitStopTimer = 0.08;
               }
             }
           },
@@ -2249,8 +2753,12 @@
       default: {
         // Safe fallback slash
         this.spawnSlashArc(p.x, p.z, dir.angle, 3.6, colorHex, 0.28, true);
+        playSfxSafe('sword_slash');
         if (ins.alive && dist2D(p.x, p.z, ins.x, ins.z) <= 4.0) {
-          this.damageInspector(power, dir.x * 3.5, dir.z * 3.5, false);
+          this.damageInspector(power, dir.x * 3.5, dir.z * 3.5, false, {
+            playerImpact: true,
+            hitStop: 0.05
+          });
         }
         sl.cooldownLeft = sl.cooldownMax;
         break;
@@ -2343,6 +2851,7 @@
         w.mats[2].opacity = 0.12 * fade;
       }
       if (w.ttl <= 0) {
+        this.spawnWardEmbers(w.x, w.z, w.radius);
         this.scene.remove(w.group);
         for (var g = 0; g < w.geos.length; g++) w.geos[g].dispose();
         for (var m = 0; m < w.mats.length; m++) w.mats[m].dispose();
@@ -2379,7 +2888,7 @@
           ins.stunTimer = Math.max(ins.stunTimer, 0.8);
           this.spawnFloatingText(ins.x, 2.5, ins.z, '结界弹阻！', '#f0c46c');
           this.spawnSparkBurst(ins.x, 1.0, ins.z, 0xf0c46c, 12);
-          playSfxSafe('ward_place');
+          playSfxSafe('ward_hum');
         }
         blocked = true;
       }
@@ -2789,13 +3298,19 @@
     this.spawnSparkBurst(x, 1.0, z, 0x4de8ff, 18);
     this.addCameraShake(0.32, 0.24);
     this.emitSoundRipple(x, z, 70, 'emp');
-    playSfxSafe('broadcast_static');
+    this.empBlackoutTimer = 3.5;
+    this.empBlackoutPos.x = x;
+    this.empBlackoutPos.z = z;
+    this.empSparkAccum = 0;
+    this.glitchAmount = Math.max(this.glitchAmount, 0.5);
+    playSfxSafe('emp_boom');
 
     // Stun Inspector if in radius
     var ins = this.inspector;
     if (ins.alive && dist2D(x, z, ins.x, ins.z) <= radius + ins.radius) {
       ins.stunTimer = Math.max(ins.stunTimer, stunSec);
       ins.lungeTelegraph = 0;
+      ins.lungeWindup = 0;
       ins.lungeActive = 0;
       ins.teleMesh.visible = false;
       ins.teleFill.visible = false;
@@ -3373,6 +3888,7 @@
     // 0.9s Crimson Lunge Telegraph wind-up!
     if (ins.lungeTelegraph > 0) {
       ins.lungeTelegraph = Math.max(0, ins.lungeTelegraph - simDt);
+      ins.lungeWindup = ins.lungeTelegraph;
       var progress = 1 - clamp(ins.lungeTelegraph / 0.9, 0, 1);
       ins.teleMesh.visible = true;
       ins.teleFill.visible = true;
@@ -3383,12 +3899,13 @@
       ins.actionTimer = 0.2;
 
       if (ins.lungeTelegraph <= 0) {
+        ins.lungeWindup = 0;
         ins.teleMesh.visible = false;
         ins.teleFill.visible = false;
         ins.lungeActive = 0.28;
         ins.lungeHitDone = false;
         ins.lungeCd = 3.2;
-        playSfxSafe('blade_ring');
+        playSfxSafe('sword_slash');
         this.emitSoundRipple(ins.x, ins.z, 65, 'boss');
       }
       this.updateActorSprite(ins, simDt, false);
@@ -3457,6 +3974,7 @@
           ins.lungeDirX = ldx / ll;
           ins.lungeDirZ = ldz / ll;
           ins.lungeTelegraph = 0.9;
+          ins.lungeWindup = 0.9;
           ins.facingLeft = ins.lungeDirX < 0;
           this.spawnFloatingText(ins.x, 2.9, ins.z, '处决蓄力! (可弹反/结界)', '#ff3b4f');
           playSfxSafe('alert');
@@ -3529,13 +4047,23 @@
   // ---------------------------------------------------------------------------
   // Damage & Defeat Handling
   // ---------------------------------------------------------------------------
-  EngineSession.prototype.damageInspector = function (amount, kbX, kbZ, isCrit) {
+  EngineSession.prototype.damageInspector = function (amount, kbX, kbZ, isCrit, opts) {
     var ins = this.inspector;
     if (!ins.alive) return;
     var dmg = Math.max(1, Math.round(amount));
     ins.hp = Math.max(0, ins.hp - dmg);
     ins.hitFlash = 0.16;
     this.stats.damageDealt += dmg;
+    playSfxSafe('hit_impact');
+
+    if (opts && opts.playerImpact) {
+      ins.whiteFlash = Math.max(ins.whiteFlash || 0, 0.09);
+      this.hitStopTimer = Math.max(this.hitStopTimer, opts.hitStop || 0.05);
+      if (kbX || kbZ) {
+        var kLen = Math.max(0.01, Math.sqrt((kbX || 0) * (kbX || 0) + (kbZ || 0) * (kbZ || 0)));
+        this.addCameraKick(((kbX || 0) / kLen) * 0.42, ((kbZ || 0) / kLen) * 0.42);
+      }
+    }
 
     if (kbX || kbZ) {
       var kbRes = this.mapApi.resolveCircleWallCollision(ins.x + (kbX || 0) * 0.28, ins.z + (kbZ || 0) * 0.28, ins.radius);
@@ -3632,17 +4160,20 @@
     p.hitFlash = 0.25;
     p.invulnTimer = 0.65;
     this.stats.damageTaken += dmg;
+    this.glitchAmount = Math.max(this.glitchAmount, 0.65);
     this.addCameraShake(0.45, 0.28);
     this.hitStopTimer = 0.06;
 
     if (kbX || kbZ) {
+      var kLenP = Math.max(0.01, Math.sqrt((kbX || 0) * (kbX || 0) + (kbZ || 0) * (kbZ || 0)));
+      this.addCameraKick(((kbX || 0) / kLenP) * 0.48, ((kbZ || 0) / kLenP) * 0.48);
       var res = this.mapApi.resolveCircleWallCollision(p.x + kbX * 0.22, p.z + kbZ * 0.22, p.radius);
       p.x = res.x;
       p.z = res.z;
     }
 
     this.spawnFloatingText(p.x, 2.3, p.z, '-' + dmg + ' HP', '#ff3b4f');
-    playSfxSafe('crisis_freeze');
+    playSfxSafe('hit_impact');
 
     if (p.hp <= 0) {
       this.finishExam('wipeout');
@@ -3676,7 +4207,7 @@
       this.trainCountdownSec -= simDt;
       if (this.trainCountdownSec <= 5.5 && !this.trainWarned) {
         this.trainWarned = true;
-        playSfxSafe('broadcast_static');
+        playSfxSafe('train_horn');
         this.emitRadio({
           type: 'broadcast',
           speaker: '站台铁轨震动',
@@ -3689,7 +4220,7 @@
         tr.z = -24;
         tr.group.visible = true;
         tr.group.position.set(TRAIN_X, RAIL_Y + 0.12, tr.z);
-        playSfxSafe('crisis_freeze');
+        playSfxSafe('train_horn');
       }
     } else if (this.trainPhase === 'arriving') {
       var targetZ = 27;
@@ -3716,7 +4247,7 @@
       if (this.trainTimer <= 0) {
         this.trainPhase = 'departing';
         this.trainInStation = false;
-        playSfxSafe('broadcast_static');
+        playSfxSafe('train_horn');
       }
     } else if (this.trainPhase === 'departing') {
       tr.z += 22 * simDt;
@@ -3757,7 +4288,8 @@
 
     this.activeFakeBroadcastTimer = 5.5;
     this.pendingYanciExposeTimer = 2.2;
-    playSfxSafe('broadcast_static');
+    this.glitchAmount = Math.max(this.glitchAmount, 0.85);
+    playSfxSafe('glitch_burst');
 
     var sanHit = Math.round(7 * (1 - this.passives.memeResist));
     if (sanHit > 0) {
@@ -4187,6 +4719,120 @@
     });
   };
 
+  EngineSession.prototype.spawnScorchDecal = function (x, z, angle, radius) {
+    var THREE = this.THREE;
+    var arcLen = Math.PI * 0.68;
+    var rOuter = Math.max(2.4, radius || 3.8);
+    var rInner = rOuter * 0.54;
+    var decalY = (x >= 41 && x < 50) ? 0.06 : 0.03;
+
+    var group = new THREE.Group();
+    group.position.set(x, decalY, z);
+    group.rotation.y = -angle;
+
+    // Dark charred arc base
+    var charGeo = new THREE.RingGeometry(rInner * 0.92, rOuter * 1.04, 22, 1, -arcLen * 0.5, arcLen);
+    charGeo.rotateX(-Math.PI / 2);
+    var charMat = new THREE.MeshBasicMaterial({
+      color: 0x181008,
+      transparent: true,
+      opacity: 0.52,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    group.add(new THREE.Mesh(charGeo, charMat));
+
+    // Glowing dark-gold scorch streak overlay
+    var glowGeo = new THREE.RingGeometry(rInner * 1.04, rOuter * 0.94, 22, 1, -arcLen * 0.46, arcLen * 0.92);
+    glowGeo.rotateX(-Math.PI / 2);
+    var glowMat = new THREE.MeshBasicMaterial({
+      color: 0xd99636,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    var glowMesh = new THREE.Mesh(glowGeo, glowMat);
+    glowMesh.position.y = 0.005;
+    group.add(glowMesh);
+
+    this.scene.add(group);
+
+    var self = this;
+    this.vfxList.push({
+      ttl: 6.0,
+      maxTtl: 6.0,
+      update: function (dt) {
+        this.ttl -= dt;
+        var frac = clamp(this.ttl / this.maxTtl, 0, 1);
+        charMat.opacity = 0.52 * frac;
+        glowMat.opacity = 0.72 * Math.pow(frac, 1.35);
+      },
+      dispose: function () {
+        self.scene.remove(group);
+        charGeo.dispose();
+        glowGeo.dispose();
+        charMat.dispose();
+        glowMat.dispose();
+      }
+    });
+  };
+
+  EngineSession.prototype.spawnWardEmbers = function (x, z, radius) {
+    var THREE = this.THREE;
+    var count = 22;
+    var positions = new Float32Array(count * 3);
+    var vels = [];
+    var r = Math.max(1.8, radius || 3.4);
+    for (var i = 0; i < count; i++) {
+      var a = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+      var rr = r * (0.45 + Math.random() * 0.6);
+      positions[i * 3] = x + Math.cos(a) * rr;
+      positions[i * 3 + 1] = 0.12 + Math.random() * 0.45;
+      positions[i * 3 + 2] = z + Math.sin(a) * rr;
+      vels.push({
+        vx: (Math.random() - 0.5) * 0.55,
+        vy: 0.9 + Math.random() * 1.45,
+        vz: (Math.random() - 0.5) * 0.55
+      });
+    }
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    var mat = new THREE.PointsMaterial({
+      color: 0xf7d06b,
+      size: 0.22,
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    var pts = new THREE.Points(geo, mat);
+    this.scene.add(pts);
+
+    var self = this;
+    this.vfxList.push({
+      ttl: 1.35,
+      maxTtl: 1.35,
+      update: function (dt) {
+        this.ttl -= dt;
+        var attr = geo.attributes.position;
+        for (var k = 0; k < count; k++) {
+          attr.array[k * 3] += vels[k].vx * dt;
+          attr.array[k * 3 + 1] += vels[k].vy * dt;
+          attr.array[k * 3 + 2] += vels[k].vz * dt;
+        }
+        attr.needsUpdate = true;
+        mat.opacity = 0.92 * clamp(this.ttl / this.maxTtl, 0, 1);
+      },
+      dispose: function () {
+        self.scene.remove(pts);
+        geo.dispose();
+        mat.dispose();
+      }
+    });
+  };
+
   EngineSession.prototype.updateVfx = function (simDt, realDt) {
     for (var i = this.vfxList.length - 1; i >= 0; i--) {
       var v = this.vfxList[i];
@@ -4259,7 +4905,44 @@
       }
     }
 
-    // Pooled nearest station flickering lights around camera
+    // EMP Blackout timer & crackling cyan sparks near overhead station lights
+    var empActive = false;
+    if (this.empBlackoutTimer > 0) {
+      empActive = true;
+      this.empBlackoutTimer = Math.max(0, this.empBlackoutTimer - realDt);
+      this.empSparkAccum += realDt;
+      if (this.empSparkAccum >= 0.16) {
+        this.empSparkAccum = 0;
+        var sparked = false;
+        for (var si = 0; si < this.stationLightDefs.length; si++) {
+          var sDef = this.stationLightDefs[si];
+          if (dist2D(sDef.x, sDef.z, this.empBlackoutPos.x, this.empBlackoutPos.z) <= 18.0 && Math.random() < 0.55) {
+            this.spawnSparkBurst(sDef.x, 2.75, sDef.z, 0x4de8ff, 5);
+            sparked = true;
+          }
+        }
+        if (!sparked) {
+          this.spawnSparkBurst(
+            this.empBlackoutPos.x + (Math.random() - 0.5) * 3.5,
+            2.4,
+            this.empBlackoutPos.z + (Math.random() - 0.5) * 3.5,
+            0x4de8ff,
+            6
+          );
+        }
+      }
+    }
+
+    if (this.stationBulbMat) {
+      if (empActive) {
+        var bPulse = (Math.sin(t * 49.0) > 0.72) ? 0x4de8ff : 0x162230;
+        this.stationBulbMat.color.setHex(bPulse);
+      } else {
+        this.stationBulbMat.color.setHex(0xbfe8ff);
+      }
+    }
+
+    // Pooled nearest station flickering lights around camera (<=4 pooled lights)
     if (this.stationLightPool.length > 0 && this.stationLightDefs.length > 0) {
       var sorted = this.stationLightDefs.slice().sort(function (a, b) {
         var da = (a.x - p.x) * (a.x - p.x) + (a.z - p.z) * (a.z - p.z);
@@ -4281,9 +4964,39 @@
           var wave = Math.sin(t * 11.3 + def.seed) * Math.sin(t * 27.1 + def.seed * 2);
           flk = wave > 0.72 ? Math.max(0.25, 1.0 - def.flicker * 2.1) : (1.0 - def.flicker * 0.35 + wave * def.flicker * 0.45);
         }
+        if (empActive && dist2D(def.x, def.z, this.empBlackoutPos.x, this.empBlackoutPos.z) <= 22.0) {
+          if (this.empBlackoutTimer > 1.0) {
+            var stutter = Math.sin(t * 53.0 + def.seed * 7.0);
+            flk = stutter > 0.86 ? 0.28 : 0.03;
+            pl.color.setHex(stutter > 0.86 ? 0x4de8ff : def.color);
+          } else {
+            var recover = 1.0 - this.empBlackoutTimer;
+            flk *= lerp(0.12, 1.0, recover) * (Math.sin(t * 37.0 + def.seed * 3.0) > -0.25 ? 1.0 : 0.14);
+          }
+        }
         pl.intensity = def.intensity * flk;
       }
     }
+  };
+
+  EngineSession.prototype.updateSpatialAudio = function () {
+    var p = this.player;
+    if (!p) return;
+
+    var ins = this.inspector;
+    var insIntensity = 0;
+    if (ins && ins.alive && !this.ended) {
+      var dIns = dist2D(p.x, p.z, ins.x, ins.z);
+      var stateScale = ins.stunTimer > 0 ? 0.15 : (ins.state === 'HUNT' ? 1.0 : (ins.state === 'INVESTIGATE' ? 0.82 : 0.58));
+      insIntensity = clamp(1.0 - dIns / 24.0, 0, 1) * stateScale;
+    }
+    safeAudio('updateSpatialSource', 'inspector', ins ? (ins.x - p.x) : 99, ins ? (ins.z - p.z) : 99, insIntensity);
+
+    var trainActive = !!(this.train && this.train.group && this.train.group.visible && this.trainPhase !== 'waiting' && !this.ended);
+    var trainZ = this.train ? this.train.z : -32;
+    safeAudio('updateSpatialSource', 'train', TRAIN_X - p.x, trainZ - p.z, trainActive ? 1 : 0);
+
+    safeAudio('setBulletTime', !!(this.slowMo || this.inputPaused));
   };
 
   EngineSession.prototype.updateDust = function (simDt) {
@@ -4348,24 +5061,29 @@
     };
   };
 
-  EngineSession.prototype.spawnFloatingText = function (x, y, z, text, color) {
+  EngineSession.prototype.spawnFloatingText = function (x, y, z, text, color, isBoldCallout) {
     if (!this.floatersLayer) return;
     var el = document.createElement('div');
     el.textContent = text;
+    var fontSize = isBoldCallout ? '15px' : '12px';
+    var shadow = isBoldCallout
+      ? '0 0 12px rgba(255,224,125,0.85),0 2px 6px #000,0 0 18px rgba(255,196,70,0.65)'
+      : '0 1px 4px #000,0 0 8px rgba(0,0,0,0.95)';
     el.style.cssText =
-      'position:absolute;transform:translate(-50%,-50%);font-size:12px;font-weight:800;' +
-      'color:' + (color || '#ffffff') + ';text-shadow:0 1px 4px #000,0 0 8px rgba(0,0,0,0.95);' +
-      'white-space:nowrap;pointer-events:none;letter-spacing:0.4px;';
+      'position:absolute;transform:translate(-50%,-50%);font-size:' + fontSize + ';font-weight:900;' +
+      'color:' + (color || '#ffffff') + ';text-shadow:' + shadow + ';' +
+      'white-space:nowrap;pointer-events:none;letter-spacing:' + (isBoldCallout ? '1.0px' : '0.4px') + ';';
     this.floatersLayer.appendChild(el);
 
+    var ttl = isBoldCallout ? 1.55 : 1.15;
     this.floatingTexts.push({
       el: el,
-      x: x + (Math.random() - 0.5) * 0.4,
+      x: x + (isBoldCallout ? 0 : (Math.random() - 0.5) * 0.4),
       y: y,
       z: z,
-      vy: 1.35,
-      ttl: 1.15,
-      maxTtl: 1.15
+      vy: isBoldCallout ? 1.05 : 1.35,
+      ttl: ttl,
+      maxTtl: ttl
     });
   };
 
@@ -4712,6 +5430,12 @@
 
     this.removeBlinkBeacon();
     this.clearReconBeacons();
+    this.disposePostFx();
+
+    // Silence spatial audio sources and reset bullet-time filter cleanly
+    safeAudio('updateSpatialSource', 'inspector', 99, 99, 0);
+    safeAudio('updateSpatialSource', 'train', 99, 99, 0);
+    safeAudio('setBulletTime', false);
 
     // Dispose all tracked engine-owned geometries, materials, fallback textures
     for (var gi = 0; gi < this.ownedGeometries.length; gi++) {
@@ -4738,6 +5462,10 @@
       this.containerEl.innerHTML = '';
     }
 
+    this.fogOfWar = null;
+    this.fogGrid = null;
+    this.fogRayPts = null;
+    this.stationBulbMat = null;
     this.scene = null;
     this.camera = null;
     this.speechBubbles = Object.create(null);
@@ -4821,6 +5549,21 @@
         return activeSession.getSnapshot();
       }
       return null;
+    },
+
+    setPostFxEnabled: function (enabled) {
+      postFxGlobalEnabled = !!enabled;
+      if (activeSession) {
+        activeSession.postFxEnabled = postFxGlobalEnabled;
+      }
+      return postFxGlobalEnabled;
+    },
+
+    isPostFxEnabled: function () {
+      if (activeSession) {
+        return !!activeSession.postFxEnabled;
+      }
+      return postFxGlobalEnabled;
     }
   };
 })(window);

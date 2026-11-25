@@ -946,15 +946,97 @@
   }
 
   /* --------------------------------------------------------------------------
+   * External Tile Hot-Swap Loader (Manifest-Driven, Zero 404 Console Errors)
+   * -------------------------------------------------------------------------- */
+  var tileEntries = Object.create(null);
+
+  function resolveExternalTileUrl(name) {
+    try {
+      if (INFINITY.ASSETS && typeof INFINITY.ASSETS.getTileUrl === 'function') {
+        var url = INFINITY.ASSETS.getTileUrl(name);
+        if (typeof url === 'string' && url.length > 0) return url;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function applyExternalTile(entry, forceReload) {
+    if (!entry || !entry.canvas || !entry.tex) return;
+    var url = resolveExternalTileUrl(entry.name);
+
+    // If manifest override was removed after previously loading an external tile, restore procedural tile
+    if (!url) {
+      if (entry.loadedUrl) {
+        var fallback = buildTileCanvas(entry.name);
+        entry.canvas.width = fallback.width;
+        entry.canvas.height = fallback.height;
+        var fctx = entry.canvas.getContext('2d');
+        fctx.imageSmoothingEnabled = false;
+        fctx.clearRect(0, 0, entry.canvas.width, entry.canvas.height);
+        fctx.drawImage(fallback, 0, 0);
+        entry.loadedUrl = null;
+        if (entry.tex && typeof entry.tex === 'object') {
+          entry.tex.needsUpdate = true;
+        }
+      }
+      return;
+    }
+
+    if (!forceReload && entry.loadedUrl === url) return;
+    if (typeof global.Image !== 'function') return;
+
+    var img = new global.Image();
+    // Only set crossOrigin for external http(s) origins so local file:// or same-origin loads never fail
+    if (/^https?:\/\//i.test(url) && global.location && global.location.origin && url.indexOf(global.location.origin) !== 0) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = function () {
+      try {
+        var nw = img.naturalWidth || img.width || 32;
+        var nh = img.naturalHeight || img.height || 32;
+        // Keep power-of-two dimensions (32/64/128) so RepeatWrapping never triggers WebGL NPOT warnings
+        var targetSize = (nw >= 128 && nh >= 128) ? 128 : ((nw >= 64 && nh >= 64) ? 64 : 32);
+        if (entry.canvas.width !== targetSize || entry.canvas.height !== targetSize) {
+          entry.canvas.width = targetSize;
+          entry.canvas.height = targetSize;
+        }
+        var ctx = entry.canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, targetSize, targetSize);
+        ctx.drawImage(img, 0, 0, targetSize, targetSize);
+        entry.loadedUrl = url;
+        if (entry.tex && typeof entry.tex === 'object') {
+          entry.tex.needsUpdate = true;
+        }
+      } catch (_) {}
+    };
+    img.onerror = function () {
+      // Silently preserve procedural pixel tile on load error
+    };
+    img.src = url;
+  }
+
+  /* --------------------------------------------------------------------------
    * Public API (Cached NearestFilter THREE.CanvasTexture)
    * -------------------------------------------------------------------------- */
   function getTileTexture(name) {
-    var key = 'tile:' + String(name || 'floor_slate');
+    var tileName = String(name || 'floor_slate');
+    var key = 'tile:' + tileName;
     if (textureCache[key]) return textureCache[key];
-    var canvas = buildTileCanvas(name);
+    var canvas = buildTileCanvas(tileName);
     var tex = toTexture(canvas, true);
     textureCache[key] = tex;
+    var entry = { name: tileName, canvas: canvas, tex: tex, loadedUrl: null };
+    tileEntries[tileName] = entry;
+    applyExternalTile(entry, false);
     return tex;
+  }
+
+  function reloadExternalTiles() {
+    var names = Object.keys(tileEntries);
+    for (var i = 0; i < names.length; i++) {
+      applyExternalTile(tileEntries[names[i]], true);
+    }
   }
 
   function getCharTexture(id, frame) {
@@ -982,6 +1064,7 @@
 
   INFINITY.PixelSprites = {
     getTileTexture: getTileTexture,
+    reloadExternalTiles: reloadExternalTiles,
     getCharTexture: getCharTexture,
     getPropTexture: getPropTexture
   };
