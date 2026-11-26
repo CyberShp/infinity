@@ -915,6 +915,291 @@
   }
 
   // ---------------------------------------------------------------------------
+  // 7B. 12-Motif Parametric VFX DNA Compiler (100% Coverage of 500+ Items)
+  // ---------------------------------------------------------------------------
+  var VFX_MOTIFS = {
+    sword_qi: {
+      id: 'sword_qi',
+      label: '剑意锋芒',
+      primary: '#5ce1c6',
+      secondary: '#d2fff6',
+      core: '#ffffff',
+      sigilStyle: 'bagua',
+      orbiterType: 'sword',
+      particleStyle: 'slash_spark',
+      ringLayers: 2
+    },
+    flame_solar: {
+      id: 'flame_solar',
+      label: '炽阳雷火',
+      primary: '#ff7838',
+      secondary: '#ffd25a',
+      core: '#fff7d1',
+      sigilStyle: 'bagua',
+      orbiterType: 'talisman',
+      particleStyle: 'ember',
+      ringLayers: 2
+    },
+    thunder_emp: {
+      id: 'thunder_emp',
+      label: '高压雷暴',
+      primary: '#48d1ff',
+      secondary: '#9d7bff',
+      core: '#e8fcff',
+      sigilStyle: 'hex_grid',
+      orbiterType: 'drone_bit',
+      particleStyle: 'arc_bolt',
+      ringLayers: 2
+    },
+    frost_cryo: {
+      id: 'frost_cryo',
+      label: '极寒凝霜',
+      primary: '#7ce8ff',
+      secondary: '#c8f6ff',
+      core: '#ffffff',
+      sigilStyle: 'arcane_star',
+      orbiterType: 'void_prism',
+      particleStyle: 'crystal',
+      ringLayers: 2
+    },
+    blood_sanguine: {
+      id: 'blood_sanguine',
+      label: '血煞狂潮',
+      primary: '#ff3b5c',
+      secondary: '#b81d3d',
+      core: '#ffd1d9',
+      sigilStyle: 'blood_crest',
+      orbiterType: 'blood_shard',
+      particleStyle: 'crimson_mist',
+      ringLayers: 2
+    },
+    void_space: {
+      id: 'void_space',
+      label: '裂隙折跃',
+      primary: '#8f7cff',
+      secondary: '#52d6ff',
+      core: '#eef4ff',
+      sigilStyle: 'arcane_star',
+      orbiterType: 'void_prism',
+      particleStyle: 'rift_shard',
+      ringLayers: 2
+    },
+    holy_tao: {
+      id: 'holy_tao',
+      label: '玄门金印',
+      primary: '#f2c766',
+      secondary: '#76e8d4',
+      core: '#fff8db',
+      sigilStyle: 'bagua',
+      orbiterType: 'talisman',
+      particleStyle: 'rune_gold',
+      ringLayers: 2
+    },
+    occult_meme: {
+      id: 'occult_meme',
+      label: '诡异收容',
+      primary: '#e84a7f',
+      secondary: '#c25bff',
+      core: '#ffd6e8',
+      sigilStyle: 'occult_eye',
+      orbiterType: 'rune_orb',
+      particleStyle: 'glitch_static',
+      ringLayers: 2
+    },
+    bio_venom: {
+      id: 'bio_venom',
+      label: '生机净蚀',
+      primary: '#58e89a',
+      secondary: '#b2ff6e',
+      core: '#e9fff0',
+      sigilStyle: 'hex_grid',
+      orbiterType: 'bio_helix',
+      particleStyle: 'bio_cross',
+      ringLayers: 2
+    },
+    cyber_tactical: {
+      id: 'cyber_tactical',
+      label: '赛博矩阵',
+      primary: '#3ee8ff',
+      secondary: '#ffb347',
+      core: '#e8ffff',
+      sigilStyle: 'tactical_hud',
+      orbiterType: 'drone_bit',
+      particleStyle: 'holo_grid',
+      ringLayers: 2
+    },
+    shadow_ninja: {
+      id: 'shadow_ninja',
+      label: '影遁忍法',
+      primary: '#9e82ff',
+      secondary: '#5865a8',
+      core: '#e0d6ff',
+      sigilStyle: 'occult_eye',
+      orbiterType: 'void_prism',
+      particleStyle: 'shadow_wisp',
+      ringLayers: 1
+    },
+    gravity_kinetic: {
+      id: 'gravity_kinetic',
+      label: '震岳重劲',
+      primary: '#ff8a47',
+      secondary: '#f2c464',
+      core: '#fff0d4',
+      sigilStyle: 'blood_crest',
+      orbiterType: 'kinetic_plate',
+      particleStyle: 'shock_debris',
+      ringLayers: 2
+    }
+  };
+
+  var VFX_MOTIF_RULES = [
+    { id: 'sword_qi', nameRe: /剑|刀|刃|锋|斩|宵练|承影|干将|莫邪|太阿|诛仙|青锋|居合|飞剑/, descRe: /剑气|剑意|刀光|御剑|斩击|拔刀/, tag: '剑修' },
+    { id: 'flame_solar', nameRe: /火|炎|焰|阳|金乌|焚|炽|爆|燃|熔|业火|朱雀|凤凰|三昧|云爆|烈日/, descRe: /灼烧|火焰|纯阳|爆炸|高温|炽烈/, tag: '火焰雷法' },
+    { id: 'thunder_emp', nameRe: /雷|电|EMP|磁|电弧|闪电|雷法|五雷|掌心雷|脉冲|高压|静默塔|轨道|高斯|离子|黑客|破解/, descRe: /电磁|高压|瘫痪|雷击|电弧|骇客|短路/, tag: '电磁' },
+    { id: 'frost_cryo', nameRe: /冰|霜|寒|雪|冻|液氮|极寒|玄冰|凛/, descRe: /冻结|冰霜|低温|减速|寒气/, tag: null },
+    { id: 'blood_sanguine', nameRe: /血|暴君|狂暴|狼人|吸血|血族|将臣|修罗|嗜血|肉体|鬼神|黑光|屠|煞|猩红|恶魔/, descRe: /嗜血|吸血|狂暴|肉体畸变|血煞|撕裂/, tag: '赌命' },
+    { id: 'void_space', nameRe: /空|跃|闪|折跃|飞雷神|缩地|时空|微尘|穿墙|维度|虚空|星|曲率|相位|黑洞|传送|时间/, descRe: /空间|折跃|瞬移|裂隙|维度|时间|相位/, tag: '空间' },
+    { id: 'holy_tao', nameRe: /道|符|阵|佛|金钵|圣|律|天平|八卦|太极|注连绳|镇魂|桃木|法印|灵宝|昊天|昆仑|两仪|守心|净/, descRe: /结界|道门|符箓|佛光|镇煞|律令|阵法|神圣/, tag: '阵法' },
+    { id: 'occult_meme', nameRe: /诡|鬼|灵|模因|收容|棺|尸|匣|怨|冥|死灵|克苏鲁|诅咒|纸人|扎纸|替身草人|拍立得|铜铃|招魂|异变|异常/, descRe: /模因|收容|规则|灵异|怨念|精神污染|诡异/, tag: '收容' },
+    { id: 'bio_venom', nameRe: /毒|医|疗|药|剂|生|基因|细胞|净水|绷带|血清|圣水|再生|回春|解毒|丹|灵泉|青草|嗅盐/, descRe: /治疗|恢复|医疗|解毒|毒素|生化|再生|止血/, tag: '医疗' },
+    { id: 'cyber_tactical', nameRe: /赛博|义体|机械|枪|炮|左轮|步枪|狙击|激光|无人机|雷达|热成像|凯夫拉|全息|纳米|外骨骼|机甲|神经|底盘|PKE|护目镜|探测/, descRe: /赛博|义体|枪械|弹道|无人机|全息|雷达|战术/, tag: '科技装备' },
+    { id: 'shadow_ninja', nameRe: /影|隐|匿|潜|忍|苦无|迷彩|狐|幻|雾|夜|暗|消音|分身|替身术|逆模因/, descRe: /隐身|隐匿|潜行|忍术|光学迷彩|暗影|幻象/, tag: '隐蔽' },
+    { id: 'gravity_kinetic', nameRe: /拳|体|力|重|泰坦|巨人|后土|金刚|石像鬼|霸王|龙|震|盾|甲|壁垒|背心|山魈|震地|破阵/, descRe: /重击|震地|破甲|体魄|冲击波|蛮力|硬直/, tag: '破甲' }
+  ];
+
+  var TIER_VFX_INTENSITY = {
+    D: 0.82,
+    C: 0.96,
+    B: 1.14,
+    A: 1.36,
+    S: 1.62
+  };
+
+  function classifyVfxMotif(item, archetypeId) {
+    var name = String((item && item.name) || '');
+    var desc = sanitizePositiveDesc((item && item.desc) || '');
+    var tags = Array.isArray(item && item.tags) ? item.tags : [];
+    var energyType = String((item && item.energyType) || '通用');
+    var category = String((item && item.category) || 'general');
+
+    var tagSet = Object.create(null);
+    for (var t = 0; t < tags.length; t++) tagSet[tags[t]] = true;
+
+    var bestMotif = null;
+    var bestScore = -1;
+    var seed = stableHash((item && item.id) || name || archetypeId || 'vfx');
+
+    for (var i = 0; i < VFX_MOTIF_RULES.length; i++) {
+      var rule = VFX_MOTIF_RULES[i];
+      var sc = 0;
+      if (rule.nameRe && rule.nameRe.test(name)) sc += 12;
+      if (rule.descRe && rule.descRe.test(desc)) sc += 5.5;
+      if (rule.tag && tagSet[rule.tag]) sc += 4.5;
+
+      // Energy & category synergy nudges
+      if (rule.id === 'holy_tao' && energyType === '真元') sc += 2.2;
+      if (rule.id === 'sword_qi' && energyType === '真元' && archetypeId === 'sword_arc') sc += 3.5;
+      if (rule.id === 'cyber_tactical' && (energyType === '科技' || category === 'tech')) sc += 3.0;
+      if (rule.id === 'thunder_emp' && energyType === '科技' && archetypeId === 'emp_blast') sc += 4.2;
+      if (rule.id === 'occult_meme' && (energyType === '灵异' || category === 'anomaly')) sc += 3.0;
+      if (rule.id === 'void_space' && (energyType === '魔力' || archetypeId === 'blink_mark')) sc += 2.6;
+      if (rule.id === 'gravity_kinetic' && (energyType === '体魄' || archetypeId === 'berserk_strike')) sc += 3.0;
+      if (rule.id === 'blood_sanguine' && category === 'bloodline' && energyType === '体魄') sc += 2.8;
+      if (rule.id === 'bio_venom' && (archetypeId === 'heal_pulse' || tagSet['毒素生化'])) sc += 3.2;
+      if (rule.id === 'shadow_ninja' && archetypeId === 'stealth_veil') sc += 3.8;
+
+      if (sc > bestScore || (sc === bestScore && sc > 0 && ((seed + i * 11) % 17) > 8)) {
+        bestScore = sc;
+        bestMotif = rule.id;
+      }
+    }
+
+    if (!bestMotif || bestScore <= 0) {
+      var fallbackByArch = {
+        sword_arc: 'sword_qi',
+        ward_circle: 'holy_tao',
+        emp_blast: 'thunder_emp',
+        rail_shot: 'cyber_tactical',
+        blink_mark: 'void_space',
+        aegis_shield: 'holy_tao',
+        overclock: 'cyber_tactical',
+        heal_pulse: 'bio_venom',
+        stealth_veil: 'shadow_ninja',
+        seal_chain: 'occult_meme',
+        recon_pulse: 'cyber_tactical',
+        turret_drone: 'cyber_tactical',
+        decoy_flare: 'shadow_ninja',
+        berserk_strike: 'gravity_kinetic'
+      };
+      bestMotif = fallbackByArch[archetypeId] || 'cyber_tactical';
+    }
+    return bestMotif;
+  }
+
+  function buildVfxProfile(item, archetypeId, tier, resolvedColor) {
+    var safeItem = item || {};
+    var normTier = normalizeTier(tier || safeItem.tier);
+    var motifId = classifyVfxMotif(safeItem, archetypeId);
+    var motif = VFX_MOTIFS[motifId] || VFX_MOTIFS.cyber_tactical;
+    var energyType = String(safeItem.energyType || '通用');
+    var tags = Array.isArray(safeItem.tags) ? safeItem.tags : [];
+    var isFused = Boolean(safeItem.id && /^FUS_|^CUSTOM_FUS_/.test(String(safeItem.id)));
+    var isGamble = tags.indexOf('赌命') !== -1 || /赌命|自毁|献祭|燃血|禁术/.test(String(safeItem.name || ''));
+    var hash = stableHash(String(safeItem.id || '') + '|' + String(safeItem.name || '') + '|' + archetypeId);
+    var tierRank = TIER_RANK[normTier] || 0;
+    var intensity = (TIER_VFX_INTENSITY[normTier] || 1.0) * (isFused ? 1.15 : 1.0);
+
+    // Harmonize primary color between motif and energyType palette
+    var primary = motif.primary || resolvedColor || '#6fd8ea';
+    var secondary = motif.secondary || resolvedColor || '#ffffff';
+    if (energyType === '灵异' && motifId !== 'blood_sanguine' && motifId !== 'occult_meme') {
+      secondary = '#e05882';
+    } else if (energyType === '真元' && motifId === 'cyber_tactical') {
+      secondary = '#f0c975';
+    } else if (energyType === '魔力' && motifId === 'sword_qi') {
+      secondary = '#a97bff';
+    } else if (isFused) {
+      secondary = (ENERGY_PALETTES[energyType] && ENERGY_PALETTES[energyType].high) || '#ffe184';
+    }
+
+    return {
+      motif: motifId,
+      motifLabel: motif.label,
+      labelTag: energyType + '·' + motif.label,
+      primaryColor: primary,
+      secondaryColor: secondary,
+      coreColor: motif.core || '#ffffff',
+      sigilStyle: motif.sigilStyle,
+      orbiterType: motif.orbiterType,
+      particleStyle: motif.particleStyle,
+      ringLayers: Math.min(3, (motif.ringLayers || 2) + (tierRank >= 3 ? 1 : 0)),
+      tier: normTier,
+      tierRank: tierRank,
+      tierIntensity: round2(intensity),
+      isFused: isFused,
+      isGamble: isGamble,
+      isHighTier: tierRank >= 3,
+      shapeVariant: hash % 4
+    };
+  }
+
+  // Enrich built-in STARTER_SKILLS with deterministic vfxProfile & particlePreset
+  for (var stIdx = 0; stIdx < STARTER_SKILLS.length; stIdx++) {
+    var stSk = STARTER_SKILLS[stIdx];
+    var stRaw = {
+      id: stSk.itemId,
+      name: stSk.name,
+      tier: stSk.tier,
+      energyType: stSk.energyType,
+      category: stSk.category,
+      desc: stSk.desc,
+      tags: []
+    };
+    stSk.vfxProfile = buildVfxProfile(stRaw, stSk.archetype, stSk.tier, stSk.color);
+    stSk.particlePreset = null; // populated immediately after ParticleVfx module init below
+  }
+
+  // ---------------------------------------------------------------------------
   // 8. mapItemToSkill(item)
   // ---------------------------------------------------------------------------
   function mapItemToSkill(itemOrId) {
@@ -963,6 +1248,10 @@
     }
 
     var color = resolveNeonColor(energyType, archetypeId, tier);
+    var vfxProfile = buildVfxProfile(item, archetypeId, tier, color);
+    var itemIdStr = String(item.id || ('CUSTOM_' + stableHash(item.name || 'skill')));
+    var particlePreset = PARTICLE_CATALOG[itemIdStr] || buildParticlePreset(item, archetypeId, tier, vfxProfile);
+    vfxProfile.particlePreset = particlePreset;
     var itemDesc = item.desc ? String(item.desc).trim() : '';
     var desc = itemDesc
       ? '[' + arch.name + '] ' + itemDesc
@@ -970,10 +1259,10 @@
 
     return {
       archetype: archetypeId,
-      itemId: String(item.id || ('CUSTOM_' + stableHash(item.name || 'skill'))),
+      itemId: itemIdStr,
       name: String(item.name || arch.name),
       tier: tier,
-      color: color,
+      color: vfxProfile.primaryColor || color,
       cooldown: cooldown,
       energyCost: energyCost,
       power: power,
@@ -983,9 +1272,12 @@
       icon: arch.icon,
       energyType: energyType,
       category: String(item.category || 'general'),
+      tags: tags.slice(),
       noise: arch.noise,
       discounted: discounted,
-      isStarter: false
+      isStarter: false,
+      vfxProfile: vfxProfile,
+      particlePreset: particlePreset
     };
   }
 
@@ -1354,34 +1646,2018 @@
       chosen.push(Object.assign({}, STARTER_SKILLS[s2]));
     }
 
-    // Attach slot metadata (`key: '1'..'4'`, `slotIndex: 0..3`)
+    // Extract equipped bloodlines and evaluate Bloodline Resonance across all 4 slots & basic attack
+    var equippedBloodlines = extractEquippedBloodlines(ownedItems, mappedSkills);
+
+    // Attach slot metadata (`key: '1'..'4'`, `slotIndex: 0..3`) and Bloodline Resonance bonuses
     var slots = [];
     for (var idx = 0; idx < 4; idx++) {
       var slotSkill = Object.assign({}, chosen[idx]);
       slotSkill.slotIndex = idx;
       slotSkill.key = String(idx + 1);
+      slotSkill.baseCooldown = slotSkill.cooldown;
+      slotSkill.baseEnergyCost = slotSkill.energyCost;
+      slotSkill.basePower = slotSkill.power;
+      slotSkill.baseRadius = slotSkill.radius;
+      slotSkill.baseDuration = slotSkill.duration;
+
+      var slotRes = evaluateBloodlineResonance(equippedBloodlines, slotSkill);
+      if (slotRes && slotRes.matched) {
+        slotSkill.resonance = slotRes;
+        slotSkill.cooldown = round1(clamp(slotSkill.cooldown * slotRes.bonuses.cooldownMult, 1.4, 18.0));
+        slotSkill.energyCost = Math.max(4, Math.round(slotSkill.energyCost * slotRes.bonuses.energyCostMult));
+        slotSkill.resonanceAppliedOnSlot = true;
+      } else {
+        slotSkill.resonance = null;
+        slotSkill.resonanceAppliedOnSlot = false;
+      }
       slots.push(slotSkill);
     }
 
     var basicAttack = buildBasicAttack(player, ownedItems, mappedSkills);
+    var basicRes = evaluateBloodlineResonance(equippedBloodlines, basicAttack);
+    basicAttack.resonance = (basicRes && basicRes.matched) ? basicRes : null;
+
     var passives = computePassives(player, ownedItems, mappedSkills);
+    var resonanceSummary = buildLoadoutResonanceSummary(equippedBloodlines, slots, basicAttack);
+    if (resonanceSummary && resonanceSummary.activeCount > 0) {
+      var pb = resonanceSummary.passiveBonuses;
+      passives.damageMult = round2(clamp(passives.damageMult + (pb.damageMultAdd || 0), 0.90, 2.55));
+      passives.energyRegen = round1(clamp(passives.energyRegen + (pb.energyRegenAdd || 0), 4.0, 22.0));
+      passives.maxHpBonus = Math.round(clamp(passives.maxHpBonus + (pb.maxHpAdd || 0), 0, 320));
+      passives.moveSpeedMult = round2(clamp(passives.moveSpeedMult + (pb.moveSpeedAdd || 0), 0.85, 1.80));
+      passives.memeResist = round2(clamp(passives.memeResist + (pb.memeResistAdd || 0), 0.0, 0.90));
+      passives.noiseMult = round2(clamp(passives.noiseMult * (pb.noiseMult || 1.0), 0.35, 1.35));
+    }
     var styleLabel = computeStyleLabel(ownedItems, mappedSkills);
+
+    // Synthesize holistic 2.5D character visual aura, orbiting relics, and sigil from all equipped items/bloodlines
+    var characterVisual = buildCharacterVisualProfile(ownedItems, mappedSkills, slots, basicAttack, styleLabel);
+    basicAttack.vfxProfile = basicAttack.vfxProfile || {
+      motif: characterVisual.primaryMotif,
+      motifLabel: characterVisual.motifLabel,
+      labelTag: characterVisual.labelTag,
+      primaryColor: basicAttack.color || characterVisual.auraColor,
+      secondaryColor: characterVisual.accentColor,
+      coreColor: '#ffffff',
+      sigilStyle: characterVisual.sigilStyle,
+      orbiterType: characterVisual.orbiterType,
+      particleStyle: characterVisual.particleStyle,
+      ringLayers: 1,
+      tier: characterVisual.highestTier,
+      tierRank: characterVisual.tierRank,
+      tierIntensity: round2(0.88 + characterVisual.tierRank * 0.14),
+      isFused: characterVisual.hasFused,
+      isGamble: characterVisual.hasGamble,
+      isHighTier: characterVisual.tierRank >= 3,
+      shapeVariant: characterVisual.tierRank % 4
+    };
+    basicAttack.particlePreset = buildParticlePreset(
+      { id: 'BASIC_' + characterVisual.primaryMotif, name: basicAttack.name, tier: characterVisual.highestTier, energyType: '通用', tags: [] },
+      basicAttack.mode === 'ranged' ? 'rail_shot' : 'sword_arc',
+      characterVisual.highestTier,
+      basicAttack.vfxProfile
+    );
+    basicAttack.vfxProfile.particlePreset = basicAttack.particlePreset;
 
     return {
       basicAttack: basicAttack,
       slots: slots,
       passives: passives,
-      styleLabel: styleLabel
+      styleLabel: styleLabel,
+      characterVisual: characterVisual,
+      bloodlines: equippedBloodlines,
+      resonanceSummary: resonanceSummary
+    };
+  }
+
+  function buildCharacterVisualProfile(ownedItems, mappedSkills, slots, basicAttack, styleLabel) {
+    var bestBloodline = null;
+    var bestItem = null;
+    var highestRank = -1;
+    var hasFused = false;
+    var hasGamble = false;
+    var motifWeights = Object.create(null);
+
+    for (var i = 0; i < ownedItems.length; i++) {
+      var it = ownedItems[i];
+      var sk = mappedSkills[i];
+      if (!it || !sk) continue;
+      var vp = sk.vfxProfile;
+      var tr = TIER_RANK[normalizeTier(it.tier)] || 0;
+      if (it.id && /^FUS_|^CUSTOM_FUS_/.test(String(it.id))) hasFused = true;
+      if (vp && vp.isGamble) hasGamble = true;
+      if (tr > highestRank) {
+        highestRank = tr;
+        bestItem = sk;
+      }
+      if (it.category === 'bloodline') {
+        if (!bestBloodline || tr >= (TIER_RANK[bestBloodline.tier] || 0)) {
+          bestBloodline = sk;
+        }
+      }
+      if (vp && vp.motif) {
+        var w = 1 + tr * 0.75 + (it.category === 'bloodline' ? 1.8 : 0) + (vp.isFused ? 2.5 : 0);
+        motifWeights[vp.motif] = (motifWeights[vp.motif] || 0) + w;
+      }
+    }
+
+    var primarySkill = bestBloodline || bestItem || (slots && slots[0]) || STARTER_SKILLS[0];
+    var primaryVp = (primarySkill && primarySkill.vfxProfile) || buildVfxProfile(null, 'sword_arc', 'C', '#6fd8ea');
+
+    // Pick secondary motif if player combines multiple systems
+    var sortedMotifs = Object.keys(motifWeights).sort(function (a, b) {
+      return motifWeights[b] - motifWeights[a];
+    });
+    var primaryMotifId = sortedMotifs[0] || primaryVp.motif || 'sword_qi';
+    var secondaryMotifId = sortedMotifs[1] || primaryMotifId;
+    var pMotif = VFX_MOTIFS[primaryMotifId] || VFX_MOTIFS.sword_qi;
+    var sMotif = VFX_MOTIFS[secondaryMotifId] || pMotif;
+
+    var tierRank = Math.max(0, highestRank);
+    var tierNames = ['D', 'C', 'B', 'A', 'S'];
+    var highestTier = tierNames[Math.min(4, tierRank)] || 'D';
+    var orbiterCount = clamp(1 + Math.floor(tierRank * 0.75) + (hasFused ? 1 : 0), 1, 4);
+
+    return {
+      primaryMotif: primaryMotifId,
+      secondaryMotif: secondaryMotifId,
+      motifLabel: pMotif.label,
+      labelTag: (primarySkill && primarySkill.energyType ? primarySkill.energyType : '通用') + '·' + pMotif.label,
+      auraColor: primaryVp.primaryColor || pMotif.primary,
+      accentColor: secondaryMotifId !== primaryMotifId ? sMotif.primary : (primaryVp.secondaryColor || pMotif.secondary),
+      rimColor: pMotif.core || '#ffffff',
+      sigilStyle: pMotif.sigilStyle || 'bagua',
+      orbiterType: pMotif.orbiterType || 'sword',
+      particleStyle: pMotif.particleStyle || 'slash_spark',
+      orbiterCount: orbiterCount,
+      tierRank: tierRank,
+      highestTier: highestTier,
+      hasFused: hasFused,
+      hasGamble: hasGamble,
+      bloodlineName: bestBloodline ? bestBloodline.name : (primarySkill ? primarySkill.name : '考生基础脉络'),
+      weaponStyle: (basicAttack && basicAttack.style) || 'tactical',
+      styleLabel: styleLabel || '多域战术求生者'
     };
   }
 
   // ---------------------------------------------------------------------------
-  // 10. Public Export on window.INFINITY.Skills25D
+  // 10. Three.js 500-Skill Parametric Particle VFX Module
+  // Predefines distinct 3-tone color profiles & trigger choreography for all
+  // 500 SHOP_CATALOG items (arc_shock, shield_refract, blade_vortex, etc.).
   // ---------------------------------------------------------------------------
+  var PARTICLE_TRIGGER_ANIMS = {
+    arc_shock: {
+      id: 'arc_shock',
+      label: '电弧震荡',
+      desc: '强力爆发与雷电冲击：高能电弧粒子沿冲击波高频震荡，伴随多分支 3D 闪电丝裂变。',
+      defaultDuration: 0.62,
+      defaultSpeed: 6.4,
+      defaultSpread: 2.8,
+      oscillationFreq: 26.0,
+      hasArcs: true
+    },
+    shield_refract: {
+      id: 'shield_refract',
+      label: '护盾折射光',
+      desc: '防御壁垒与结界展开：球面晶格粒子包覆躯干并产生棱镜折射闪烁，双倾角折射环同步脉冲。',
+      defaultDuration: 0.85,
+      defaultSpeed: 2.1,
+      defaultSpread: 1.55,
+      oscillationFreq: 10.5,
+      hasRefractRings: true
+    },
+    blade_vortex: {
+      id: 'blade_vortex',
+      label: '剑气星屑',
+      desc: '弧光斩击与锋刃挥砍：扇面高速星屑沿瞄准方向横扫卷起螺旋余烬。',
+      defaultDuration: 0.54,
+      defaultSpeed: 7.2,
+      defaultSpread: 3.2,
+      oscillationFreq: 14.0
+    },
+    void_implode: {
+      id: 'void_implode',
+      label: '虚空坍缩',
+      desc: '空间折跃与封禁锁链：先瞬时引力坍缩聚拢，再沿倾斜相位面爆裂散射。',
+      defaultDuration: 0.76,
+      defaultSpeed: 5.4,
+      defaultSpread: 2.6,
+      oscillationFreq: 16.0,
+      hasPhaseRing: true
+    },
+    sanctuary_rise: {
+      id: 'sanctuary_rise',
+      label: '生机螺旋',
+      desc: '急救与净化光环：双螺旋温润光尘自足底盘旋升腾，释放柔和复苏辉光。',
+      defaultDuration: 0.98,
+      defaultSpeed: 2.8,
+      defaultSpread: 1.9,
+      oscillationFreq: 6.5
+    },
+    stealth_dissolve: {
+      id: 'stealth_dissolve',
+      label: '幽影散逸',
+      desc: '潜行迷彩与声噪幻象：扫描波纹自下而上将轮廓粒子化为离散幽影薄雾。',
+      defaultDuration: 0.72,
+      defaultSpeed: 2.4,
+      defaultSpread: 1.75,
+      oscillationFreq: 12.0
+    },
+    sonar_ripple: {
+      id: 'sonar_ripple',
+      label: '声呐波阵',
+      desc: 'PKE 探测与全域洞察：双频量化声呐点阵贴地高速扩散，高亮周边波纹。',
+      defaultDuration: 0.88,
+      defaultSpeed: 8.5,
+      defaultSpread: 4.5,
+      oscillationFreq: 18.0,
+      hasSonarRings: true
+    },
+    overdrive_stream: {
+      id: 'overdrive_stream',
+      label: '超频流光',
+      desc: '神经超频与炮台布阵：高转速环形流光束环绕施法者盘旋加速并拉出上升光迹。',
+      defaultDuration: 0.78,
+      defaultSpeed: 4.8,
+      defaultSpread: 1.85,
+      oscillationFreq: 20.0,
+      hasPhaseRing: true
+    }
+  };
+
+  function parseHexToRgb01(hexStr) {
+    var clean = String(hexStr || '#6fd8ea').replace('#', '');
+    if (clean.length === 3) {
+      clean = clean[0] + clean[0] + clean[1] + clean[1] + clean[2] + clean[2];
+    }
+    var n = parseInt(clean, 16);
+    if (isNaN(n)) n = 0x6fd8ea;
+    return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  }
+
+  function rgb01ToHexInt(r, g, b) {
+    var ri = clamp(Math.round(r * 255), 0, 255);
+    var gi = clamp(Math.round(g * 255), 0, 255);
+    var bi = clamp(Math.round(b * 255), 0, 255);
+    return (ri << 16) | (gi << 8) | bi;
+  }
+
+  function hexIntToCss(hexInt) {
+    return '#' + (hexInt >>> 0).toString(16).padStart(6, '0');
+  }
+
+  function shiftHexColor(hexStr, hueDeg, satDelta, lightDelta) {
+    var rgb = parseHexToRgb01(hexStr);
+    var r = rgb[0], g = rgb[1], b = rgb[2];
+    var max = Math.max(r, g, b);
+    var min = Math.min(r, g, b);
+    var h = 0, s = 0, l = (max + min) * 0.5;
+    if (max !== min) {
+      var d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h /= 6;
+    }
+    h = (h + (hueDeg || 0) / 360) % 1;
+    if (h < 0) h += 1;
+    s = clamp(s + (satDelta || 0), 0.25, 1.0);
+    l = clamp(l + (lightDelta || 0), 0.34, 0.86);
+
+    function hue2rgb(p, q, t) {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    }
+    var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    var p = 2 * l - q;
+    var nr = hue2rgb(p, q, h + 1 / 3);
+    var ng = hue2rgb(p, q, h);
+    var nb = hue2rgb(p, q, h - 1 / 3);
+    return hexIntToCss(rgb01ToHexInt(nr, ng, nb));
+  }
+
+  function classifyParticleTriggerAnim(item, archetypeId, vfxProfile) {
+    var arch = archetypeId || 'sword_arc';
+    var motif = (vfxProfile && vfxProfile.motif) || 'cyber_tactical';
+    var tags = Array.isArray(item && item.tags) ? item.tags : [];
+    var isHigh = Boolean(vfxProfile && (vfxProfile.isHighTier || vfxProfile.isFused));
+
+    // Defense & containment barriers -> Shield Refraction Light
+    if (arch === 'aegis_shield' || arch === 'ward_circle' || tags.indexOf('护盾') !== -1) {
+      return 'shield_refract';
+    }
+    // Heavy bursts, EMP, Rail shots, Thunder motif, or Gamble/S-tier heavy offense -> Arc Shock Oscillation
+    if (
+      arch === 'berserk_strike' ||
+      arch === 'emp_blast' ||
+      arch === 'rail_shot' ||
+      motif === 'thunder_emp' ||
+      (arch === 'sword_arc' && (vfxProfile && vfxProfile.isGamble) && isHigh)
+    ) {
+      return 'arc_shock';
+    }
+    if (arch === 'sword_arc') return 'blade_vortex';
+    if (arch === 'blink_mark' || arch === 'seal_chain') return 'void_implode';
+    if (arch === 'heal_pulse') return 'sanctuary_rise';
+    if (arch === 'stealth_veil' || arch === 'decoy_flare') return 'stealth_dissolve';
+    if (arch === 'recon_pulse') return 'sonar_ripple';
+    if (arch === 'overclock' || arch === 'turret_drone') return 'overdrive_stream';
+    return 'arc_shock';
+  }
+
+  function buildParticlePreset(item, archetypeId, tier, vfxProfile) {
+    var safeItem = item || {};
+    var normTier = normalizeTier(tier || safeItem.tier || (vfxProfile && vfxProfile.tier));
+    var vp = vfxProfile || buildVfxProfile(safeItem, archetypeId, normTier, null);
+    var tierRank = TIER_RANK[normTier] || 0;
+    var itemId = String(safeItem.id || ('CUSTOM_' + stableHash(String(safeItem.name || archetypeId || 'skill'))));
+    var hash = stableHash(itemId + '|' + String(safeItem.name || '') + '|' + archetypeId);
+
+    var triggerAnim = classifyParticleTriggerAnim(safeItem, archetypeId, vp);
+    var animMeta = PARTICLE_TRIGGER_ANIMS[triggerAnim] || PARTICLE_TRIGGER_ANIMS.arc_shock;
+
+    // Deterministic per-item HSL signature so every one of the 500 items carries unique color nuances
+    var hueJitter = ((hash % 29) - 14); // -14° .. +14°
+    var secJitter = ((((hash >> 5) % 37) - 18)); // -18° .. +18°
+    var satBoost = tierRank >= 3 ? 0.08 : 0.0;
+    var lightShift = (((hash >> 10) % 9) - 4) * 0.015;
+
+    var primaryColor = shiftHexColor(vp.primaryColor || '#6fd8ea', hueJitter, satBoost, lightShift);
+    var secondaryColor = shiftHexColor(vp.secondaryColor || '#ffffff', secJitter, satBoost, lightShift * 0.6);
+    var refractColor = triggerAnim === 'shield_refract'
+      ? shiftHexColor(vp.primaryColor || '#6fd8ea', 52 + (hash % 35), 0.14, 0.14)
+      : shiftHexColor(vp.coreColor || '#ffffff', hueJitter * 0.5, 0.05, 0.12);
+
+    var primaryRgb = parseHexToRgb01(primaryColor);
+    var secondaryRgb = parseHexToRgb01(secondaryColor);
+    var refractRgb = parseHexToRgb01(refractColor);
+
+    var baseCount = 28 + tierRank * 11 + (vp.isFused ? 12 : 0) + (hash % 7);
+    var particleSize = round2((0.20 + tierRank * 0.032 + (vp.isHighTier ? 0.03 : 0)) * (triggerAnim === 'shield_refract' ? 1.08 : 1.0));
+    var duration = round2(animMeta.defaultDuration * (0.94 + tierRank * 0.05));
+    var speed = round2(animMeta.defaultSpeed * (0.92 + ((hash >> 3) % 7) * 0.04));
+    var spread = round2(animMeta.defaultSpread * (0.92 + tierRank * 0.08));
+
+    return {
+      itemId: itemId,
+      name: String(safeItem.name || (ARCHETYPES[archetypeId] && ARCHETYPES[archetypeId].name) || '技能粒子'),
+      archetype: archetypeId || 'sword_arc',
+      tier: normTier,
+      tierRank: tierRank,
+      motif: vp.motif,
+      triggerAnim: triggerAnim,
+      triggerLabel: animMeta.label,
+      primaryColor: primaryColor,
+      secondaryColor: secondaryColor,
+      refractColor: refractColor,
+      primaryHex: rgb01ToHexInt(primaryRgb[0], primaryRgb[1], primaryRgb[2]),
+      secondaryHex: rgb01ToHexInt(secondaryRgb[0], secondaryRgb[1], secondaryRgb[2]),
+      refractHex: rgb01ToHexInt(refractRgb[0], refractRgb[1], refractRgb[2]),
+      primaryRgb: primaryRgb,
+      secondaryRgb: secondaryRgb,
+      refractRgb: refractRgb,
+      count: baseCount,
+      particleSize: particleSize,
+      duration: duration,
+      speed: speed,
+      spread: spread,
+      oscillationFreq: round1(animMeta.oscillationFreq * (0.9 + ((hash >> 7) % 5) * 0.06)),
+      arcBranches: triggerAnim === 'arc_shock' ? (3 + Math.min(3, tierRank) + (vp.isFused ? 1 : 0)) : 0,
+      refractLayers: triggerAnim === 'shield_refract' ? (2 + (tierRank >= 3 ? 1 : 0)) : 0,
+      glowIntensity: round2(0.85 + tierRank * 0.14 + (vp.isFused ? 0.15 : 0)),
+      isHighTier: Boolean(vp.isHighTier),
+      isFused: Boolean(vp.isFused),
+      isGamble: Boolean(vp.isGamble)
+    };
+  }
+
+  // Eagerly precompile the complete 500-item particle preset registry
+  var PARTICLE_CATALOG = Object.create(null);
+  var PARTICLE_CATALOG_COUNT = 0;
+
+  function populateParticleCatalog() {
+    var list = Array.isArray(INFINITY.SHOP_CATALOG) ? INFINITY.SHOP_CATALOG : [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (!item || !item.id) continue;
+      var idKey = String(item.id);
+      if (PARTICLE_CATALOG[idKey]) continue;
+      var archId = classifyArchetype(item);
+      var normTier = normalizeTier(item.tier);
+      var col = resolveNeonColor(item.energyType, archId, normTier);
+      var vp = buildVfxProfile(item, archId, normTier, col);
+      PARTICLE_CATALOG[idKey] = buildParticlePreset(item, archId, normTier, vp);
+      PARTICLE_CATALOG_COUNT++;
+    }
+  }
+  populateParticleCatalog();
+
+  // Populate starter skills' particlePreset now that buildParticlePreset is ready
+  for (var stp = 0; stp < STARTER_SKILLS.length; stp++) {
+    var stItem = STARTER_SKILLS[stp];
+    stItem.particlePreset = buildParticlePreset(
+      { id: stItem.itemId, name: stItem.name, tier: stItem.tier, energyType: '通用', tags: [] },
+      stItem.archetype,
+      stItem.tier,
+      stItem.vfxProfile
+    );
+    if (stItem.vfxProfile) stItem.vfxProfile.particlePreset = stItem.particlePreset;
+  }
+
+  function getParticlePreset(skillOrItemOrId) {
+    if (!skillOrItemOrId) return STARTER_SKILLS[0].particlePreset;
+    if (typeof skillOrItemOrId === 'string') {
+      if (PARTICLE_CATALOG[skillOrItemOrId]) return PARTICLE_CATALOG[skillOrItemOrId];
+      var found = lookupItem(skillOrItemOrId);
+      if (found) {
+        var archId = classifyArchetype(found);
+        var tier = normalizeTier(found.tier);
+        var vp = buildVfxProfile(found, archId, tier, resolveNeonColor(found.energyType, archId, tier));
+        var preset = buildParticlePreset(found, archId, tier, vp);
+        PARTICLE_CATALOG[skillOrItemOrId] = preset;
+        return preset;
+      }
+      return STARTER_SKILLS[0].particlePreset;
+    }
+    if (skillOrItemOrId.particlePreset && skillOrItemOrId.particlePreset.triggerAnim) {
+      return skillOrItemOrId.particlePreset;
+    }
+    var key = skillOrItemOrId.itemId || skillOrItemOrId.id;
+    if (key && PARTICLE_CATALOG[String(key)]) {
+      return PARTICLE_CATALOG[String(key)];
+    }
+    var arch = skillOrItemOrId.archetype || classifyArchetype(skillOrItemOrId);
+    var t = normalizeTier(skillOrItemOrId.tier);
+    var prof = skillOrItemOrId.vfxProfile || buildVfxProfile(skillOrItemOrId, arch, t, skillOrItemOrId.color);
+    return buildParticlePreset(skillOrItemOrId, arch, t, prof);
+  }
+
+  // Cached procedural radial-glow particle sprite texture (shared, zero external files)
+  var cachedParticleGlowTex = null;
+  function getParticleGlowTexture(THREE) {
+    if (cachedParticleGlowTex) return cachedParticleGlowTex;
+    if (!THREE || typeof document === 'undefined' || !document.createElement) return null;
+    try {
+      var canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 32;
+      var ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      var grad = ctx.createRadialGradient(16, 16, 1, 16, 16, 15);
+      grad.addColorStop(0.0, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.32, 'rgba(255,255,255,0.88)');
+      grad.addColorStop(0.68, 'rgba(255,255,255,0.28)');
+      grad.addColorStop(1.0, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 32, 32);
+      var tex = new THREE.CanvasTexture(canvas);
+      tex.needsUpdate = true;
+      cachedParticleGlowTex = tex;
+      return tex;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * Three.js Particle VFX Trigger Engine:
+   * Spawns a complete, self-contained 3D particle + auxiliary geometry VFX handle
+   * tailored to any of the 500 skills (or custom/fused skills).
+   * Returns { group, preset, ttl, maxTtl, update(dt), dispose() }.
+   */
+  function triggerSkillParticleVfx(THREE, scene, skillOrItemOrId, opts) {
+    if (!THREE || !scene) return null;
+    var preset = getParticlePreset(skillOrItemOrId);
+    var cfg = opts || {};
+    var anim = cfg.triggerAnimOverride || preset.triggerAnim || 'arc_shock';
+    var intensityScale = clamp(Number(cfg.intensityScale) || 1.0, 0.35, 1.8);
+    var ox = Number(cfg.x) || 0;
+    var oy = typeof cfg.y === 'number' ? cfg.y : 1.0;
+    var oz = Number(cfg.z) || 0;
+    var angle = Number(cfg.angle) || 0;
+    var spread = (Number(cfg.radius) ? Math.min(Number(cfg.radius), preset.spread * 1.4) : preset.spread) * (0.75 + 0.25 * intensityScale);
+    var dur = (Number(cfg.duration) || preset.duration) * (intensityScale < 0.7 ? 0.78 : 1.0);
+    var count = Math.max(12, Math.round(preset.count * intensityScale));
+
+    var pRgb = preset.primaryRgb;
+    var sRgb = preset.secondaryRgb;
+    var rRgb = preset.refractRgb;
+
+    var group = new THREE.Group();
+    group.position.set(ox, oy, oz);
+    var geos = [];
+    var mats = [];
+
+    // Per-particle kinematic state buffers (zero allocations in update loop)
+    var positions = new Float32Array(count * 3);
+    var colors = new Float32Array(count * 3);
+    var initPos = new Float32Array(count * 3);
+    var vels = new Float32Array(count * 3);
+    var phases = new Float32Array(count);
+    var radii = new Float32Array(count);
+
+    for (var i = 0; i < count; i++) {
+      var frac = i / count;
+      var i3 = i * 3;
+      phases[i] = frac * Math.PI * 2 + Math.random() * 1.4;
+
+      // Blend primary / secondary / refract colors per particle
+      var cPick = i % 5;
+      var cSrc = cPick === 0 ? rRgb : (cPick % 2 === 0 ? sRgb : pRgb);
+      colors[i3] = cSrc[0];
+      colors[i3 + 1] = cSrc[1];
+      colors[i3 + 2] = cSrc[2];
+
+      if (anim === 'shield_refract') {
+        // Fibonacci spherical crystalline shell around caster
+        var phi = Math.acos(1 - 2 * ((i + 0.5) / count));
+        var theta = Math.PI * (1 + Math.sqrt(5)) * i;
+        var sr = 0.88 + (i % 3) * 0.14;
+        radii[i] = sr;
+        initPos[i3] = Math.sin(phi) * Math.cos(theta) * sr;
+        initPos[i3 + 1] = Math.cos(phi) * sr * 0.92;
+        initPos[i3 + 2] = Math.sin(phi) * Math.sin(theta) * sr;
+        positions[i3] = initPos[i3] * 0.65;
+        positions[i3 + 1] = initPos[i3 + 1] * 0.65;
+        positions[i3 + 2] = initPos[i3 + 2] * 0.65;
+      } else if (anim === 'blade_vortex') {
+        // Directional crescent fan sweeping across aim angle
+        var coneAng = angle + (frac - 0.5) * 1.75;
+        var br = 0.45 + Math.random() * spread * 0.38;
+        radii[i] = br;
+        positions[i3] = Math.cos(coneAng) * br;
+        positions[i3 + 1] = (Math.random() - 0.45) * 0.55;
+        positions[i3 + 2] = Math.sin(coneAng) * br;
+        var bSpd = preset.speed * (0.65 + Math.random() * 0.65);
+        vels[i3] = Math.cos(coneAng) * bSpd;
+        vels[i3 + 1] = 0.6 + Math.random() * 2.1;
+        vels[i3 + 2] = Math.sin(coneAng) * bSpd;
+      } else if (anim === 'void_implode') {
+        // Start scattered on an inclined sphere, implode inward then burst out
+        var va = Math.random() * Math.PI * 2;
+        var vr = spread * (0.55 + Math.random() * 0.6);
+        radii[i] = vr;
+        initPos[i3] = Math.cos(va) * vr;
+        initPos[i3 + 1] = (Math.random() - 0.5) * 1.6;
+        initPos[i3 + 2] = Math.sin(va) * vr;
+        positions[i3] = initPos[i3];
+        positions[i3 + 1] = initPos[i3 + 1];
+        positions[i3 + 2] = initPos[i3 + 2];
+      } else if (anim === 'sanctuary_rise') {
+        // Double-helix ascending sanctuary motes
+        var ha = (i % 2) * Math.PI + frac * Math.PI * 4;
+        var hr = 0.45 + (i % 4) * (spread * 0.16);
+        radii[i] = hr;
+        phases[i] = ha;
+        positions[i3] = Math.cos(ha) * hr;
+        positions[i3 + 1] = -0.8 + frac * 0.9;
+        positions[i3 + 2] = Math.sin(ha) * hr;
+        vels[i3 + 1] = 1.9 + Math.random() * 1.4;
+      } else if (anim === 'stealth_dissolve') {
+        // Vertical silhouette scatter drifting into shadowy mist
+        var sa = Math.random() * Math.PI * 2;
+        var sr2 = 0.25 + Math.random() * 0.65;
+        positions[i3] = Math.cos(sa) * sr2;
+        positions[i3 + 1] = -0.8 + Math.random() * 1.7;
+        positions[i3 + 2] = Math.sin(sa) * sr2;
+        vels[i3] = Math.cos(sa) * (1.2 + Math.random() * 1.6);
+        vels[i3 + 1] = 0.9 + Math.random() * 1.3;
+        vels[i3 + 2] = Math.sin(sa) * (1.2 + Math.random() * 1.6);
+      } else if (anim === 'sonar_ripple') {
+        // Concentric quantized sonar dots along ground plane
+        var ringIdx = i % 2;
+        var ra = frac * Math.PI * 2;
+        radii[i] = ringIdx === 0 ? 1.0 : 0.64;
+        phases[i] = ra;
+        positions[i3] = Math.cos(ra) * 0.35;
+        positions[i3 + 1] = -oy + 0.14 + ringIdx * 0.08;
+        positions[i3 + 2] = Math.sin(ra) * 0.35;
+      } else if (anim === 'overdrive_stream') {
+        // High-RPM toroidal accelerator stream
+        var oa = frac * Math.PI * 2;
+        var orad = 0.72 + (i % 3) * 0.28;
+        radii[i] = orad;
+        phases[i] = oa;
+        positions[i3] = Math.cos(oa) * orad;
+        positions[i3 + 1] = -0.7 + Math.random() * 1.5;
+        positions[i3 + 2] = Math.sin(oa) * orad;
+        vels[i3 + 1] = 1.5 + Math.random() * 1.8;
+      } else {
+        // arc_shock (default heavy offensive burst): radial + aim-biased high-voltage explosion
+        var aa = (i % 3 === 0)
+          ? (angle + (Math.random() - 0.5) * 1.35)
+          : (Math.random() * Math.PI * 2);
+        var aSpd = preset.speed * (0.55 + Math.random() * 0.75);
+        positions[i3] = (Math.random() - 0.5) * 0.28;
+        positions[i3 + 1] = (Math.random() - 0.5) * 0.35;
+        positions[i3 + 2] = (Math.random() - 0.5) * 0.28;
+        vels[i3] = Math.cos(aa) * aSpd;
+        vels[i3 + 1] = (Math.random() - 0.25) * 3.8;
+        vels[i3 + 2] = Math.sin(aa) * aSpd;
+        radii[i] = 0.12 + Math.random() * 0.22; // jitter amplitude
+      }
+    }
+
+    var pGeo = new THREE.BufferGeometry();
+    pGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    pGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    var glowTex = getParticleGlowTexture(THREE);
+    var pMat = new THREE.PointsMaterial({
+      size: preset.particleSize * (0.85 + 0.15 * intensityScale),
+      map: glowTex || null,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.96,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    var pts = new THREE.Points(pGeo, pMat);
+    group.add(pts);
+    geos.push(pGeo);
+    mats.push(pMat);
+
+    // Auxiliary 3D animation accents (Arc Shock 3D Lightning Filaments / Shield Refraction Rings / Phase Rings)
+    var arcEntries = [];
+    var refractRings = [];
+    var phaseRing = null;
+    var phaseRingMat = null;
+
+    if (anim === 'arc_shock') {
+      var branchCount = Math.max(2, Math.round((preset.arcBranches || 4) * intensityScale));
+      var segs = 6;
+      for (var bi = 0; bi < branchCount; bi++) {
+        var bAng = (bi < 2)
+          ? (angle + (bi === 0 ? -0.35 : 0.35))
+          : ((bi / branchCount) * Math.PI * 2 + Math.random() * 0.5);
+        var bLen = spread * (0.72 + Math.random() * 0.42);
+        var bEndY = -0.35 + Math.random() * 0.95;
+        var aPos = new Float32Array((segs + 1) * 3);
+        var aGeo = new THREE.BufferGeometry();
+        aGeo.setAttribute('position', new THREE.BufferAttribute(aPos, 3));
+        var aMat = new THREE.LineBasicMaterial({
+          color: bi % 2 === 0 ? preset.primaryHex : preset.refractHex,
+          transparent: true,
+          opacity: 0.95,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        });
+        var aLine = new THREE.Line(aGeo, aMat);
+        group.add(aLine);
+        geos.push(aGeo);
+        mats.push(aMat);
+        arcEntries.push({
+          geo: aGeo,
+          mat: aMat,
+          arr: aPos,
+          segs: segs,
+          ex: Math.cos(bAng) * bLen,
+          ey: bEndY,
+          ez: Math.sin(bAng) * bLen
+        });
+      }
+    } else if (anim === 'shield_refract') {
+      var layerCount = Math.max(2, preset.refractLayers || 2);
+      for (var ri = 0; ri < layerCount; ri++) {
+        var rGeo = new THREE.TorusGeometry(0.95 + ri * 0.24, 0.036, 6, 28);
+        var rMat = new THREE.MeshBasicMaterial({
+          color: ri === 0 ? preset.refractHex : (ri === 1 ? preset.primaryHex : preset.secondaryHex),
+          transparent: true,
+          opacity: 0.84,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        });
+        var rMesh = new THREE.Mesh(rGeo, rMat);
+        rMesh.rotation.x = Math.PI * (0.32 + ri * 0.24);
+        rMesh.rotation.y = ri * 1.05;
+        group.add(rMesh);
+        geos.push(rGeo);
+        mats.push(rMat);
+        refractRings.push({ mesh: rMesh, mat: rMat, idx: ri });
+      }
+    } else if (anim === 'void_implode' || anim === 'overdrive_stream' || anim === 'sonar_ripple') {
+      var prGeo = new THREE.RingGeometry(0.78, 1.0, 32);
+      prGeo.rotateX(-Math.PI / 2);
+      phaseRingMat = new THREE.MeshBasicMaterial({
+        color: preset.secondaryHex,
+        transparent: true,
+        opacity: 0.72,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      phaseRing = new THREE.Mesh(prGeo, phaseRingMat);
+      if (anim === 'sonar_ripple') phaseRing.position.y = -oy + 0.12;
+      group.add(phaseRing);
+      geos.push(prGeo);
+      mats.push(phaseRingMat);
+    }
+
+    function refreshArcLines(progress) {
+      var reach = clamp(progress * 3.2, 0.25, 1.0);
+      var amp = 0.28 * (1 - progress * 0.4);
+      for (var ai = 0; ai < arcEntries.length; ai++) {
+        var ae = arcEntries[ai];
+        var arr = ae.arr;
+        for (var s = 0; s <= ae.segs; s++) {
+          var f = (s / ae.segs) * reach;
+          var env = (s === 0 || s === ae.segs) ? 0 : Math.sin((s / ae.segs) * Math.PI);
+          arr[s * 3] = ae.ex * f + (Math.random() - 0.5) * 2 * amp * env;
+          arr[s * 3 + 1] = ae.ey * f + (Math.random() - 0.5) * 1.6 * amp * env;
+          arr[s * 3 + 2] = ae.ez * f + (Math.random() - 0.5) * 2 * amp * env;
+        }
+        ae.geo.attributes.position.needsUpdate = true;
+      }
+    }
+    if (arcEntries.length > 0) refreshArcLines(0.05);
+
+    scene.add(group);
+
+    var elapsed = 0;
+    var arcTick = 0;
+    var oscFreq = preset.oscillationFreq || 18.0;
+
+    return {
+      group: group,
+      preset: preset,
+      ttl: dur,
+      maxTtl: dur,
+      update: function (dt) {
+        var stepDt = Math.max(0.001, dt || 0.016);
+        this.ttl -= stepDt;
+        elapsed += stepDt;
+        var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
+        var posAttr = pGeo.attributes.position;
+        var colAttr = pGeo.attributes.color;
+        var arr = posAttr.array;
+        var cArr = colAttr.array;
+
+        if (anim === 'arc_shock') {
+          var drag = Math.exp(-2.8 * stepDt);
+          for (var k = 0; k < count; k++) {
+            var k3 = k * 3;
+            vels[k3] *= drag;
+            vels[k3 + 1] = vels[k3 + 1] * drag - 2.6 * stepDt;
+            vels[k3 + 2] *= drag;
+            var jOsc = Math.sin(elapsed * oscFreq + phases[k]) * radii[k];
+            arr[k3] += vels[k3] * stepDt + jOsc * stepDt * 6.5;
+            arr[k3 + 1] = Math.max(-oy + 0.08, arr[k3 + 1] + vels[k3 + 1] * stepDt + Math.cos(elapsed * oscFreq * 1.3 + phases[k]) * 0.04);
+            arr[k3 + 2] += vels[k3 + 2] * stepDt - jOsc * stepDt * 6.5;
+          }
+          arcTick += stepDt;
+          if (arcTick >= 0.04) {
+            arcTick = 0;
+            refreshArcLines(p);
+          }
+          for (var ai = 0; ai < arcEntries.length; ai++) {
+            arcEntries[ai].mat.opacity = 0.95 * Math.pow(1 - p, 1.15);
+          }
+        } else if (anim === 'shield_refract') {
+          // Prismatic refractive shell expansion & shimmering hue glints
+          var shellScale = 0.72 + Math.sin(Math.min(1, p * 1.6) * Math.PI * 0.5) * 0.55 + p * 0.12;
+          var spin = elapsed * 2.4;
+          var cosS = Math.cos(spin);
+          var sinS = Math.sin(spin);
+          for (var k = 0; k < count; k++) {
+            var k3 = k * 3;
+            var ix = initPos[k3] * shellScale;
+            var iy = initPos[k3 + 1] * shellScale;
+            var iz = initPos[k3 + 2] * shellScale;
+            arr[k3] = ix * cosS - iz * sinS;
+            arr[k3 + 1] = iy + Math.sin(elapsed * 5.0 + phases[k]) * 0.06;
+            arr[k3 + 2] = ix * sinS + iz * cosS;
+
+            // Prismatic refraction glint cycling primary -> refract -> white-gold
+            var glint = 0.5 + 0.5 * Math.sin(elapsed * oscFreq + phases[k] * 2.5);
+            cArr[k3] = pRgb[0] + (rRgb[0] - pRgb[0]) * glint;
+            cArr[k3 + 1] = pRgb[1] + (rRgb[1] - pRgb[1]) * glint;
+            cArr[k3 + 2] = pRgb[2] + (rRgb[2] - pRgb[2]) * glint;
+          }
+          colAttr.needsUpdate = true;
+          for (var ri = 0; ri < refractRings.length; ri++) {
+            var rk = refractRings[ri];
+            var rsc = 0.75 + p * (0.75 + rk.idx * 0.22);
+            rk.mesh.scale.set(rsc, rsc, rsc);
+            rk.mesh.rotation.z += stepDt * (3.2 + rk.idx * 1.6) * (rk.idx % 2 === 0 ? 1 : -1);
+            rk.mesh.rotation.x += stepDt * 1.4;
+            rk.mat.opacity = 0.84 * Math.pow(1 - p, 1.1);
+          }
+        } else if (anim === 'blade_vortex') {
+          var bDrag = Math.exp(-3.4 * stepDt);
+          for (var k = 0; k < count; k++) {
+            var k3 = k * 3;
+            vels[k3] *= bDrag;
+            vels[k3 + 2] *= bDrag;
+            var swirl = elapsed * 4.5 + phases[k];
+            arr[k3] += (vels[k3] + Math.cos(swirl) * 0.9) * stepDt;
+            arr[k3 + 1] = Math.max(-oy + 0.08, arr[k3 + 1] + vels[k3 + 1] * stepDt);
+            arr[k3 + 2] += (vels[k3 + 2] + Math.sin(swirl) * 0.9) * stepDt;
+          }
+        } else if (anim === 'void_implode') {
+          // 0..0.30 implode inward -> 0.30..1.00 hyper-burst outward along tilted orbital plane
+          var scaleF = p < 0.30
+            ? (1.0 - (p / 0.30) * 0.88)
+            : (0.12 + Math.pow((p - 0.30) / 0.70, 0.72) * 1.45);
+          var vSpin = elapsed * (p < 0.30 ? 8.0 : -4.5);
+          var vCos = Math.cos(vSpin);
+          var vSin = Math.sin(vSpin);
+          for (var k = 0; k < count; k++) {
+            var k3 = k * 3;
+            var vx0 = initPos[k3] * scaleF;
+            var vz0 = initPos[k3 + 2] * scaleF;
+            arr[k3] = vx0 * vCos - vz0 * vSin;
+            arr[k3 + 1] = initPos[k3 + 1] * scaleF;
+            arr[k3 + 2] = vx0 * vSin + vz0 * vCos;
+          }
+          if (phaseRing && phaseRingMat) {
+            var prSc = Math.max(0.18, scaleF * spread * 0.65);
+            phaseRing.scale.set(prSc, 1, prSc);
+            phaseRing.rotation.z = 0.28;
+            phaseRing.rotation.y += stepDt * 5.0;
+            phaseRingMat.opacity = 0.72 * (1 - p);
+          }
+        } else if (anim === 'sanctuary_rise') {
+          for (var k = 0; k < count; k++) {
+            var k3 = k * 3;
+            var ang = phases[k] + elapsed * 3.8;
+            var hr = radii[k] * (0.9 + p * 0.35);
+            arr[k3] = Math.cos(ang) * hr;
+            arr[k3 + 1] += vels[k3 + 1] * stepDt;
+            arr[k3 + 2] = Math.sin(ang) * hr;
+          }
+        } else if (anim === 'stealth_dissolve') {
+          for (var k = 0; k < count; k++) {
+            var k3 = k * 3;
+            arr[k3] += (vels[k3] + Math.sin(elapsed * 9.0 + phases[k]) * 0.5) * stepDt;
+            arr[k3 + 1] += vels[k3 + 1] * stepDt;
+            arr[k3 + 2] += (vels[k3 + 2] + Math.cos(elapsed * 9.0 + phases[k]) * 0.5) * stepDt;
+          }
+        } else if (anim === 'sonar_ripple') {
+          for (var k = 0; k < count; k++) {
+            var k3 = k * 3;
+            var rNow = 0.35 + p * spread * 1.45 * radii[k];
+            var aNow = phases[k] + elapsed * 0.6;
+            arr[k3] = Math.cos(aNow) * rNow;
+            arr[k3 + 2] = Math.sin(aNow) * rNow;
+          }
+          if (phaseRing && phaseRingMat) {
+            var sSc = 0.35 + p * spread * 1.45;
+            phaseRing.scale.set(sSc, 1, sSc);
+            phaseRingMat.opacity = 0.68 * (1 - p);
+          }
+        } else {
+          // overdrive_stream
+          for (var k = 0; k < count; k++) {
+            var k3 = k * 3;
+            var oa = phases[k] + elapsed * 9.2;
+            var orad = radii[k] * (1.0 + p * 0.45);
+            arr[k3] = Math.cos(oa) * orad;
+            arr[k3 + 1] += vels[k3 + 1] * stepDt;
+            arr[k3 + 2] = Math.sin(oa) * orad;
+          }
+          if (phaseRing && phaseRingMat) {
+            var oSc = 0.8 + p * 1.3;
+            phaseRing.scale.set(oSc, 1, oSc);
+            phaseRing.rotation.y -= stepDt * 8.5;
+            phaseRingMat.opacity = 0.72 * (1 - p);
+          }
+        }
+
+        posAttr.needsUpdate = true;
+        pMat.opacity = 0.96 * Math.pow(1 - p, 1.15);
+      },
+      dispose: function () {
+        scene.remove(group);
+        for (var gi = 0; gi < geos.length; gi++) geos[gi].dispose();
+        for (var mi = 0; mi < mats.length; mi++) mats[mi].dispose();
+      }
+    };
+  }
+
+  var ParticleVfx = {
+    ANIM_PRESETS: PARTICLE_TRIGGER_ANIMS,
+    CATALOG: PARTICLE_CATALOG,
+    getCatalogCount: function () {
+      if (PARTICLE_CATALOG_COUNT === 0) populateParticleCatalog();
+      return PARTICLE_CATALOG_COUNT;
+    },
+    getPreset: getParticlePreset,
+    buildPreset: buildParticlePreset,
+    trigger: triggerSkillParticleVfx
+  };
+
+  // ---------------------------------------------------------------------------
+  // 11. Bloodline Resonance System (血统共鸣系统)
+  // Matches equipped bloodlines against skill attributes (elemental/affinity
+  // domains, energy systems, tactical tags) to grant numeric combat bonuses
+  // and trigger arena-wide global Three.js particle choreography.
+  // ---------------------------------------------------------------------------
+  var RESONANCE_AFFINITY_ORDER = [
+    'frost',
+    'pyro_storm',
+    'sword_qi',
+    'cyber_emp',
+    'void_space',
+    'occult_seal',
+    'vital_sanctuary',
+    'shadow_venom',
+    'titan_body',
+    'arcane_ether'
+  ];
+
+  var RESONANCE_AFFINITIES = {
+    frost: {
+      id: 'frost',
+      label: '极寒霜域',
+      shortLabel: '极寒共鸣',
+      resonanceTitle: '极寒血统共鸣',
+      desc: '寒冰血脉与霜冻技能同频共振，全域降下冰晶暴雪并大幅强化震荡威力与迟缓控制。',
+      globalFxStyle: 'frost_blizzard',
+      primaryColor: '#7be8ff',
+      secondaryColor: '#d8f9ff',
+      accentColor: '#3a9cff',
+      keywords: /极寒|冰霜|寒冰|寒灵|霜|冻|雪|零度|冰封|寒气|冷冽|冰晶|玄冰|寒霜|凛冬/,
+      curatedIds: { B099: 3.5, FUS_COLD_SPIRIT_ROOT: 3.5 },
+      tags: ['冰霜', '极寒', '控制'],
+      energyTypes: [],
+      archetypes: ['emp_blast', 'ward_circle', 'seal_chain'],
+      bonusProfile: {
+        powerAdd: [0.22, 0.32, 0.44],
+        radiusAdd: [0.18, 0.25, 0.34],
+        durationAdd: [0.24, 0.34, 0.46],
+        cooldownCut: [0.10, 0.14, 0.20],
+        costCut: [0.12, 0.16, 0.22],
+        noiseMult: 0.90,
+        energyRefund: [4, 7, 11],
+        hpBonus: [0, 0, 0],
+        sanBonus: [2, 4, 6],
+        sealBonusPct: [4, 7, 10],
+        slowBonusSec: [1.5, 2.4, 3.5]
+      }
+    },
+    pyro_storm: {
+      id: 'pyro_storm',
+      label: '炽雷焚天',
+      shortLabel: '炎雷共鸣',
+      resonanceTitle: '炽雷血统共鸣',
+      desc: '炽炎与雷霆血脉共振引爆高能电弧余烬风暴，巨幅增幅爆发伤害并返还大量能量。',
+      globalFxStyle: 'pyro_tempest',
+      primaryColor: '#ff7338',
+      secondaryColor: '#ffe066',
+      accentColor: '#ff385c',
+      keywords: /火|炎|焰|焚|炽|灼|金乌|不死鸟|雷|电|霆|霹雳|阳炎|等离子|熔岩|烈阳|天雷|火球|爆炎/,
+      curatedIds: { B080: 3.2, B090: 3.0 },
+      tags: ['火焰雷法', '爆发'],
+      energyTypes: [],
+      archetypes: ['emp_blast', 'berserk_strike', 'rail_shot'],
+      bonusProfile: {
+        powerAdd: [0.26, 0.38, 0.50],
+        radiusAdd: [0.15, 0.22, 0.30],
+        durationAdd: [0.14, 0.20, 0.28],
+        cooldownCut: [0.10, 0.15, 0.20],
+        costCut: [0.10, 0.14, 0.18],
+        noiseMult: 1.0,
+        energyRefund: [6, 10, 15],
+        hpBonus: [0, 0, 0],
+        sanBonus: [0, 0, 0],
+        sealBonusPct: [0, 0, 0],
+        slowBonusSec: [0.6, 1.0, 1.5]
+      }
+    },
+    sword_qi: {
+      id: 'sword_qi',
+      label: '剑心通明',
+      shortLabel: '剑意共鸣',
+      resonanceTitle: '剑骨血统共鸣',
+      desc: '先天剑脉与真元剑诀共振，全域垂落青锋星雨，显著提升斩击威力并大幅压缩冷却。',
+      globalFxStyle: 'sword_domain',
+      primaryColor: '#5ce1c6',
+      secondaryColor: '#f5dc8a',
+      accentColor: '#e8fffb',
+      keywords: /剑|刀|刃|斩|居合|剑骨|剑意|剑气|剑诀|御剑|宵练|承影|灵根|丹田|真元|道胎/,
+      curatedIds: { B026: 3.4, C001: 3.0, C002: 2.6, C066: 3.0 },
+      tags: ['剑修', '东方修真'],
+      energyTypes: ['真元'],
+      archetypes: ['sword_arc', 'overclock'],
+      bonusProfile: {
+        powerAdd: [0.22, 0.32, 0.44],
+        radiusAdd: [0.14, 0.20, 0.28],
+        durationAdd: [0.16, 0.24, 0.32],
+        cooldownCut: [0.15, 0.22, 0.28],
+        costCut: [0.12, 0.18, 0.24],
+        noiseMult: 0.92,
+        energyRefund: [5, 9, 13],
+        hpBonus: [0, 0, 0],
+        sanBonus: [2, 4, 6],
+        sealBonusPct: [0, 0, 0],
+        slowBonusSec: [0.4, 0.8, 1.2]
+      }
+    },
+    cyber_emp: {
+      id: 'cyber_emp',
+      label: '赛博超频',
+      shortLabel: '电磁共鸣',
+      resonanceTitle: '赛博神经共鸣',
+      desc: '义体底盘与电磁科技武装高频同步，全域展开数字矩阵波纹，扩大扫描与火力覆盖。',
+      globalFxStyle: 'cyber_matrix',
+      primaryColor: '#38e8ff',
+      secondaryColor: '#73a6ff',
+      accentColor: '#b0fbff',
+      keywords: /赛博|神经|义体|机械|纳米|量子|电磁|脉冲|黑客|光学|激光|无人机|机甲|基因|底盘|墨家|机关|炮|枪|EMP/,
+      curatedIds: { B041: 3.2, B066: 3.2, FUS_MOJIA_CYBER: 3.5 },
+      tags: ['电磁', '黑客', '科技装备', '侦察'],
+      energyTypes: ['科技'],
+      archetypes: ['emp_blast', 'rail_shot', 'overclock', 'turret_drone', 'recon_pulse'],
+      bonusProfile: {
+        powerAdd: [0.20, 0.30, 0.40],
+        radiusAdd: [0.20, 0.28, 0.38],
+        durationAdd: [0.18, 0.26, 0.36],
+        cooldownCut: [0.14, 0.20, 0.26],
+        costCut: [0.14, 0.20, 0.26],
+        noiseMult: 0.92,
+        energyRefund: [5, 8, 12],
+        hpBonus: [0, 0, 0],
+        sanBonus: [0, 2, 4],
+        sealBonusPct: [0, 0, 0],
+        slowBonusSec: [0.8, 1.3, 2.0]
+      }
+    },
+    void_space: {
+      id: 'void_space',
+      label: '虚空折跃',
+      shortLabel: '空间共鸣',
+      resonanceTitle: '时空血统共鸣',
+      desc: '时空脉络与折跃技能产生相位谐振，全域浮现逆重力星尘与次元光环，延伸射程与持续。',
+      globalFxStyle: 'void_aurora',
+      primaryColor: '#9d7bff',
+      secondaryColor: '#66e8ff',
+      accentColor: '#e8d4ff',
+      keywords: /空间|时空|虚空|折跃|曲率|相位|瞬移|微尘|门|次元|星际|重力|飞雷神|缩地|穿墙|两仪/,
+      curatedIds: { B091: 3.5, FUS_ABSOLUTE_REALM: 3.2 },
+      tags: ['空间', '位移'],
+      energyTypes: [],
+      archetypes: ['blink_mark', 'ward_circle'],
+      bonusProfile: {
+        powerAdd: [0.18, 0.28, 0.38],
+        radiusAdd: [0.22, 0.32, 0.42],
+        durationAdd: [0.22, 0.32, 0.42],
+        cooldownCut: [0.15, 0.22, 0.28],
+        costCut: [0.14, 0.20, 0.26],
+        noiseMult: 0.85,
+        energyRefund: [5, 8, 12],
+        hpBonus: [0, 0, 0],
+        sanBonus: [2, 4, 6],
+        sealBonusPct: [3, 5, 8],
+        slowBonusSec: [0.7, 1.2, 1.8]
+      }
+    },
+    occult_seal: {
+      id: 'occult_seal',
+      label: '镇煞律令',
+      shortLabel: '灵异共鸣',
+      resonanceTitle: '镇煞血统共鸣',
+      desc: '灵异守心体质与收容封印术式共振，全域铺开朱砂符箓星尘，额外推进封印并稳固理智。',
+      globalFxStyle: 'occult_eclipse',
+      primaryColor: '#f06292',
+      secondaryColor: '#ffd166',
+      accentColor: '#c75cf5',
+      keywords: /灵异|鬼|煞|咒|封印|收容|规则|模因|道门|守心|阴阳|镇压|法海|棺材|冥|亡灵|结界|阵法|画地|注连|纸|鬼道/,
+      curatedIds: { B027: 3.4, B061: 3.2, FUS_DAO_GHOST_VESSEL: 3.5 },
+      tags: ['灵异', '收容', '规则', '抗模因', '结界', '阵法'],
+      energyTypes: ['灵异'],
+      archetypes: ['seal_chain', 'ward_circle', 'recon_pulse'],
+      bonusProfile: {
+        powerAdd: [0.20, 0.30, 0.40],
+        radiusAdd: [0.18, 0.26, 0.34],
+        durationAdd: [0.24, 0.34, 0.44],
+        cooldownCut: [0.11, 0.16, 0.22],
+        costCut: [0.12, 0.18, 0.24],
+        noiseMult: 0.90,
+        energyRefund: [4, 7, 10],
+        hpBonus: [0, 0, 0],
+        sanBonus: [5, 9, 14],
+        sealBonusPct: [6, 10, 15],
+        slowBonusSec: [0.8, 1.3, 1.9]
+      }
+    },
+    vital_sanctuary: {
+      id: 'vital_sanctuary',
+      label: '不朽生机',
+      shortLabel: '圣愈共鸣',
+      resonanceTitle: '生机血统共鸣',
+      desc: '圣愈再生血脉与护盾/治疗技能共鸣，全域绽放金翠治愈光雨，附加即时生命与护盾强化。',
+      globalFxStyle: 'sanctuary_bloom',
+      primaryColor: '#5ce6a0',
+      secondaryColor: '#ffe484',
+      accentColor: '#c6ffe2',
+      keywords: /圣|光|愈|疗|医|药|生机|再生|不死|木|森|精灵|净化|厚德|守护|护盾|天使|治疗|回春|复苏/,
+      curatedIds: { B039: 2.8, B096: 3.2 },
+      tags: ['医疗', '护盾', '团队'],
+      energyTypes: [],
+      archetypes: ['heal_pulse', 'aegis_shield'],
+      bonusProfile: {
+        powerAdd: [0.22, 0.32, 0.44],
+        radiusAdd: [0.18, 0.26, 0.36],
+        durationAdd: [0.22, 0.32, 0.42],
+        cooldownCut: [0.11, 0.16, 0.22],
+        costCut: [0.12, 0.18, 0.24],
+        noiseMult: 0.92,
+        energyRefund: [4, 6, 10],
+        hpBonus: [8, 14, 22],
+        sanBonus: [4, 7, 11],
+        sealBonusPct: [0, 0, 0],
+        slowBonusSec: [0, 0, 0]
+      }
+    },
+    shadow_venom: {
+      id: 'shadow_venom',
+      label: '幽影蚀毒',
+      shortLabel: '暗袭共鸣',
+      resonanceTitle: '幽影血统共鸣',
+      desc: '潜影蚀毒血脉与隐匿/诱饵术式共鸣，全域弥散暗紫蚀雾，极大幅度消音并延长隐匿时长。',
+      globalFxStyle: 'shadow_mist',
+      primaryColor: '#b48aff',
+      secondaryColor: '#55f2a8',
+      accentColor: '#7c52ff',
+      keywords: /影|暗|隐|潜|忍|狐|毒|生化|血族|狼人|寄生|幻|魅|刺客|无声|迷彩|替身|青丘|下忍|中忍/,
+      curatedIds: { B006: 2.8, B031: 3.2, B068: 3.0 },
+      tags: ['隐蔽', '毒素生化', '侦察'],
+      energyTypes: [],
+      archetypes: ['stealth_veil', 'decoy_flare', 'recon_pulse'],
+      bonusProfile: {
+        powerAdd: [0.20, 0.30, 0.40],
+        radiusAdd: [0.16, 0.22, 0.30],
+        durationAdd: [0.24, 0.34, 0.46],
+        cooldownCut: [0.12, 0.18, 0.24],
+        costCut: [0.12, 0.16, 0.22],
+        noiseMult: 0.58,
+        energyRefund: [4, 7, 10],
+        hpBonus: [0, 0, 0],
+        sanBonus: [2, 4, 6],
+        sealBonusPct: [0, 0, 0],
+        slowBonusSec: [0.7, 1.1, 1.6]
+      }
+    },
+    titan_body: {
+      id: 'titan_body',
+      label: '泰坦狂血',
+      shortLabel: '霸体共鸣',
+      resonanceTitle: '狂血体魄共鸣',
+      desc: '巨力狂战血脉与重击破甲技共振，全域掀起炽金震地气浪，极大幅度放大破坏力与击退。',
+      globalFxStyle: 'titan_quake',
+      primaryColor: '#ff8c42',
+      secondaryColor: '#ffd166',
+      accentColor: '#ff4757',
+      keywords: /体魄|巨力|泰坦|暴君|狂|龙|虎|霸体|金刚|铁布衫|古武|肌肉|冲锋|重击|破甲|山魈|白眼|战体/,
+      curatedIds: { B022: 3.4, B032: 3.0, B073: 3.2 },
+      tags: ['爆发', '破甲', '赌命'],
+      energyTypes: ['体魄'],
+      archetypes: ['berserk_strike', 'aegis_shield'],
+      bonusProfile: {
+        powerAdd: [0.26, 0.38, 0.50],
+        radiusAdd: [0.16, 0.24, 0.34],
+        durationAdd: [0.16, 0.24, 0.32],
+        cooldownCut: [0.10, 0.14, 0.20],
+        costCut: [0.10, 0.14, 0.20],
+        noiseMult: 1.0,
+        energyRefund: [4, 8, 12],
+        hpBonus: [6, 10, 16],
+        sanBonus: [0, 0, 0],
+        sealBonusPct: [0, 0, 0],
+        slowBonusSec: [0.6, 1.0, 1.5]
+      }
+    },
+    arcane_ether: {
+      id: 'arcane_ether',
+      label: '以太秘法',
+      shortLabel: '魔力共鸣',
+      resonanceTitle: '以太血统共鸣',
+      desc: '异域魔力血脉与秘术技能共鸣，全域浮现星图奥术光尘，大幅节省能耗并提升法术范围。',
+      globalFxStyle: 'arcane_constellation',
+      primaryColor: '#b388ff',
+      secondaryColor: '#66e0ff',
+      accentColor: '#ffe082',
+      keywords: /魔力|法|秘|奥术|星辰|炼金|符文|元素|召唤|恶魔|神圣|炽天|学徒|魔药|秘术|魔法/,
+      curatedIds: {},
+      tags: ['异域神秘'],
+      energyTypes: ['魔力'],
+      archetypes: ['ward_circle', 'seal_chain', 'blink_mark', 'rail_shot'],
+      bonusProfile: {
+        powerAdd: [0.20, 0.30, 0.42],
+        radiusAdd: [0.18, 0.26, 0.36],
+        durationAdd: [0.18, 0.26, 0.36],
+        cooldownCut: [0.12, 0.18, 0.24],
+        costCut: [0.16, 0.22, 0.30],
+        noiseMult: 0.92,
+        energyRefund: [6, 10, 14],
+        hpBonus: [0, 0, 0],
+        sanBonus: [3, 5, 8],
+        sealBonusPct: [3, 5, 8],
+        slowBonusSec: [0.4, 0.7, 1.1]
+      }
+    }
+  };
+
+  function isBloodlineItem(item) {
+    if (!item || typeof item !== 'object') return false;
+    if (item.category === 'bloodline') return true;
+    var tags = Array.isArray(item.tags) ? item.tags : [];
+    if (tags.indexOf('血统') !== -1) return true;
+    var id = String(item.itemId || item.id || '');
+    if (/^B\d{3}$|^FUS_|^CUSTOM_FUS_/.test(id)) return true;
+    var name = String(item.name || '');
+    if (/血统|血脉|基因|体质|灵根|剑骨|魔体|量子体|实验体|守心体|底盘|妖裔|狐裔|残血|薄血|道胎/.test(name)) return true;
+    return false;
+  }
+
+  function extractItemAffinities(itemOrSkill) {
+    var raw = itemOrSkill;
+    if (typeof raw === 'string') raw = lookupItem(raw) || { id: raw, name: raw };
+    if (!raw || typeof raw !== 'object') return [];
+
+    // Enrich mapped skill with catalog entry if available so tags/desc are complete
+    var catalogRef = (raw.itemId || raw.id) ? lookupItem(raw.itemId || raw.id) : null;
+    var id = String(raw.itemId || raw.id || (catalogRef && catalogRef.id) || '');
+    var name = String(raw.name || (catalogRef && catalogRef.name) || '');
+    var desc = String(raw.desc || raw.summary || (catalogRef && (catalogRef.desc || catalogRef.summary)) || '');
+    var energyType = String(raw.energyType || (catalogRef && catalogRef.energyType) || '通用');
+    var archetype = String(raw.archetype || '');
+    var rawTags = Array.isArray(raw.tags) ? raw.tags : [];
+    var catTags = (catalogRef && Array.isArray(catalogRef.tags)) ? catalogRef.tags : [];
+    var tagSet = Object.create(null);
+    var ti;
+    for (ti = 0; ti < rawTags.length; ti++) tagSet[rawTags[ti]] = true;
+    for (ti = 0; ti < catTags.length; ti++) tagSet[catTags[ti]] = true;
+
+    var combinedText = name + ' ' + desc;
+    var scores = [];
+
+    for (var i = 0; i < RESONANCE_AFFINITY_ORDER.length; i++) {
+      var affId = RESONANCE_AFFINITY_ORDER[i];
+      var aff = RESONANCE_AFFINITIES[affId];
+      var weight = 0;
+      var matchedBy = [];
+
+      if (aff.curatedIds && id && aff.curatedIds[id]) {
+        weight += aff.curatedIds[id];
+        matchedBy.push('curated');
+      }
+      if (aff.keywords && aff.keywords.test(name)) {
+        weight += 3.2;
+        matchedBy.push('name');
+      } else if (aff.keywords && aff.keywords.test(combinedText)) {
+        weight += 1.65;
+        matchedBy.push('desc');
+      }
+      for (var j = 0; j < aff.tags.length; j++) {
+        if (tagSet[aff.tags[j]]) {
+          weight += 1.55;
+          matchedBy.push('tag:' + aff.tags[j]);
+        }
+      }
+      if (energyType !== '通用' && aff.energyTypes.indexOf(energyType) !== -1) {
+        weight += 1.35;
+        matchedBy.push('energy:' + energyType);
+      }
+      if (archetype && aff.archetypes.indexOf(archetype) !== -1 && weight > 0) {
+        weight += 0.45;
+      }
+
+      if (weight >= 1.1) {
+        scores.push({
+          id: affId,
+          weight: round2(weight),
+          strong: weight >= 2.4 || matchedBy.indexOf('name') !== -1 || matchedBy.indexOf('curated') !== -1,
+          matchedBy: matchedBy
+        });
+      }
+    }
+
+    scores.sort(function (a, b) {
+      if (b.weight !== a.weight) return b.weight - a.weight;
+      return RESONANCE_AFFINITY_ORDER.indexOf(a.id) - RESONANCE_AFFINITY_ORDER.indexOf(b.id);
+    });
+
+    // Guarantee at least one fallback affinity from energyType or archetype
+    if (scores.length === 0) {
+      var fallbackId = 'arcane_ether';
+      if (energyType === '真元') fallbackId = 'sword_qi';
+      else if (energyType === '科技') fallbackId = 'cyber_emp';
+      else if (energyType === '灵异') fallbackId = 'occult_seal';
+      else if (energyType === '体魄') fallbackId = 'titan_body';
+      else if (energyType === '魔力') fallbackId = 'arcane_ether';
+      else if (archetype === 'heal_pulse' || archetype === 'aegis_shield') fallbackId = 'vital_sanctuary';
+      else if (archetype === 'stealth_veil' || archetype === 'decoy_flare') fallbackId = 'shadow_venom';
+      else if (archetype === 'blink_mark') fallbackId = 'void_space';
+      else if (archetype === 'sword_arc') fallbackId = 'sword_qi';
+      else if (archetype === 'berserk_strike') fallbackId = 'titan_body';
+      else if (archetype === 'emp_blast' || archetype === 'rail_shot' || archetype === 'turret_drone') fallbackId = 'cyber_emp';
+      scores.push({ id: fallbackId, weight: 1.0, strong: false, matchedBy: ['fallback'] });
+    }
+
+    return scores;
+  }
+
+  function extractEquippedBloodlines(ownedItems, mappedSkills) {
+    var list = Array.isArray(ownedItems) ? ownedItems : [];
+    var out = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < list.length; i++) {
+      var it = list[i];
+      if (!it || !isBloodlineItem(it)) continue;
+      var key = String(it.id || it.itemId || it.name || ('BL_' + i));
+      if (seen[key]) continue;
+      seen[key] = true;
+      var sk = mappedSkills && mappedSkills[i] ? mappedSkills[i] : null;
+      var affs = extractItemAffinities(it);
+      out.push({
+        id: key,
+        name: String(it.name || '未知血统'),
+        tier: normalizeTier(it.tier),
+        tierRank: TIER_RANK[normalizeTier(it.tier)] || 0,
+        energyType: String(it.energyType || '通用'),
+        tags: Array.isArray(it.tags) ? it.tags.slice() : [],
+        isFused: Boolean(/^FUS_|^CUSTOM_FUS_/.test(key)),
+        archetype: sk ? sk.archetype : classifyArchetype(it),
+        affinities: affs,
+        primaryAffinity: affs[0] ? affs[0].id : 'arcane_ether'
+      });
+    }
+    return out;
+  }
+
+  var RESONANCE_LEVEL_LABELS = ['', '微光共鸣', '同源共鸣', '绝巅共鸣'];
+
+  function evaluateBloodlineResonance(bloodlinesOrPlayer, skillOrItem) {
+    if (!bloodlinesOrPlayer || !skillOrItem) return null;
+
+    var bloodlines = [];
+    if (Array.isArray(bloodlinesOrPlayer)) {
+      for (var bi = 0; bi < bloodlinesOrPlayer.length; bi++) {
+        var bEntry = typeof bloodlinesOrPlayer[bi] === 'string' ? lookupItem(bloodlinesOrPlayer[bi]) : bloodlinesOrPlayer[bi];
+        if (bEntry) bloodlines.push(bEntry);
+      }
+    } else if (bloodlinesOrPlayer.loadout || bloodlinesOrPlayer.ownedItems) {
+      bloodlines = extractEquippedBloodlines(resolveOwnedItems(bloodlinesOrPlayer), null);
+    } else {
+      var singleB = typeof bloodlinesOrPlayer === 'string' ? lookupItem(bloodlinesOrPlayer) : bloodlinesOrPlayer;
+      if (singleB) bloodlines.push(singleB);
+    }
+
+    if (bloodlines.length === 0) return null;
+
+    var skillObj = typeof skillOrItem === 'string' ? (lookupItem(skillOrItem) || { id: skillOrItem, name: skillOrItem }) : skillOrItem;
+    if (!skillObj || typeof skillObj !== 'object') return null;
+
+    var skillCatRef = (skillObj.itemId || skillObj.id) ? lookupItem(skillObj.itemId || skillObj.id) : null;
+    var skillId = String(skillObj.itemId || skillObj.id || (skillCatRef && skillCatRef.id) || 'SKILL_CUSTOM');
+    var skillName = String(skillObj.name || (skillCatRef && skillCatRef.name) || '技能');
+    var skillEnergy = String(skillObj.energyType || (skillCatRef && skillCatRef.energyType) || '通用');
+    var skillTags = Array.isArray(skillObj.tags)
+      ? skillObj.tags
+      : ((skillCatRef && Array.isArray(skillCatRef.tags)) ? skillCatRef.tags : []);
+    var skillAffs = extractItemAffinities(skillObj);
+
+    var bestMatch = null;
+
+    for (var i = 0; i < bloodlines.length; i++) {
+      var bl = bloodlines[i];
+      var blId = String(bl.id || bl.itemId || ('BL_' + i));
+      var blName = String(bl.name || '血统');
+      var blTier = normalizeTier(bl.tier);
+      var blTierRank = TIER_RANK[blTier] || 0;
+      var blEnergy = String(bl.energyType || '通用');
+      var blTags = Array.isArray(bl.tags) ? bl.tags : [];
+      var blIsFused = Boolean(bl.isFused || /^FUS_|^CUSTOM_FUS_/.test(blId));
+      var blAffs = Array.isArray(bl.affinities) && bl.affinities.length ? bl.affinities : extractItemAffinities(bl);
+
+      // 1) Shared affinity domain check (strongest channel, e.g. frost + frost)
+      var sharedAff = null;
+      var affOverlapScore = 0;
+      for (var ba = 0; ba < blAffs.length; ba++) {
+        for (var sa = 0; sa < skillAffs.length; sa++) {
+          if (blAffs[ba].id === skillAffs[sa].id) {
+            var pairScore = blAffs[ba].weight + skillAffs[sa].weight + (blAffs[ba].strong && skillAffs[sa].strong ? 2.4 : 0);
+            // Ignore double fallback-only matches unless energy or tags also align
+            var bothFallback = (blAffs[ba].matchedBy && blAffs[ba].matchedBy[0] === 'fallback') &&
+              (skillAffs[sa].matchedBy && skillAffs[sa].matchedBy[0] === 'fallback');
+            if (bothFallback) pairScore = 0.5;
+            if (pairScore > affOverlapScore) {
+              affOverlapScore = pairScore;
+              sharedAff = {
+                id: blAffs[ba].id,
+                bothStrong: Boolean(blAffs[ba].strong && skillAffs[sa].strong),
+                eitherStrong: Boolean(blAffs[ba].strong || skillAffs[sa].strong),
+                bothFallback: bothFallback
+              };
+            }
+          }
+        }
+      }
+
+      // 2) Shared energy system check
+      var energyMatch = (blEnergy !== '通用' && skillEnergy !== '通用' && blEnergy === skillEnergy);
+
+      // 3) Shared tactical combat tag check (excluding generic '血统' / '耗材' / '原著')
+      var sharedTags = [];
+      for (var t = 0; t < blTags.length; t++) {
+        var tg = blTags[t];
+        if (tg === '血统' || tg === '耗材' || tg === '原著' || tg === '泛用战术') continue;
+        if (skillTags.indexOf(tg) !== -1) sharedTags.push(tg);
+      }
+
+      // 4) Same-item bloodline active release (casting the bloodline's own active signature)
+      var isSelfBloodlineSkill = (blId === skillId);
+
+      // Determine whether resonance triggers
+      var hasStrongAffinity = Boolean(sharedAff && !sharedAff.bothFallback && (sharedAff.bothStrong || (sharedAff.eitherStrong && affOverlapScore >= 3.2)));
+      var hasNormalAffinity = Boolean(sharedAff && !sharedAff.bothFallback && affOverlapScore >= 2.5);
+      var triggers = hasStrongAffinity || (hasNormalAffinity && (energyMatch || sharedTags.length > 0)) ||
+        (energyMatch && sharedTags.length > 0) ||
+        (energyMatch && !isSelfBloodlineSkill) ||
+        sharedTags.length >= 1;
+
+      // Require genuine attribute match; allow self-bloodline skill only if high tier / fused / strong affinity
+      if (!triggers && isSelfBloodlineSkill && (blTierRank >= 2 || blIsFused || hasStrongAffinity)) {
+        triggers = true;
+      }
+
+      if (!triggers) continue;
+
+      var reasons = [];
+      var totalScore = 0;
+      if (hasStrongAffinity) {
+        totalScore += 3.2;
+        reasons.push(RESONANCE_AFFINITIES[sharedAff.id].label + '属性契合');
+      } else if (hasNormalAffinity) {
+        totalScore += 2.0;
+        reasons.push(RESONANCE_AFFINITIES[sharedAff.id].label + '脉络呼应');
+      }
+      if (energyMatch) {
+        totalScore += 1.6;
+        reasons.push(blEnergy + '同源');
+      }
+      if (sharedTags.length > 0) {
+        totalScore += Math.min(2.2, sharedTags.length * 1.15);
+        reasons.push('特性「' + sharedTags[0] + '」增幅');
+      }
+      if (blIsFused) {
+        totalScore += 1.25;
+        reasons.push('融合血统超频');
+      } else if (blTierRank >= 3) {
+        totalScore += 0.8;
+      }
+      if (isSelfBloodlineSkill) {
+        // Prefer cross-item bloodline + skill pairing slightly over self-only resonance when both exist
+        totalScore -= 0.45;
+      }
+
+      var level = 1;
+      if (totalScore >= 5.2 || (hasStrongAffinity && (blTierRank >= 3 || blIsFused || (energyMatch && sharedTags.length > 0)))) {
+        level = 3;
+      } else if (totalScore >= 3.0 || hasStrongAffinity || (energyMatch && sharedTags.length > 0)) {
+        level = 2;
+      }
+
+      var chosenAffId = (sharedAff && !sharedAff.bothFallback)
+        ? sharedAff.id
+        : (blAffs[0] ? blAffs[0].id : 'arcane_ether');
+
+      if (!bestMatch || totalScore > bestMatch.score) {
+        bestMatch = {
+          affinityId: chosenAffId,
+          level: level,
+          score: round2(totalScore),
+          bloodlineId: blId,
+          bloodlineName: blName,
+          bloodlineTier: blTier,
+          isFused: blIsFused,
+          reasons: reasons
+        };
+      }
+    }
+
+    if (!bestMatch) return null;
+
+    var affDef = RESONANCE_AFFINITIES[bestMatch.affinityId] || RESONANCE_AFFINITIES.arcane_ether;
+    var lvIdx = clamp(bestMatch.level - 1, 0, 2);
+    var bp = affDef.bonusProfile;
+    var fusedBoost = bestMatch.isFused ? 0.06 : 0;
+
+    var powerMult = round2(1 + bp.powerAdd[lvIdx] + fusedBoost);
+    var radiusMult = round2(1 + bp.radiusAdd[lvIdx]);
+    var durationMult = round2(1 + bp.durationAdd[lvIdx]);
+    var cooldownMult = round2(clamp(1 - bp.cooldownCut[lvIdx], 0.65, 0.95));
+    var energyCostMult = round2(clamp(1 - bp.costCut[lvIdx], 0.65, 0.95));
+    var energyRefund = bp.energyRefund[lvIdx] || 0;
+    var hpBonus = bp.hpBonus[lvIdx] || 0;
+    var sanBonus = bp.sanBonus[lvIdx] || 0;
+    var sealBonusPct = bp.sealBonusPct[lvIdx] || 0;
+    var slowBonusSec = bp.slowBonusSec[lvIdx] || 0;
+
+    var pRgb = parseHexToRgb01(affDef.primaryColor);
+    var sRgb = parseHexToRgb01(affDef.secondaryColor);
+    var aRgb = parseHexToRgb01(affDef.accentColor);
+
+    var summaryParts = [
+      '威力+' + Math.round((powerMult - 1) * 100) + '%',
+      '范围+' + Math.round((radiusMult - 1) * 100) + '%'
+    ];
+    if (cooldownMult < 0.96) summaryParts.push('冷却-' + Math.round((1 - cooldownMult) * 100) + '%');
+    if (slowBonusSec >= 1.2) summaryParts.push('冰滞+' + slowBonusSec.toFixed(1) + 's');
+    else if (sealBonusPct > 0) summaryParts.push('封印+' + sealBonusPct + '%');
+    else if (hpBonus > 0) summaryParts.push('回血+' + hpBonus);
+    else if (energyRefund >= 6) summaryParts.push('返能+' + energyRefund);
+
+    return {
+      matched: true,
+      affinityId: affDef.id,
+      affinityLabel: affDef.label,
+      resonanceName: affDef.resonanceTitle,
+      badgeText: affDef.shortLabel + ' Lv.' + bestMatch.level,
+      level: bestMatch.level,
+      levelLabel: RESONANCE_LEVEL_LABELS[bestMatch.level] || '同源共鸣',
+      score: bestMatch.score,
+      bloodlineId: bestMatch.bloodlineId,
+      bloodlineName: bestMatch.bloodlineName,
+      bloodlineTier: bestMatch.bloodlineTier,
+      skillId: skillId,
+      skillName: skillName,
+      matchReasons: bestMatch.reasons,
+      globalFxStyle: affDef.globalFxStyle,
+      desc: affDef.desc,
+      colors: {
+        primary: affDef.primaryColor,
+        secondary: affDef.secondaryColor,
+        accent: affDef.accentColor,
+        primaryHex: rgb01ToHexInt(pRgb[0], pRgb[1], pRgb[2]),
+        secondaryHex: rgb01ToHexInt(sRgb[0], sRgb[1], sRgb[2]),
+        accentHex: rgb01ToHexInt(aRgb[0], aRgb[1], aRgb[2]),
+        primaryRgb: pRgb,
+        secondaryRgb: sRgb,
+        accentRgb: aRgb
+      },
+      bonuses: {
+        powerMult: powerMult,
+        radiusMult: radiusMult,
+        durationMult: durationMult,
+        cooldownMult: cooldownMult,
+        energyCostMult: energyCostMult,
+        noiseMult: bp.noiseMult,
+        energyRefund: energyRefund,
+        hpBonus: hpBonus,
+        sanBonus: sanBonus,
+        sealBonusPct: sealBonusPct,
+        slowBonusSec: slowBonusSec
+      },
+      summaryText: summaryParts.join(' · ')
+    };
+  }
+
+  function buildLoadoutResonanceSummary(bloodlines, slots, basicAttack) {
+    var blList = Array.isArray(bloodlines) ? bloodlines : [];
+    var slList = Array.isArray(slots) ? slots : [];
+    var activeSlots = [];
+    var bestRes = null;
+    var affinityCounts = Object.create(null);
+
+    for (var i = 0; i < slList.length; i++) {
+      var r = slList[i] && slList[i].resonance;
+      if (r && r.matched) {
+        activeSlots.push({
+          slotIndex: i,
+          key: slList[i].key || String(i + 1),
+          skillName: slList[i].name,
+          bloodlineName: r.bloodlineName,
+          affinityId: r.affinityId,
+          resonanceName: r.resonanceName,
+          badgeText: r.badgeText,
+          level: r.level,
+          color: r.colors.primary,
+          summaryText: r.summaryText
+        });
+        affinityCounts[r.affinityId] = (affinityCounts[r.affinityId] || 0) + r.level;
+        if (!bestRes || r.level > bestRes.level || (r.level === bestRes.level && r.score > bestRes.score)) {
+          bestRes = r;
+        }
+      }
+    }
+
+    var activeCount = activeSlots.length;
+    var passiveBonuses = {
+      damageMultAdd: round2(Math.min(0.24, activeCount * 0.045 + (bestRes ? bestRes.level * 0.02 : 0))),
+      energyRegenAdd: round1(Math.min(3.5, activeCount * 0.55 + (bestRes ? bestRes.level * 0.3 : 0))),
+      maxHpAdd: Math.round(Math.min(48, activeCount * 8 + (bestRes && bestRes.affinityId === 'vital_sanctuary' ? 16 : 0))),
+      moveSpeedAdd: round2(Math.min(0.12, activeCount * 0.02 + (bestRes && bestRes.affinityId === 'void_space' ? 0.04 : 0))),
+      memeResistAdd: round2(Math.min(0.16, activeCount * 0.025 + (bestRes && bestRes.affinityId === 'occult_seal' ? 0.06 : 0))),
+      noiseMult: (bestRes && bestRes.affinityId === 'shadow_venom') ? 0.86 : 1.0
+    };
+
+    return {
+      hasBloodline: blList.length > 0,
+      bloodlineNames: blList.map(function (b) { return b.name; }),
+      activeCount: activeCount,
+      dominantAffinity: bestRes ? bestRes.affinityId : null,
+      dominantName: bestRes ? bestRes.resonanceName : null,
+      dominantBadge: bestRes ? bestRes.badgeText : null,
+      dominantColor: bestRes ? bestRes.colors.primary : null,
+      basicResonance: (basicAttack && basicAttack.resonance) ? basicAttack.resonance.badgeText : null,
+      slots: activeSlots,
+      passiveBonuses: passiveBonuses
+    };
+  }
+
+  // Cached procedural crystalline 4-point star/hexagon sprite texture for global resonance particles
+  var cachedResonanceCrystalTex = null;
+  function getResonanceCrystalTexture(THREE) {
+    if (cachedResonanceCrystalTex) return cachedResonanceCrystalTex;
+    if (!THREE || typeof document === 'undefined' || !document.createElement) return null;
+    try {
+      var canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      var ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      var grad = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+      grad.addColorStop(0.0, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.28, 'rgba(255,255,255,0.92)');
+      grad.addColorStop(0.58, 'rgba(255,255,255,0.34)');
+      grad.addColorStop(1.0, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 64, 64);
+
+      // Crisp crystalline diamond star flare inside sprite
+      if (typeof ctx.beginPath === 'function') {
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.beginPath();
+        ctx.moveTo(32, 4);
+        ctx.lineTo(36, 28);
+        ctx.lineTo(60, 32);
+        ctx.lineTo(36, 36);
+        ctx.lineTo(32, 60);
+        ctx.lineTo(28, 36);
+        ctx.lineTo(4, 32);
+        ctx.lineTo(28, 28);
+        ctx.closePath();
+        ctx.fill();
+      }
+      var tex = new THREE.CanvasTexture(canvas);
+      tex.needsUpdate = true;
+      cachedResonanceCrystalTex = tex;
+      return tex;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * Arena-Wide Global Three.js Particle VFX Engine for Bloodline Resonance:
+   * Spawns a wide-field atmospheric particle storm (120-210 particles),
+   * ground-sweeping horizon resonance waves, a sky-pillar prism veil, and
+   * an orbital resonance halo crown. Strictly disposes all GPU resources.
+   */
+  function triggerGlobalResonanceVfx(THREE, scene, resonance, opts) {
+    if (!THREE || !scene || !resonance) return null;
+    var cfg = opts || {};
+    var affDef = RESONANCE_AFFINITIES[resonance.affinityId] || RESONANCE_AFFINITIES.frost;
+    var fxStyle = resonance.globalFxStyle || affDef.globalFxStyle || 'frost_blizzard';
+    var level = clamp(Number(resonance.level) || 2, 1, 3);
+    var ox = Number(cfg.x) || 0;
+    var oz = Number(cfg.z) || 0;
+    var angle = Number(cfg.angle) || 0;
+    var arenaSpread = clamp(Number(cfg.spread) || (16.5 + level * 2.5), 10, 28);
+    var dur = clamp(Number(cfg.duration) || (1.35 + level * 0.24), 0.9, 2.6);
+    var count = Math.round((112 + level * 32) * clamp(Number(cfg.intensityScale) || 1.0, 0.5, 1.5));
+
+    var cols = resonance.colors || {
+      primaryHex: rgb01ToHexInt.apply(null, parseHexToRgb01(affDef.primaryColor)),
+      secondaryHex: rgb01ToHexInt.apply(null, parseHexToRgb01(affDef.secondaryColor)),
+      accentHex: rgb01ToHexInt.apply(null, parseHexToRgb01(affDef.accentColor)),
+      primaryRgb: parseHexToRgb01(affDef.primaryColor),
+      secondaryRgb: parseHexToRgb01(affDef.secondaryColor),
+      accentRgb: parseHexToRgb01(affDef.accentColor)
+    };
+
+    var group = new THREE.Group();
+    group.position.set(ox, 0, oz);
+    var geos = [];
+    var mats = [];
+
+    // Layer 1: Global Battlefield Atmospheric Particle Cloud (THREE.Points)
+    var positions = new Float32Array(count * 3);
+    var colors = new Float32Array(count * 3);
+    var vels = new Float32Array(count * 3);
+    var phases = new Float32Array(count);
+    var radii = new Float32Array(count);
+
+    for (var i = 0; i < count; i++) {
+      var i3 = i * 3;
+      var frac = i / count;
+      var ang = Math.random() * Math.PI * 2;
+      var dist = Math.sqrt(Math.random()) * arenaSpread;
+      phases[i] = frac * Math.PI * 2 + Math.random() * 2.4;
+      radii[i] = Math.max(0.8, dist);
+
+      var cPick = i % 5;
+      var cSrc = cPick === 0 ? cols.accentRgb : (cPick % 2 === 0 ? cols.secondaryRgb : cols.primaryRgb);
+      colors[i3] = cSrc[0];
+      colors[i3 + 1] = cSrc[1];
+      colors[i3 + 2] = cSrc[2];
+
+      if (fxStyle === 'frost_blizzard') {
+        // Swirling glacial snowflakes & ice shards blanketing the whole viewport
+        positions[i3] = Math.cos(ang) * dist;
+        positions[i3 + 1] = 0.35 + Math.random() * 7.8;
+        positions[i3 + 2] = Math.sin(ang) * dist;
+        vels[i3] = Math.cos(angle + 0.6) * (3.2 + Math.random() * 3.4);
+        vels[i3 + 1] = -(1.4 + Math.random() * 2.2);
+        vels[i3 + 2] = Math.sin(angle + 0.6) * (3.2 + Math.random() * 3.4);
+      } else if (fxStyle === 'pyro_tempest') {
+        // Incandescent rising ember tempest across entire battlefield
+        positions[i3] = Math.cos(ang) * dist;
+        positions[i3 + 1] = 0.15 + Math.random() * 2.8;
+        positions[i3 + 2] = Math.sin(ang) * dist;
+        vels[i3] = -Math.sin(ang) * (2.6 + Math.random() * 2.8);
+        vels[i3 + 1] = 3.0 + Math.random() * 3.6;
+        vels[i3 + 2] = Math.cos(ang) * (2.6 + Math.random() * 2.8);
+      } else if (fxStyle === 'sword_domain') {
+        // Slanted luminous sword-qi rain sweeping across the corridor
+        positions[i3] = Math.cos(ang) * dist;
+        positions[i3 + 1] = 2.6 + Math.random() * 6.5;
+        positions[i3 + 2] = Math.sin(ang) * dist;
+        vels[i3] = Math.cos(angle) * (4.6 + Math.random() * 3.0);
+        vels[i3 + 1] = -(3.8 + Math.random() * 2.6);
+        vels[i3 + 2] = Math.sin(angle) * (4.6 + Math.random() * 3.0);
+      } else if (fxStyle === 'cyber_matrix') {
+        // Quantized vertical digital rain columns across the entire station
+        var colX = Math.round((Math.random() - 0.5) * arenaSpread * 1.6);
+        var colZ = Math.round((Math.random() - 0.5) * arenaSpread * 1.6);
+        positions[i3] = colX;
+        positions[i3 + 1] = 0.5 + Math.random() * 8.2;
+        positions[i3 + 2] = colZ;
+        vels[i3] = 0;
+        vels[i3 + 1] = -(3.4 + (i % 4) * 1.1);
+        vels[i3 + 2] = 0;
+      } else if (fxStyle === 'void_aurora') {
+        // Reverse-gravity starlight ascending through orbital drift
+        positions[i3] = Math.cos(ang) * dist;
+        positions[i3 + 1] = 0.2 + Math.random() * 4.5;
+        positions[i3 + 2] = Math.sin(ang) * dist;
+        vels[i3] = Math.cos(ang) * -1.4;
+        vels[i3 + 1] = 2.0 + Math.random() * 2.5;
+        vels[i3 + 2] = Math.sin(ang) * -1.4;
+      } else if (fxStyle === 'occult_eclipse') {
+        // Spiraling cinnabar-gold talisman motes sweeping around the arena
+        positions[i3] = Math.cos(ang) * dist;
+        positions[i3 + 1] = 0.25 + Math.random() * 5.2;
+        positions[i3 + 2] = Math.sin(ang) * dist;
+        vels[i3] = 0;
+        vels[i3 + 1] = 1.4 + Math.random() * 1.8;
+        vels[i3 + 2] = 0;
+      } else if (fxStyle === 'sanctuary_bloom') {
+        // Soft ascending golden-emerald healing pollen across the hall
+        positions[i3] = Math.cos(ang) * dist;
+        positions[i3 + 1] = 0.15 + Math.random() * 3.4;
+        positions[i3 + 2] = Math.sin(ang) * dist;
+        vels[i3] = (Math.random() - 0.5) * 1.0;
+        vels[i3 + 1] = 1.6 + Math.random() * 1.8;
+        vels[i3 + 2] = (Math.random() - 0.5) * 1.0;
+      } else if (fxStyle === 'shadow_mist') {
+        // Low-altitude phantom mist wisps gliding across the floor
+        positions[i3] = Math.cos(ang) * dist;
+        positions[i3 + 1] = 0.2 + Math.random() * 2.2;
+        positions[i3 + 2] = Math.sin(ang) * dist;
+        vels[i3] = Math.cos(ang + 1.2) * (2.5 + Math.random() * 2.2);
+        vels[i3 + 1] = 0.4 + Math.random() * 0.7;
+        vels[i3 + 2] = Math.sin(ang + 1.2) * (2.5 + Math.random() * 2.2);
+      } else if (fxStyle === 'titan_quake') {
+        // Explosive upward magma-gold seismic debris across the arena
+        positions[i3] = Math.cos(ang) * (dist * 0.85);
+        positions[i3 + 1] = 0.15 + Math.random() * 1.1;
+        positions[i3 + 2] = Math.sin(ang) * (dist * 0.85);
+        vels[i3] = Math.cos(ang) * (2.0 + Math.random() * 3.2);
+        vels[i3 + 1] = 4.2 + Math.random() * 3.8;
+        vels[i3 + 2] = Math.sin(ang) * (2.0 + Math.random() * 3.2);
+      } else {
+        // arcane_constellation: twinkling orbital starlight nodes
+        positions[i3] = Math.cos(ang) * dist;
+        positions[i3 + 1] = 0.8 + Math.random() * 6.0;
+        positions[i3 + 2] = Math.sin(ang) * dist;
+        vels[i3] = 0;
+        vels[i3 + 1] = 0.8 + Math.random() * 1.2;
+        vels[i3 + 2] = 0;
+      }
+    }
+
+    var pGeo = new THREE.BufferGeometry();
+    pGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    pGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    var crystalTex = getResonanceCrystalTexture(THREE) || getParticleGlowTexture(THREE);
+    var pMat = new THREE.PointsMaterial({
+      size: 0.42 + level * 0.08,
+      map: crystalTex || null,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.94,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    var pts = new THREE.Points(pGeo, pMat);
+    pts.frustumCulled = false;
+    group.add(pts);
+    geos.push(pGeo);
+    mats.push(pMat);
+
+    // Layer 2: Global Ground-Sweeping Resonance Wave Rings (2-3 concentric waves)
+    var waveCount = level >= 3 ? 3 : 2;
+    var waveRings = [];
+    for (var wi = 0; wi < waveCount; wi++) {
+      var segs = fxStyle === 'frost_blizzard' ? 6 : (fxStyle === 'cyber_matrix' ? 8 : 40);
+      var wGeo = new THREE.RingGeometry(0.84, 1.0, segs);
+      wGeo.rotateX(-Math.PI / 2);
+      var wMat = new THREE.MeshBasicMaterial({
+        color: wi === 0 ? cols.primaryHex : (wi === 1 ? cols.secondaryHex : cols.accentHex),
+        transparent: true,
+        opacity: 0.78 - wi * 0.14,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      var wMesh = new THREE.Mesh(wGeo, wMat);
+      wMesh.position.y = 0.14 + wi * 0.06;
+      group.add(wMesh);
+      geos.push(wGeo);
+      mats.push(wMat);
+      waveRings.push({ mesh: wMesh, mat: wMat, delay: wi * 0.14, maxR: arenaSpread * (0.95 + wi * 0.15) });
+    }
+
+    // Layer 3: Theatrical Sky-Pillar Resonance Prism Veil & Orbital Crown
+    var pillarGeo = new THREE.CylinderGeometry(0.85, 1.65, 11.5, fxStyle === 'frost_blizzard' ? 6 : 16, 1, true);
+    var pillarMat = new THREE.MeshBasicMaterial({
+      color: cols.primaryHex,
+      transparent: true,
+      opacity: 0.34 + level * 0.06,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    var pillarMesh = new THREE.Mesh(pillarGeo, pillarMat);
+    pillarMesh.position.y = 5.75;
+    group.add(pillarMesh);
+    geos.push(pillarGeo);
+    mats.push(pillarMat);
+
+    // Elevated resonance crown ring hovering overhead
+    var crownSegs = fxStyle === 'frost_blizzard' ? 6 : 24;
+    var crownPts = [];
+    for (var ci = 0; ci < crownSegs; ci++) {
+      var ca = (ci / crownSegs) * Math.PI * 2;
+      crownPts.push(new THREE.Vector3(Math.cos(ca) * 2.2, 0, Math.sin(ca) * 2.2));
+    }
+    var crownGeo = new THREE.BufferGeometry().setFromPoints(crownPts);
+    var crownMat = new THREE.LineBasicMaterial({
+      color: cols.secondaryHex,
+      transparent: true,
+      opacity: 0.88,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    var crownLoop = new THREE.LineLoop(crownGeo, crownMat);
+    crownLoop.position.y = 2.6;
+    group.add(crownLoop);
+    geos.push(crownGeo);
+    mats.push(crownMat);
+
+    scene.add(group);
+
+    var elapsed = 0;
+    return {
+      group: group,
+      resonance: resonance,
+      ttl: dur,
+      maxTtl: dur,
+      update: function (dt) {
+        var stepDt = Math.max(0.001, dt || 0.016);
+        this.ttl -= stepDt;
+        elapsed += stepDt;
+        var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
+
+        var posAttr = pGeo.attributes.position;
+        var arr = posAttr.array;
+
+        for (var k = 0; k < count; k++) {
+          var k3 = k * 3;
+          if (fxStyle === 'frost_blizzard') {
+            var sw = elapsed * 2.4 + phases[k];
+            arr[k3] += (vels[k3] + Math.cos(sw) * 2.1) * stepDt;
+            arr[k3 + 1] += vels[k3 + 1] * stepDt;
+            arr[k3 + 2] += (vels[k3 + 2] + Math.sin(sw) * 2.1) * stepDt;
+            if (arr[k3 + 1] < 0.12) arr[k3 + 1] = 7.4;
+          } else if (fxStyle === 'pyro_tempest') {
+            arr[k3] += (vels[k3] + Math.sin(elapsed * 5.0 + phases[k]) * 1.4) * stepDt;
+            arr[k3 + 1] += vels[k3 + 1] * stepDt;
+            arr[k3 + 2] += (vels[k3 + 2] + Math.cos(elapsed * 5.0 + phases[k]) * 1.4) * stepDt;
+          } else if (fxStyle === 'sword_domain') {
+            arr[k3] += vels[k3] * stepDt;
+            arr[k3 + 1] = Math.max(0.14, arr[k3 + 1] + vels[k3 + 1] * stepDt);
+            arr[k3 + 2] += vels[k3 + 2] * stepDt;
+          } else if (fxStyle === 'cyber_matrix') {
+            arr[k3 + 1] += vels[k3 + 1] * stepDt;
+            if (arr[k3 + 1] < 0.14) arr[k3 + 1] = 8.0;
+          } else if (fxStyle === 'occult_eclipse' || fxStyle === 'arcane_constellation') {
+            var spinRate = fxStyle === 'occult_eclipse' ? 1.85 : 1.15;
+            var curAng = phases[k] + elapsed * spinRate;
+            var rCur = radii[k] * (fxStyle === 'occult_eclipse' ? (1.0 - p * 0.25) : (1.0 + p * 0.12));
+            arr[k3] = Math.cos(curAng) * rCur;
+            arr[k3 + 1] += vels[k3 + 1] * stepDt;
+            arr[k3 + 2] = Math.sin(curAng) * rCur;
+          } else if (fxStyle === 'titan_quake') {
+            vels[k3 + 1] -= 9.2 * stepDt;
+            arr[k3] += vels[k3] * stepDt;
+            arr[k3 + 1] = Math.max(0.12, arr[k3 + 1] + vels[k3 + 1] * stepDt);
+            arr[k3 + 2] += vels[k3 + 2] * stepDt;
+          } else {
+            // void_aurora / sanctuary_bloom / shadow_mist
+            arr[k3] += (vels[k3] + Math.cos(elapsed * 2.2 + phases[k]) * 0.65) * stepDt;
+            arr[k3 + 1] += vels[k3 + 1] * stepDt;
+            arr[k3 + 2] += (vels[k3 + 2] + Math.sin(elapsed * 2.2 + phases[k]) * 0.65) * stepDt;
+          }
+        }
+        posAttr.needsUpdate = true;
+
+        // Smooth fade envelope: fast rise -> hold -> graceful dissolve
+        var env = p < 0.15 ? (p / 0.15) : Math.pow(1 - (p - 0.15) / 0.85, 1.15);
+        pMat.opacity = 0.94 * clamp(env, 0, 1);
+
+        // Expand global floor resonance waves
+        for (var wi = 0; wi < waveRings.length; wi++) {
+          var wr = waveRings[wi];
+          var wp = clamp((p - wr.delay) / Math.max(0.25, 1 - wr.delay), 0, 1);
+          var eased = 1 - Math.pow(1 - wp, 2.2);
+          var sc = 0.9 + eased * wr.maxR;
+          wr.mesh.scale.set(sc, 1, sc);
+          wr.mesh.rotation.y += stepDt * (wi % 2 === 0 ? 1.2 : -1.5);
+          wr.mat.opacity = (wp <= 0 ? 0 : (0.76 - wi * 0.12) * Math.pow(1 - wp, 1.3));
+        }
+
+        // Sky-pillar flares brightly in first 45% then dissolves smoothly
+        var pilP = clamp(p / 0.65, 0, 1);
+        var pilSc = 0.8 + pilP * (1.8 + level * 0.35);
+        pillarMesh.scale.set(pilSc, 1 + pilP * 0.25, pilSc);
+        pillarMesh.rotation.y += stepDt * 1.8;
+        pillarMat.opacity = (0.34 + level * 0.06) * Math.pow(1 - pilP, 1.4);
+
+        // Overhead resonance crown expands & rotates
+        var crSc = 0.75 + p * (2.6 + level * 0.55);
+        crownLoop.scale.set(crSc, 1, crSc);
+        crownLoop.position.y = 2.4 + p * 2.4;
+        crownLoop.rotation.y -= stepDt * 3.4;
+        crownMat.opacity = 0.88 * Math.pow(1 - p, 1.2);
+      },
+      dispose: function () {
+        scene.remove(group);
+        for (var gi = 0; gi < geos.length; gi++) geos[gi].dispose();
+        for (var mi = 0; mi < mats.length; mi++) mats[mi].dispose();
+      }
+    };
+  }
+
+  var BloodlineResonance = {
+    AFFINITY_ORDER: RESONANCE_AFFINITY_ORDER,
+    AFFINITIES: RESONANCE_AFFINITIES,
+    isBloodlineItem: isBloodlineItem,
+    extractAffinities: extractItemAffinities,
+    extractEquippedBloodlines: extractEquippedBloodlines,
+    evaluate: evaluateBloodlineResonance,
+    buildLoadoutSummary: buildLoadoutResonanceSummary,
+    triggerGlobalVfx: triggerGlobalResonanceVfx
+  };
+
+  // ---------------------------------------------------------------------------
+  // 12. Public Export on window.INFINITY.Skills25D, ParticleVfx25D & BloodlineResonance25D
+  // ---------------------------------------------------------------------------
+  INFINITY.ParticleVfx25D = ParticleVfx;
+  INFINITY.BloodlineResonance25D = BloodlineResonance;
   INFINITY.Skills25D = {
     ARCHETYPES: ARCHETYPES,
     ARCHETYPE_ORDER: ARCHETYPE_ORDER,
     STARTER_SKILLS: STARTER_SKILLS,
+    VFX_MOTIFS: VFX_MOTIFS,
+    PARTICLE_TRIGGER_ANIMS: PARTICLE_TRIGGER_ANIMS,
+    PARTICLE_CATALOG: PARTICLE_CATALOG,
+    RESONANCE_AFFINITIES: RESONANCE_AFFINITIES,
+    ParticleVfx: ParticleVfx,
+    BloodlineResonance: BloodlineResonance,
+    buildVfxProfile: buildVfxProfile,
+    buildParticlePreset: buildParticlePreset,
+    getParticlePreset: getParticlePreset,
+    evaluateBloodlineResonance: evaluateBloodlineResonance,
+    triggerGlobalResonanceVfx: triggerGlobalResonanceVfx,
     mapItemToSkill: mapItemToSkill,
     buildCombatLoadout: buildCombatLoadout
   };

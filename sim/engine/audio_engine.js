@@ -43,6 +43,13 @@
   var examStep = 0;
   var EXAM_STEP_MS = 129; // ~116 BPM 16th-note grid
 
+  // Soft Mission-Closure Ambient Soundscape state (triggered when all mission tasks complete)
+  var closureAmbienceNodes = [];
+  var closureAmbienceGain = null;
+  var closureChimeTimer = null;
+  var closureAmbienceActive = false;
+  var closureAmbiencePending = false;
+
   // Persistent 3D spatial channels ('inspector' | 'train')
   var spatialChannels = {};
   var spatialPending = {
@@ -1142,8 +1149,9 @@
       return;
     }
 
-    // Non-exam scenes silence spatial channels cleanly
+    // Non-exam scenes silence spatial channels & mission closure ambience cleanly
     silenceSpatialChannels();
+    stopMissionClosureAmbienceInternal();
 
     var sceneGain = ctx.createGain();
     sceneGain.gain.setValueAtTime(0.0001, now);
@@ -1879,7 +1887,333 @@
       ag.connect(sfxBus);
       air.start(now);
       air.stop(now + 1.9);
+      return;
     }
+
+    if (name === 'mission_complete') {
+      // Celebratory ascending D-major harmonic chime + warm resonant shimmer
+      var mlp = ctx.createBiquadFilter();
+      mlp.type = 'lowpass';
+      mlp.frequency.setValueAtTime(4200, now);
+      mlp.frequency.exponentialRampToValueAtTime(1750, now + 1.35);
+      mlp.Q.setValueAtTime(0.9, now);
+      mlp.connect(sfxBus);
+
+      // Warm harmonic root anchor (D4)
+      var root = ctx.createOscillator();
+      var rootG = ctx.createGain();
+      root.type = 'sine';
+      root.frequency.setValueAtTime(293.66, now);
+      rootG.gain.setValueAtTime(0.0001, now);
+      rootG.gain.linearRampToValueAtTime(0.085, now + 0.03);
+      rootG.gain.exponentialRampToValueAtTime(0.0001, now + 1.25);
+      root.connect(rootG);
+      rootG.connect(mlp);
+      root.start(now);
+      root.stop(now + 1.3);
+
+      // Ascending celebratory arpeggio (D5 -> F#5 -> A5 -> D6)
+      var fanfare = [
+        { freq: 587.33, off: 0.00, peak: 0.11, dur: 0.62 },
+        { freq: 739.99, off: 0.075, peak: 0.115, dur: 0.68 },
+        { freq: 880.00, off: 0.15, peak: 0.12, dur: 0.78 },
+        { freq: 1174.66, off: 0.23, peak: 0.14, dur: 1.05 }
+      ];
+      fanfare.forEach(function (note) {
+        var t = now + note.off;
+        var oMain = ctx.createOscillator();
+        var oHarm = ctx.createOscillator();
+        var gNote = ctx.createGain();
+        var gHarm = ctx.createGain();
+
+        oMain.type = 'triangle';
+        oMain.frequency.setValueAtTime(note.freq, t);
+        oHarm.type = 'sine';
+        oHarm.frequency.setValueAtTime(note.freq * 2, t);
+
+        gNote.gain.setValueAtTime(0.0001, t);
+        gNote.gain.linearRampToValueAtTime(note.peak, t + 0.012);
+        gNote.gain.exponentialRampToValueAtTime(0.0001, t + note.dur);
+
+        gHarm.gain.setValueAtTime(0.0001, t);
+        gHarm.gain.linearRampToValueAtTime(note.peak * 0.28, t + 0.01);
+        gHarm.gain.exponentialRampToValueAtTime(0.0001, t + note.dur * 0.75);
+
+        oMain.connect(gNote);
+        oHarm.connect(gHarm);
+        gNote.connect(mlp);
+        gHarm.connect(mlp);
+
+        oMain.start(t);
+        oHarm.start(t);
+        oMain.stop(t + note.dur + 0.05);
+        oHarm.stop(t + note.dur + 0.05);
+      });
+
+      // Soft crystalline high-fifth shimmer on peak (A6)
+      var shimmer = ctx.createOscillator();
+      var shG = ctx.createGain();
+      shimmer.type = 'sine';
+      shimmer.frequency.setValueAtTime(1760.0, now + 0.24);
+      shG.gain.setValueAtTime(0.0001, now + 0.24);
+      shG.gain.linearRampToValueAtTime(0.036, now + 0.27);
+      shG.gain.exponentialRampToValueAtTime(0.0001, now + 1.25);
+      shimmer.connect(shG);
+      shG.connect(mlp);
+      shimmer.start(now + 0.24);
+      shimmer.stop(now + 1.3);
+      return;
+    }
+
+    if (name === 'waypoint_ping') {
+      // Crisp tactical sonar lock double-ping (A5 -> E6)
+      var wFilter = ctx.createBiquadFilter();
+      wFilter.type = 'bandpass';
+      wFilter.frequency.setValueAtTime(1450, now);
+      wFilter.Q.setValueAtTime(1.4, now);
+      wFilter.connect(sfxBus);
+
+      var pings = [
+        { freq: 880.0, off: 0.00, peak: 0.09, dur: 0.16 },
+        { freq: 1318.5, off: 0.085, peak: 0.11, dur: 0.34 }
+      ];
+      pings.forEach(function (pt) {
+        var t = now + pt.off;
+        var osc = ctx.createOscillator();
+        var g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(pt.freq, t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(pt.peak, t + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + pt.dur);
+        osc.connect(g);
+        g.connect(wFilter);
+        osc.start(t);
+        osc.stop(t + pt.dur + 0.03);
+      });
+      return;
+    }
+
+    if (name === 'stall_warn') {
+      // Subtle low-register two-step caution pulse (Eb4 -> C#4) when mission progress stalls
+      var sLp = ctx.createBiquadFilter();
+      sLp.type = 'lowpass';
+      sLp.frequency.setValueAtTime(980, now);
+      sLp.Q.setValueAtTime(1.2, now);
+      sLp.connect(sfxBus);
+
+      var warnSteps = [
+        { freq: 311.13, off: 0.00, peak: 0.065, dur: 0.22 },
+        { freq: 277.18, off: 0.20, peak: 0.055, dur: 0.32 }
+      ];
+      warnSteps.forEach(function (st) {
+        var t = now + st.off;
+        var o = ctx.createOscillator();
+        var g = ctx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(st.freq, t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(st.peak, t + 0.018);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + st.dur);
+        o.connect(g);
+        g.connect(sLp);
+        o.start(t);
+        o.stop(t + st.dur + 0.04);
+      });
+      return;
+    }
+
+    if (name === 'mission_all_clear') {
+      playMissionClosureSwell();
+      return;
+    }
+  }
+
+  // =========================================================================
+  // 4. SOFT MISSION-CLOSURE AMBIENCE (轻柔的任务结案环境音)
+  // =========================================================================
+
+  function playMissionClosureSwell() {
+    if (!ctx || muted) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(function () {});
+    }
+    var now = ctx.currentTime;
+    var lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(2400, now);
+    lp.frequency.exponentialRampToValueAtTime(1150, now + 2.8);
+    lp.Q.setValueAtTime(0.75, now);
+    lp.connect(sfxBus);
+
+    // Gentle Dmaj9 glass-chord resolution bloom (D4 -> F#4 -> A4 -> C#5 -> E5 -> D6)
+    var chord = [
+      { freq: 293.66, off: 0.00, peak: 0.052, dur: 2.55 },
+      { freq: 369.99, off: 0.08, peak: 0.044, dur: 2.50 },
+      { freq: 440.00, off: 0.16, peak: 0.046, dur: 2.60 },
+      { freq: 554.37, off: 0.25, peak: 0.036, dur: 2.65 },
+      { freq: 659.25, off: 0.34, peak: 0.032, dur: 2.75 },
+      { freq: 1174.66, off: 0.44, peak: 0.024, dur: 2.95 }
+    ];
+    chord.forEach(function (n) {
+      var t = now + n.off;
+      var osc = ctx.createOscillator();
+      var g = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(n.freq, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(n.peak, t + 0.24);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + n.dur);
+      osc.connect(g);
+      g.connect(lp);
+      osc.start(t);
+      osc.stop(t + n.dur + 0.06);
+    });
+  }
+
+  function scheduleMissionClosureChime() {
+    if (!ctx || !closureAmbienceActive || !closureAmbienceGain) {
+      closureChimeTimer = null;
+      return;
+    }
+    if (!muted && ctx.state === 'running') {
+      var now = ctx.currentTime;
+      // Soft pentatonic D-major glass-harp harmonics
+      var notes = [587.33, 739.99, 880.0, 987.77, 1174.66, 1318.51];
+      var f = notes[Math.floor(Math.random() * notes.length)];
+      var panner = createSafePanner(ctx);
+      panner.setPan((Math.random() - 0.5) * 0.65, now, 0.08);
+
+      var osc = ctx.createOscillator();
+      var sub = ctx.createOscillator();
+      var lp = ctx.createBiquadFilter();
+      var g = ctx.createGain();
+
+      osc.type = 'sine';
+      sub.type = 'triangle';
+      osc.frequency.setValueAtTime(f, now);
+      sub.frequency.setValueAtTime(f * 0.5, now);
+
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(1900, now);
+      lp.frequency.exponentialRampToValueAtTime(780, now + 2.8);
+
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.022, now + 0.34);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 3.1);
+
+      osc.connect(lp);
+      sub.connect(lp);
+      lp.connect(g);
+      g.connect(panner.input);
+      panner.output.connect(closureAmbienceGain);
+
+      osc.start(now);
+      sub.start(now);
+      osc.stop(now + 3.2);
+      sub.stop(now + 3.2);
+      setTimeout(function () {
+        panner.disconnect();
+      }, 3350);
+    }
+    closureChimeTimer = setTimeout(scheduleMissionClosureChime, 4600 + Math.random() * 2400);
+  }
+
+  function startMissionClosureAmbienceInternal() {
+    if (closureAmbienceActive) return;
+    if (!unlocked || !ctx) {
+      closureAmbiencePending = true;
+      return;
+    }
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(function () {});
+    }
+
+    closureAmbiencePending = false;
+    closureAmbienceActive = true;
+
+    var now = ctx.currentTime;
+    var busGain = ctx.createGain();
+    busGain.gain.setValueAtTime(0.0001, now);
+    busGain.gain.linearRampToValueAtTime(0.62, now + 1.65);
+    busGain.connect(ambienceBus);
+    closureAmbienceGain = busGain;
+
+    var nodes = [];
+    // Warm breathing holographic glass pad (Dmaj9)
+    var padFilter = ctx.createBiquadFilter();
+    padFilter.type = 'lowpass';
+    padFilter.frequency.setValueAtTime(560, now);
+    padFilter.Q.setValueAtTime(0.95, now);
+    padFilter.connect(busGain);
+    nodes.push(padFilter);
+
+    var breathLfo = ctx.createOscillator();
+    var breathDepth = ctx.createGain();
+    breathLfo.type = 'sine';
+    breathLfo.frequency.setValueAtTime(0.11, now);
+    breathDepth.gain.setValueAtTime(185, now);
+    breathLfo.connect(breathDepth);
+    breathDepth.connect(padFilter.frequency);
+    breathLfo.start();
+    nodes.push(breathLfo, breathDepth);
+
+    makeOsc('sine', 146.83, 0.068, padFilter, nodes);     // D3 warm root
+    makeOsc('triangle', 220.00, 0.036, padFilter, nodes); // A3 fifth
+    makeOsc('sine', 369.99, 0.026, padFilter, nodes);     // F#4 major third
+    makeOsc('sine', 554.37, 0.017, padFilter, nodes);     // C#5 major seventh
+    makeOsc('sine', 659.25, 0.014, padFilter, nodes);     // E5 airy ninth
+    makeOsc('sine', 370.75, 0.014, padFilter, nodes);     // gentle detuned shimmer
+
+    // Feather-light holographic air veil
+    if (pinkBuffer) {
+      makeNoiseLoop(pinkBuffer, 'bandpass', 1120, 1.8, 0.012, busGain, nodes);
+    }
+
+    closureAmbienceNodes = nodes;
+
+    // Initial gentle case-closed harmonic swell + periodic soft glass chimes
+    playMissionClosureSwell();
+    closureChimeTimer = setTimeout(scheduleMissionClosureChime, 3400);
+  }
+
+  function stopMissionClosureAmbienceInternal() {
+    closureAmbiencePending = false;
+    if (closureChimeTimer) {
+      clearTimeout(closureChimeTimer);
+      closureChimeTimer = null;
+    }
+    if (!closureAmbienceActive && !closureAmbienceGain) return;
+    closureAmbienceActive = false;
+
+    var oldGain = closureAmbienceGain;
+    var oldNodes = closureAmbienceNodes.slice();
+    closureAmbienceGain = null;
+    closureAmbienceNodes = [];
+
+    if (!ctx) return;
+    var now = ctx.currentTime;
+    if (oldGain) {
+      try {
+        oldGain.gain.cancelScheduledValues(now);
+        oldGain.gain.setValueAtTime(Math.max(oldGain.gain.value, 0.0001), now);
+        oldGain.gain.linearRampToValueAtTime(0.0001, now + 0.85);
+      } catch (_) {}
+    }
+
+    setTimeout(function () {
+      for (var i = 0; i < oldNodes.length; i++) {
+        try {
+          if (typeof oldNodes[i].stop === 'function') oldNodes[i].stop();
+        } catch (_) {}
+        try {
+          if (typeof oldNodes[i].disconnect === 'function') oldNodes[i].disconnect();
+        } catch (_) {}
+      }
+      if (oldGain) {
+        try { oldGain.disconnect(); } catch (_) {}
+      }
+    }, 960);
   }
 
   // =========================================================================
@@ -1896,6 +2230,9 @@
       applyBulletTimeFilter();
       if (currentScene && !activeSceneGain) {
         buildScene(currentScene);
+      }
+      if (closureAmbiencePending && !closureAmbienceActive) {
+        startMissionClosureAmbienceInternal();
       }
       return true;
     },
@@ -1962,6 +2299,23 @@
       if (bulletTimeEnabled === next) return;
       bulletTimeEnabled = next;
       applyBulletTimeFilter();
+    },
+
+    startMissionClosureAmbience: function () {
+      if (!unlocked) {
+        if (ensureContext()) {
+          unlocked = true;
+        }
+      }
+      startMissionClosureAmbienceInternal();
+    },
+
+    stopMissionClosureAmbience: function () {
+      stopMissionClosureAmbienceInternal();
+    },
+
+    isMissionClosureAmbienceActive: function () {
+      return closureAmbienceActive;
     },
 
     playSfx: function (name) {

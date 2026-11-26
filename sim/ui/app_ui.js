@@ -46,7 +46,31 @@
     crisisDeadline: 0,
     crisisTotalSec: 8,
     audioUnlocked: false,
-    lastFeedCount: 0
+    lastFeedCount: 0,
+    missionPanelOpen: true,
+    missionPanelExpanded: false,
+    missionPanelTab: 'progress',
+    missionLogFilter: 'all',
+    missionProgressSig: '',
+    missionLogRenderedVer: -1,
+    missionLogRenderedFilter: '',
+    missionCelebratedBars: {},
+    missionProgressInitialized: false,
+    lastCelebrationAt: 0,
+    missionProgressHistory: [],
+    missionHistoryVersion: 0,
+    missionChartRenderedVer: -1,
+    missionChartRenderedWidth: 0,
+    missionChartRenderedHeight: 0,
+    missionChartResizeObserver: null,
+    missionForecastVisible: false,
+    missionForecastLastPct: -1,
+    missionForecastAnimAt: 0,
+    lastStallWarnAt: 0,
+    lastStallWarnActive: false,
+    missionAllCompleted: false,
+    missionHoloIgniteTimer: null,
+    lastExamReview: null
   };
 
   var STARTER_PRESETS = [
@@ -368,6 +392,7 @@
         } catch (_) {}
       }
     }
+    syncMissionPanelCompletionState(false);
   }
 
   function syncSceneContainers(state) {
@@ -1222,7 +1247,56 @@
       ctx.fill();
     }
 
-    // 6. Player arrow/marker
+    // 6. Active Objective Waypoint Guidance (dashed vector + pulsing target radar)
+    if (mm.focusWaypoint && mm.player) {
+      var wp = mm.focusWaypoint;
+      var wx = wp.x * scale;
+      var wz = wp.z * scale;
+      var ppx = mm.player.x * scale;
+      var ppz = mm.player.z * scale;
+      var wpColor = wp.color || '#6fd8ea';
+      var wpPulse = (performance.now() * 0.004) % 1;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.moveTo(ppx, ppz);
+      ctx.lineTo(wx, wz);
+      ctx.strokeStyle = wpColor;
+      ctx.globalAlpha = 0.72;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Expanding outer radar ping
+      ctx.beginPath();
+      ctx.arc(wx, wz, 4 + wpPulse * 10, 0, Math.PI * 2);
+      ctx.strokeStyle = wpColor;
+      ctx.globalAlpha = (1 - wpPulse) * 0.85;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Inner lock ring + core diamond
+      ctx.beginPath();
+      ctx.arc(wx, wz, 4.5, 0, Math.PI * 2);
+      ctx.strokeStyle = wpColor;
+      ctx.globalAlpha = 0.92;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(wx, wz - 3.5);
+      ctx.lineTo(wx + 3.5, wz);
+      ctx.lineTo(wx, wz + 3.5);
+      ctx.lineTo(wx - 3.5, wz);
+      ctx.closePath();
+      ctx.fillStyle = '#fff5dc';
+      ctx.globalAlpha = 0.95;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 7. Player arrow/marker
     if (mm.player) {
       var px = mm.player.x * scale;
       var pz = mm.player.z * scale;
@@ -1259,7 +1333,9 @@
       } catch (_) {}
     }
 
-    var sig = basic.name + '|' + slots.map(function (sl) { return (sl.key || sl.index) + ':' + (sl.name || ''); }).join('|');
+    var sig = basic.name + '|' + slots.map(function (sl) {
+      return (sl.key || sl.index) + ':' + (sl.name || '') + ':' + (sl.resonance ? sl.resonance.badgeText : '');
+    }).join('|');
     if (uiState.hotbarSig !== sig) {
       uiState.hotbarSig = sig;
       var html =
@@ -1271,8 +1347,17 @@
 
       for (var i = 0; i < 4; i++) {
         var sl = slots[i] || { index: i, key: String(i + 1), name: '空槽位', icon: '◇', color: '#6fd8ea', energyCost: 0 };
+        var res = sl.resonance || null;
+        var resClass = res ? ' has-resonance' : '';
+        var resTitle = res
+          ? (sl.name || '') + ' (能耗 ' + (sl.energyCost || 0) + ') · ✦ ' + res.resonanceName + ' [' + res.bloodlineName + '] ' + res.summaryText
+          : (sl.name || '') + ' (能耗 ' + (sl.energyCost || 0) + ')';
+        var resStyle = res ? (' style="--res-color:' + esc(res.color || sl.color || '#6fd8ea') + ';"') : '';
+        var resBadgeHtml = res
+          ? '<span class="hotbar-res-tag" style="color:' + esc(res.color || '#7be8ff') + ';">✦' + esc(res.badgeText || '共鸣') + '</span>'
+          : '';
         html +=
-          '<button class="hotbar-slot" type="button" data-cast-slot="' + i + '" id="hotbar-slot-' + i + '" title="' + esc(sl.name || '') + ' (能耗 ' + (sl.energyCost || 0) + ')">' +
+          '<button class="hotbar-slot' + resClass + '" type="button" data-cast-slot="' + i + '" id="hotbar-slot-' + i + '"' + resStyle + ' title="' + esc(resTitle) + '">' +
             '<div class="hotbar-top">' +
               '<span class="hotbar-key">' + esc(sl.key || String(i + 1)) + '</span>' +
               '<span class="hotbar-cost">' + (sl.energyCost ? ('EN ' + Math.round(sl.energyCost)) : '免费') + '</span>' +
@@ -1281,7 +1366,8 @@
               '<span class="hotbar-icon">' + esc(sl.icon || '✦') + '</span>' +
               '<span class="hotbar-name">' + esc(sl.name || '技能') + '</span>' +
             '</div>' +
-            '<div class="hotbar-accent-bar" style="background:' + esc(sl.color || '#6fd8ea') + ';"></div>' +
+            resBadgeHtml +
+            '<div class="hotbar-accent-bar" style="background:' + esc(res ? (res.color || sl.color || '#6fd8ea') : (sl.color || '#6fd8ea')) + ';"></div>' +
             '<div class="hotbar-cd-mask" id="hotbar-cd-mask-' + i + '"></div>' +
             '<div class="hotbar-cd-text hidden" id="hotbar-cd-text-' + i + '"></div>' +
           '</button>';
@@ -1664,6 +1750,7 @@
     if (slowFrame) slowFrame.classList.toggle('hidden', !(slowActive || uiState.radioFocused));
 
     renderHotbar25D(snapshot, st);
+    renderMissionPanel25D(snapshot, false);
 
     // 5. Dynamic audio threat level sync
     var threatRounded = Math.round(Number(snapshot.threatLevel || 0) / 5) * 5;
@@ -1676,6 +1763,1437 @@
         INFINITY.Audio.setScene(threatRounded >= 50 ? 'station_tense' : 'station_calm');
       }
     }
+  }
+
+  function syncMissionPanelLayout() {
+    var panel = $('hud25d-mission-panel');
+    var collapsedTab = $('hud25d-mission-collapsed-tab');
+    var topBtn = $('btn-toggle-mission-panel');
+    var expandBtn = $('btn-mission-expand');
+
+    if (panel) {
+      panel.classList.toggle('collapsed', !uiState.missionPanelOpen);
+      panel.classList.toggle('expanded', uiState.missionPanelOpen && uiState.missionPanelExpanded);
+    }
+    if (collapsedTab) {
+      collapsedTab.classList.toggle('hidden', uiState.missionPanelOpen);
+    }
+    if (topBtn) {
+      topBtn.classList.toggle('active', uiState.missionPanelOpen);
+      topBtn.setAttribute('aria-pressed', uiState.missionPanelOpen ? 'true' : 'false');
+    }
+    if (expandBtn) {
+      expandBtn.classList.toggle('active', uiState.missionPanelExpanded);
+      expandBtn.textContent = uiState.missionPanelExpanded ? '还原' : '扩展';
+      expandBtn.setAttribute('aria-pressed', uiState.missionPanelExpanded ? 'true' : 'false');
+    }
+
+    var activeTab = uiState.missionPanelTab || 'progress';
+    document.querySelectorAll('[data-mission-tab]').forEach(function (btn) {
+      var isAct = btn.getAttribute('data-mission-tab') === activeTab;
+      btn.classList.toggle('active', isAct);
+      btn.setAttribute('aria-selected', isAct ? 'true' : 'false');
+    });
+    var panes = {
+      progress: $('hud25d-tab-progress'),
+      branches: $('hud25d-tab-branches'),
+      log: $('hud25d-tab-log')
+    };
+    Object.keys(panes).forEach(function (k) {
+      if (panes[k]) panes[k].classList.toggle('active', k === activeTab);
+    });
+
+    var activeFilter = uiState.missionLogFilter || 'all';
+    document.querySelectorAll('[data-mission-filter]').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-mission-filter') === activeFilter);
+    });
+
+    if (uiState.missionPanelOpen && activeTab === 'progress') {
+      if (typeof global.requestAnimationFrame === 'function') {
+        global.requestAnimationFrame(function () {
+          renderMissionProgressChart25D(true);
+        });
+      } else {
+        renderMissionProgressChart25D(true);
+      }
+    }
+  }
+
+  function triggerObjectiveRowFlash(el) {
+    if (!el) return;
+    if (el._flashTimer) {
+      clearTimeout(el._flashTimer);
+      el._flashTimer = null;
+    }
+    el.classList.remove('obj-complete-flash');
+    void el.offsetWidth;
+    el.classList.add('obj-complete-flash');
+    el._flashTimer = setTimeout(function () {
+      el.classList.remove('obj-complete-flash');
+      el._flashTimer = null;
+    }, 1020);
+  }
+
+  function flashCompletedObjectiveRows(completedKeys) {
+    if (!Array.isArray(completedKeys) || !completedKeys.length) return;
+    var flashedHudIds = {};
+    for (var i = 0; i < completedKeys.length; i++) {
+      var key = completedKeys[i];
+      if ((key === 'override' || key.indexOf('console_') === 0) && !flashedHudIds.override) {
+        flashedHudIds.override = true;
+        triggerObjectiveRowFlash($('hud25d-obj-override'));
+      } else if (key === 'inspector' && !flashedHudIds.inspector) {
+        flashedHudIds.inspector = true;
+        triggerObjectiveRowFlash($('hud25d-obj-inspector'));
+      }
+
+      var progList = $('hud25d-mission-progress-list');
+      if (progList) {
+        var matching = progList.querySelectorAll('[data-task-key]');
+        for (var m = 0; m < matching.length; m++) {
+          if (matching[m].getAttribute('data-task-key') === key) {
+            triggerObjectiveRowFlash(matching[m]);
+          }
+        }
+      }
+    }
+  }
+
+  function checkMissionProgressCelebration(progressBars) {
+    if (!progressBars) return [];
+    var keys = Object.keys(progressBars);
+    if (!uiState.missionProgressInitialized) {
+      for (var i = 0; i < keys.length; i++) {
+        if (Number(progressBars[keys[i]] || 0) >= 100) {
+          uiState.missionCelebratedBars[keys[i]] = true;
+        }
+      }
+      uiState.missionProgressInitialized = true;
+      return [];
+    }
+
+    var newlyCompletedKeys = [];
+    for (var j = 0; j < keys.length; j++) {
+      var k = keys[j];
+      var pct = Number(progressBars[k] || 0);
+      if (pct >= 100 && !uiState.missionCelebratedBars[k]) {
+        uiState.missionCelebratedBars[k] = true;
+        newlyCompletedKeys.push(k);
+      }
+    }
+
+    if (newlyCompletedKeys.length > 0) {
+      var nowMs = Date.now();
+      if (nowMs - (uiState.lastCelebrationAt || 0) >= 350) {
+        uiState.lastCelebrationAt = nowMs;
+        if (INFINITY.Audio && typeof INFINITY.Audio.playSfx === 'function') {
+          INFINITY.Audio.playSfx('mission_complete');
+        }
+      }
+    }
+    return newlyCompletedKeys;
+  }
+
+  function ensureMissionHoloOverlay(panel) {
+    if (!panel) return null;
+    var overlay = panel.querySelector('.hud25d-mp-holo-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'hud25d-mp-holo-overlay';
+      overlay.setAttribute('aria-hidden', 'true');
+      overlay.innerHTML =
+        '<div class="hud25d-mp-holo-scan"></div>' +
+        '<div class="hud25d-mp-holo-corners"><span></span><span></span><span></span><span></span></div>' +
+        '<div class="hud25d-mp-holo-seal"><span class="holo-seal-mark">✦ 达成</span><span class="holo-seal-sub">ALL CLEAR</span></div>';
+      panel.appendChild(overlay);
+    }
+    return overlay;
+  }
+
+  function syncMissionPanelCompletionState(allCompleted, stagesDone) {
+    var next = Boolean(allCompleted);
+    var prev = Boolean(uiState.missionAllCompleted);
+    var panel = $('hud25d-mission-panel');
+    var collapsedTab = $('hud25d-mission-collapsed-tab');
+    var metaEl = $('hud25d-mission-overall-meta');
+
+    if (panel) {
+      if (next) ensureMissionHoloOverlay(panel);
+      panel.classList.toggle('is-all-completed', next);
+    }
+    if (collapsedTab) {
+      collapsedTab.classList.toggle('is-all-completed', next);
+    }
+    if (metaEl && typeof stagesDone === 'number') {
+      metaEl.textContent = next ? ('✦ 达成 · ' + stagesDone + '/4 阶段') : (stagesDone + '/4 阶段');
+    }
+
+    if (next === prev) return;
+    uiState.missionAllCompleted = next;
+
+    if (uiState.missionHoloIgniteTimer) {
+      clearTimeout(uiState.missionHoloIgniteTimer);
+      uiState.missionHoloIgniteTimer = null;
+    }
+
+    if (next) {
+      if (panel) {
+        panel.classList.remove('holo-ignite');
+        void panel.offsetWidth;
+        panel.classList.add('holo-ignite');
+        uiState.missionHoloIgniteTimer = setTimeout(function () {
+          if (panel) panel.classList.remove('holo-ignite');
+          uiState.missionHoloIgniteTimer = null;
+        }, 1250);
+      }
+      if (INFINITY.Audio) {
+        if (typeof INFINITY.Audio.startMissionClosureAmbience === 'function') {
+          INFINITY.Audio.startMissionClosureAmbience();
+        } else if (typeof INFINITY.Audio.playSfx === 'function') {
+          INFINITY.Audio.playSfx('mission_all_clear');
+        }
+      }
+    } else {
+      if (panel) panel.classList.remove('holo-ignite');
+      if (INFINITY.Audio && typeof INFINITY.Audio.stopMissionClosureAmbience === 'function') {
+        INFINITY.Audio.stopMissionClosureAmbience();
+      }
+    }
+  }
+
+  function renderMissionPanel25D(snapshot, forceLog) {
+    if (!snapshot) return;
+
+    var ovPct = clamp(Math.round(Number(snapshot.overridePct || 0)), 0, 100);
+    var insp = snapshot.inspector || { hp: 160, maxHp: 160, sealedPct: 0, state: 'patrol' };
+    var inspHp = Math.max(0, Math.round(Number(insp.hp || 0)));
+    var inspMaxHp = Math.max(1, Math.round(Number(insp.maxHp || 160)));
+    var sealedPct = clamp(Math.round(Number(insp.sealedPct || 0)), 0, 100);
+    var inspDmgPct = clamp(Math.round(((inspMaxHp - inspHp) / inspMaxHp) * 100), 0, 100);
+    var inspDone = inspHp <= 0 || sealedPct >= 100;
+    var inspBreakPct = inspDone ? 100 : Math.max(inspDmgPct, sealedPct);
+
+    var cluesFound = Math.max(0, Number(snapshot.cluesFoundCount || 0));
+    var cluesTotal = Math.max(1, Number(snapshot.cluesTotal || 6));
+    var cluesPct = clamp(Math.round((cluesFound / cluesTotal) * 100), 0, 100);
+    var discoveredClueIds = Array.isArray(snapshot.discoveredClueIds) ? snapshot.discoveredClueIds : [];
+
+    var visitedZones = Array.isArray(snapshot.visitedZones) ? snapshot.visitedZones : ['concourse'];
+    var totalZones = Math.max(1, Number(snapshot.totalZones || 6));
+    var zonesPct = clamp(Math.round((visitedZones.length / totalZones) * 100), 0, 100);
+
+    var exitReady = Boolean((snapshot.minimap && snapshot.minimap.exitReady) || ovPct >= 100 || inspDone);
+    var mainBreakPct = Math.max(ovPct, inspBreakPct);
+    var mainDone = ovPct >= 100 || inspDone;
+
+    var stagesDone = (mainDone ? 1 : 0) + (cluesFound >= cluesTotal ? 1 : 0) + (visitedZones.length >= totalZones ? 1 : 0) + (exitReady ? 1 : 0);
+    var overallPct = clamp(
+      Math.round(mainBreakPct * 0.50 + cluesPct * 0.25 + zonesPct * 0.15 + (exitReady ? 10 : 0)),
+      0,
+      100
+    );
+    var allTasksCompleted = stagesDone >= 4 && overallPct >= 100;
+
+    if ($('hud25d-mission-overall-pct')) $('hud25d-mission-overall-pct').textContent = overallPct + '%';
+    if ($('hud25d-mission-collapsed-pct')) $('hud25d-mission-collapsed-pct').textContent = allTasksCompleted ? '达成' : (overallPct + '%');
+    if ($('hud25d-mission-overall-bar')) {
+      $('hud25d-mission-overall-bar').style.width = overallPct + '%';
+    }
+    syncMissionPanelCompletionState(allTasksCompleted, stagesDone);
+
+    var consoles = Array.isArray(snapshot.consoles) ? snapshot.consoles : [];
+    var progressBars = {
+      overall: overallPct,
+      override: ovPct,
+      inspector: inspBreakPct,
+      clues: cluesPct,
+      zones: zonesPct,
+      exit: exitReady ? 100 : 0
+    };
+    for (var pi = 0; pi < consoles.length; pi++) {
+      var cItem = consoles[pi];
+      if (cItem && cItem.id) {
+        progressBars['console_' + cItem.id] = cItem.done ? 100 : clamp(Math.round(Number(cItem.progress || 0)), 0, 100);
+      }
+    }
+    var newlyCompletedKeys = checkMissionProgressCelebration(progressBars);
+    var elapsedSec = Number(snapshot.elapsedSec != null ? snapshot.elapsedSec : 0);
+    recordMissionProgressPoint(elapsedSec, overallPct, newlyCompletedKeys, consoles);
+    renderMissionProgressChart25D(false);
+    var consoleSig = consoles.map(function (c) {
+      return c.id + ':' + Math.round(Number(c.progress || 0)) + ':' + (c.done ? 1 : 0);
+    }).join(',');
+    var progSig = [
+      ovPct,
+      inspHp,
+      sealedPct,
+      insp.state || '',
+      cluesFound,
+      discoveredClueIds.join(','),
+      visitedZones.join(','),
+      exitReady ? 1 : 0,
+      consoleSig
+    ].join('|');
+
+    if (progSig !== uiState.missionProgressSig) {
+      uiState.missionProgressSig = progSig;
+      var progList = $('hud25d-mission-progress-list');
+      if (progList) {
+        var scenario = getScenario();
+        var clueNameMap = {};
+        if (scenario && Array.isArray(scenario.clues)) {
+          for (var ci = 0; ci < scenario.clues.length; ci++) {
+            clueNameMap[scenario.clues[ci].id] = scenario.clues[ci].title || scenario.clues[ci].id;
+          }
+        }
+        var foundNames = discoveredClueIds.slice(-2).map(function (cid) {
+          return clueNameMap[cid] || cid;
+        });
+        var zoneCodeMap = {
+          concourse: 'Z-01',
+          corridor: 'Z-02',
+          dispatch: 'Z-03',
+          signal_room: 'Z-03',
+          substation: 'Z-04',
+          tunnel: 'Z-05',
+          maintenance: 'Z-05',
+          platform0: 'Z-06'
+        };
+        var visitedCodes = visitedZones.map(function (zid) {
+          return zoneCodeMap[zid] || zid;
+        }).join(' · ');
+
+        var consoleSubHtml = consoles.length
+          ? '<div class="mp-sub-list">' + consoles.map(function (c) {
+              var cp = clamp(Math.round(Number(c.progress || 0)), 0, 100);
+              var cDone = Boolean(c.done || cp >= 100);
+              var subGuideAttrs = cDone
+                ? ''
+                : ' data-guide-task="console_' + esc(c.id) + '" role="button" tabindex="0" title="点击在场景与小地图定位此控制台"';
+              return (
+                '<div class="mp-sub-row' + (cDone ? '' : ' is-guidable') + '" data-task-key="console_' + esc(c.id) + '"' + subGuideAttrs + '>' +
+                  '<div class="mp-sub-line">' +
+                    '<span>' + esc(c.label || c.id) + '</span>' +
+                    '<span class="mp-sub-right">' +
+                      (cDone ? '' : '<span class="mp-guide-cue">定位</span>') +
+                      '<strong class="' + (cDone ? 'accent-emerald' : 'accent-cyan') + '">' + (cDone ? '已完成' : (cp + '%')) + '</strong>' +
+                    '</span>' +
+                  '</div>' +
+                  '<div class="mp-progress-mini"><div class="mp-progress-mini-fill' + (cDone ? ' done' : '') + '" style="width:' + cp + '%"></div></div>' +
+                '</div>'
+              );
+            }).join('') + '</div>'
+          : '';
+
+        var inspStatusTxt = inspHp <= 0
+          ? '已击杀 · 100%'
+          : (sealedPct >= 100 ? '已封印 · 100%' : (inspBreakPct > 0 ? ('交战中 · ' + inspBreakPct + '%') : '警戒巡逻 · 0%'));
+        var inspStatusCls = inspDone ? 'done' : (inspBreakPct > 0 ? 'danger' : 'muted');
+
+        var ovGuidable = ovPct < 100;
+        var inspGuidable = !inspDone;
+        var cluesGuidable = cluesFound < cluesTotal;
+        var zonesGuidable = visitedZones.length < totalZones;
+        var exitGuidable = exitReady;
+
+        function guideAttrs(enabled, key, tip) {
+          if (!enabled) return '';
+          return ' data-guide-task="' + esc(key) + '" role="button" tabindex="0" title="' + esc(tip) + '"';
+        }
+
+        progList.innerHTML =
+          '<div class="mp-task-card' + (ovPct >= 100 ? ' done' : ' is-guidable') + '" data-task-key="override"' + guideAttrs(ovGuidable, 'override', '点击定位最近未完成控制台') + '>' +
+            '<div class="mp-task-top">' +
+              '<span class="mp-task-name">主线一 · 轨控逆转出环</span>' +
+              '<span class="mp-task-status ' + (ovPct >= 100 ? 'done' : (ovPct > 0 ? 'active' : 'muted')) + '">' +
+                (ovGuidable ? '<span class="mp-guide-cue">定位</span>' : '') +
+                (ovPct >= 100 ? '已完成 · 100%' : (ovPct > 0 ? ('推进中 · ' + ovPct + '%') : '待启动 · 0%')) +
+              '</span>' +
+            '</div>' +
+            '<div class="mp-progress-mini"><div class="mp-progress-mini-fill' + (ovPct >= 100 ? ' done' : '') + '" style="width:' + ovPct + '%"></div></div>' +
+            consoleSubHtml +
+          '</div>' +
+
+          '<div class="mp-task-card' + (inspDone ? ' done' : ' is-guidable') + '" data-task-key="inspector"' + guideAttrs(inspGuidable, 'inspector', '点击定位零号检票员方向') + '>' +
+            '<div class="mp-task-top">' +
+              '<span class="mp-task-name">主线二 · 肃清或封印检票员</span>' +
+              '<span class="mp-task-status ' + inspStatusCls + '">' +
+                (inspGuidable ? '<span class="mp-guide-cue">定位</span>' : '') +
+                esc(inspStatusTxt) +
+              '</span>' +
+            '</div>' +
+            '<div class="mp-progress-mini"><div class="mp-progress-mini-fill ' + (inspDone ? 'done' : 'crimson') + '" style="width:' + inspBreakPct + '%"></div></div>' +
+            '<div class="mp-task-meta"><span>当前 HP ' + inspHp + '/' + inspMaxHp + '</span><span class="mono">封印 ' + sealedPct + '%</span></div>' +
+          '</div>' +
+
+          '<div class="mp-task-card' + (cluesFound >= cluesTotal ? ' done' : ' is-guidable') + '" data-task-key="clues"' + guideAttrs(cluesGuidable, 'clues', '点击定位最近未破译线索') + '>' +
+            '<div class="mp-task-top">' +
+              '<span class="mp-task-name">情报破译 · 考场线索收集</span>' +
+              '<span class="mp-task-status ' + (cluesFound >= cluesTotal ? 'done' : (cluesFound > 0 ? 'active' : 'muted')) + '">' +
+                (cluesGuidable ? '<span class="mp-guide-cue">定位</span>' : '') +
+                (cluesFound >= cluesTotal ? '已集齐 · ' : '搜集中 · ') + cluesFound + '/' + cluesTotal +
+              '</span>' +
+            '</div>' +
+            '<div class="mp-progress-mini"><div class="mp-progress-mini-fill ' + (cluesFound >= cluesTotal ? 'done' : 'gold') + '" style="width:' + cluesPct + '%"></div></div>' +
+            '<div class="mp-task-meta"><span>' + esc(foundNames.length ? ('最新：' + foundNames.join(' / ')) : '接近发光物证按 E 勘察') + '</span></div>' +
+          '</div>' +
+
+          '<div class="mp-task-card' + (visitedZones.length >= totalZones ? ' done' : ' is-guidable') + '" data-task-key="zones"' + guideAttrs(zonesGuidable, 'zones', '点击定位最近未探索区域') + '>' +
+            '<div class="mp-task-top">' +
+              '<span class="mp-task-name">空间勘察 · 站台区域探索</span>' +
+              '<span class="mp-task-status ' + (visitedZones.length >= totalZones ? 'done' : 'active') + '">' +
+                (zonesGuidable ? '<span class="mp-guide-cue">定位</span>' : '') +
+                visitedZones.length + '/' + totalZones + ' 区' +
+              '</span>' +
+            '</div>' +
+            '<div class="mp-progress-mini"><div class="mp-progress-mini-fill' + (visitedZones.length >= totalZones ? ' done' : '') + '" style="width:' + zonesPct + '%"></div></div>' +
+            '<div class="mp-task-meta"><span class="mono">' + esc(visitedCodes) + '</span></div>' +
+          '</div>' +
+
+          '<div class="mp-task-card' + (exitReady ? ' done is-guidable' : '') + '" data-task-key="exit"' + guideAttrs(exitGuidable, 'exit', '点击定位 0 号站台撤离锚点') + '>' +
+            '<div class="mp-task-top">' +
+              '<span class="mp-task-name">终局撤离 · 0号站台出环通道</span>' +
+              '<span class="mp-task-status ' + (exitReady ? 'done' : 'muted') + '">' +
+                (exitGuidable ? '<span class="mp-guide-cue">定位</span>' : '') +
+                (exitReady ? '已解锁 · 可撤离' : '通道锁定中') +
+              '</span>' +
+            '</div>' +
+            '<div class="mp-progress-mini"><div class="mp-progress-mini-fill' + (exitReady ? ' done' : '') + '" style="width:' + (exitReady ? 100 : 0) + '%"></div></div>' +
+            '<div class="mp-task-meta"><span>' + (exitReady ? '前往 Z-06 0号站台撤离锚点按 E 脱出考场' : '完成轨控改写 100% 或肃清检票员后解锁') + '</span></div>' +
+          '</div>';
+      }
+    }
+
+    if (newlyCompletedKeys.length > 0) {
+      flashCompletedObjectiveRows(newlyCompletedKeys);
+    }
+
+    var logVer = Number(snapshot.missionLogVersion || 0);
+    var filterKey = uiState.missionLogFilter || 'all';
+    if (!forceLog && logVer === uiState.missionLogRenderedVer && filterKey === uiState.missionLogRenderedFilter) {
+      return;
+    }
+    uiState.missionLogRenderedVer = logVer;
+    uiState.missionLogRenderedFilter = filterKey;
+
+    var branches = Array.isArray(snapshot.branches) ? snapshot.branches : [];
+    var triggeredCount = 0;
+    for (var bi = 0; bi < branches.length; bi++) {
+      if (branches[bi] && branches[bi].status !== 'pending') triggeredCount += 1;
+    }
+    if ($('hud25d-branch-count')) {
+      $('hud25d-branch-count').textContent = triggeredCount + '/' + branches.length;
+    }
+
+    var branchListEl = $('hud25d-mission-branches-list');
+    if (branchListEl) {
+      var statusOrder = { warning: 0, active: 1, triggered: 2, completed: 3, pending: 4 };
+      var statusLabels = {
+        completed: '已达成',
+        active: '推进中',
+        triggered: '已触发',
+        warning: '高危警告',
+        pending: '未触发'
+      };
+      var sortedBranches = branches.slice().sort(function (a, b) {
+        var oa = statusOrder[a.status] != null ? statusOrder[a.status] : 9;
+        var ob = statusOrder[b.status] != null ? statusOrder[b.status] : 9;
+        return oa - ob;
+      });
+      branchListEl.innerHTML = sortedBranches.map(function (b) {
+        var stKey = b.status || 'pending';
+        var stLabel = statusLabels[stKey] || stKey;
+        var bp = clamp(Math.round(Number(b.progressPct || 0)), 0, 100);
+        var metaText = (b.routeTag || '逻辑分支') + (b.updatedAt ? (' · ' + b.updatedAt) : ' · 等待触发');
+        var bodyText = stKey === 'pending' ? (b.summary || b.outcome || '') : (b.outcome || b.summary || '');
+        var showBar = stKey !== 'pending' && bp > 0;
+        var barTone = stKey === 'completed' ? ' done' : (stKey === 'warning' ? ' crimson' : (stKey === 'triggered' ? ' gold' : ''));
+        return (
+          '<article class="mp-branch-card status-' + esc(stKey) + '">' +
+            '<div class="mp-branch-head">' +
+              '<span class="mp-branch-name">' + esc(b.name || b.id) + '</span>' +
+              '<span class="mp-branch-status status-' + esc(stKey) + '">' + esc(stLabel) + '</span>' +
+            '</div>' +
+            '<div class="mp-branch-meta">' + esc(metaText) + '</div>' +
+            (showBar ? ('<div class="mp-progress-mini"><div class="mp-progress-mini-fill' + barTone + '" style="width:' + bp + '%"></div></div>') : '') +
+            '<div class="mp-branch-outcome">' + esc(bodyText) + '</div>' +
+          '</article>'
+        );
+      }).join('');
+    }
+
+    var logs = Array.isArray(snapshot.missionLog) ? snapshot.missionLog : [];
+    if ($('hud25d-log-count')) {
+      $('hud25d-log-count').textContent = String(logs.length);
+    }
+
+    var logListEl = $('hud25d-mission-log-list');
+    if (logListEl) {
+      var catLabels = {
+        progress: '进度',
+        branch: '分支',
+        clue: '线索',
+        warning: '警报',
+        squad: '协同'
+      };
+      var filteredLogs = logs.filter(function (item) {
+        if (filterKey === 'all') return true;
+        if (filterKey === 'branch') return item.category === 'branch' || item.category === 'squad';
+        return item.category === filterKey;
+      });
+      if (!filteredLogs.length) {
+        logListEl.innerHTML = '<div class="mp-empty-state">当前分类下暂无已记录的任务日志。</div>';
+      } else {
+        logListEl.innerHTML = filteredLogs.map(function (item) {
+          var cat = item.category || 'progress';
+          var catLabel = catLabels[cat] || '记录';
+          var where = (item.zoneCode ? (item.zoneCode + ' ') : '') + (item.zoneName || '');
+          var logSec = item.elapsedSec != null ? Math.floor(Number(item.elapsedSec) || 0) : -1;
+          return (
+            '<article class="mp-log-item cat-' + esc(cat) + '" data-log-id="' + esc(item.id || '') + '" data-log-sec="' + logSec + '" data-log-time="' + esc(item.timeLabel || '00:00') + '">' +
+              '<div class="mp-log-head">' +
+                '<span>' + esc(item.timeLabel || '00:00') + (where ? (' · ' + esc(where)) : '') + '</span>' +
+                '<span class="mp-log-cat cat-' + esc(cat) + '">' + esc(catLabel) + '</span>' +
+              '</div>' +
+              '<div class="mp-log-title">' + esc(item.title || '') + '</div>' +
+              (item.detail ? ('<div class="mp-log-detail">' + esc(item.detail) + '</div>') : '') +
+            '</article>'
+          );
+        }).join('');
+      }
+    }
+  }
+
+  function formatChartMMSS(totalSec) {
+    var s = Math.max(0, Math.floor(Number(totalSec) || 0));
+    var mins = Math.floor(s / 60);
+    var secs = s % 60;
+    return (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+  }
+
+  function getMilestoneLabelForKey(key, consoles) {
+    if (key === 'overall') return '考场总进度 100%';
+    if (key === 'override') return '轨控逆转 100%';
+    if (key === 'inspector') return '零号检票员肃清';
+    if (key === 'clues') return '全线索破译完成';
+    if (key === 'zones') return '站台全区勘察完成';
+    if (key === 'exit') return '0号站台撤离解锁';
+    if (key && key.indexOf('console_') === 0) {
+      var cid = key.slice('console_'.length);
+      if (Array.isArray(consoles)) {
+        for (var i = 0; i < consoles.length; i++) {
+          if (consoles[i] && consoles[i].id === cid) {
+            return (consoles[i].label || cid) + '完成';
+          }
+        }
+      }
+      return '子控制台改写完成';
+    }
+    return null;
+  }
+
+  function recordMissionProgressPoint(elapsedSec, overallPct, newlyCompletedKeys, consoles) {
+    var t = Math.max(0, Math.floor(Number(elapsedSec) || 0));
+    var pct = clamp(Math.round(Number(overallPct) || 0), 0, 100);
+    var history = uiState.missionProgressHistory;
+    if (!Array.isArray(history)) {
+      history = [];
+      uiState.missionProgressHistory = history;
+    }
+
+    var milestoneLabels = [];
+    var milestoneKeys = [];
+    if (Array.isArray(newlyCompletedKeys) && newlyCompletedKeys.length) {
+      for (var i = 0; i < newlyCompletedKeys.length; i++) {
+        var lbl = getMilestoneLabelForKey(newlyCompletedKeys[i], consoles);
+        if (lbl && milestoneLabels.indexOf(lbl) === -1) {
+          milestoneLabels.push(lbl);
+          milestoneKeys.push(newlyCompletedKeys[i]);
+        }
+      }
+    }
+    var milestoneText = milestoneLabels.length ? milestoneLabels.slice(0, 2).join(' · ') : null;
+
+    if (!history.length) {
+      history.push({
+        t: t,
+        timeLabel: formatChartMMSS(t),
+        pct: pct,
+        milestone: milestoneText,
+        milestoneKeys: milestoneKeys.length ? milestoneKeys : null
+      });
+      uiState.missionHistoryVersion += 1;
+      return;
+    }
+
+    var last = history[history.length - 1];
+    if (milestoneText) {
+      if (t <= last.t) {
+        last.pct = pct;
+        if (!last.milestone) {
+          last.milestone = milestoneText;
+        } else if (last.milestone.indexOf(milestoneText) === -1) {
+          last.milestone = last.milestone + ' · ' + milestoneText;
+        }
+        if (milestoneKeys.length) {
+          last.milestoneKeys = (last.milestoneKeys || []).concat(milestoneKeys);
+        }
+      } else {
+        history.push({
+          t: t,
+          timeLabel: formatChartMMSS(t),
+          pct: pct,
+          milestone: milestoneText,
+          milestoneKeys: milestoneKeys.length ? milestoneKeys : null
+        });
+      }
+      uiState.missionHistoryVersion += 1;
+    } else if (pct !== last.pct) {
+      if (t <= last.t) {
+        last.pct = pct;
+      } else {
+        history.push({
+          t: t,
+          timeLabel: formatChartMMSS(t),
+          pct: pct,
+          milestone: null,
+          milestoneKeys: null
+        });
+      }
+      uiState.missionHistoryVersion += 1;
+    } else if (t - last.t >= 2) {
+      history.push({
+        t: t,
+        timeLabel: formatChartMMSS(t),
+        pct: pct,
+        milestone: null,
+        milestoneKeys: null
+      });
+      uiState.missionHistoryVersion += 1;
+    }
+
+    if (history.length > 260) {
+      var compacted = [];
+      var tailStart = history.length - 40;
+      for (var k = 0; k < history.length; k++) {
+        var pt = history[k];
+        if (k === 0 || k >= tailStart || pt.milestone || k % 2 === 0) {
+          compacted.push(pt);
+        }
+      }
+      uiState.missionProgressHistory = compacted;
+    }
+  }
+
+  var GRADE_BENCHMARKS = [
+    { id: 'S', sec: 210, shortLabel: 'S 03:30', cls: 'bench-s' },
+    { id: 'A', sec: 360, shortLabel: 'A 06:00', cls: 'bench-a' },
+    { id: 'LIMIT', sec: 540, shortLabel: '限 09:00', cls: 'bench-limit' }
+  ];
+
+  function getProjectedGradeMeta(totalSec) {
+    var s = Number(totalSec) || 0;
+    if (s <= 210) return { code: 'S', label: '预计 S 级', cls: 'grade-s' };
+    if (s <= 360) return { code: 'A', label: '预计 A 级', cls: 'grade-a' };
+    if (s <= 540) return { code: 'B', label: '预计 B 级', cls: 'grade-b' };
+    return { code: 'RISK', label: '超时风险', cls: 'grade-risk' };
+  }
+
+  function formatChartDuration(sec) {
+    var s = Math.max(0, Math.round(Number(sec) || 0));
+    if (s > 5999) return '>99:59';
+    return formatChartMMSS(s);
+  }
+
+  function computeMissionForecast(points) {
+    if (!Array.isArray(points) || !points.length) {
+      return { status: 'awaiting', stallSec: 0, warningLevel: 'none', gradeMeta: null };
+    }
+    var basePt = points[0];
+    var latestPt = points[points.length - 1];
+
+    // Measure how long current progress has remained flat without advancing
+    var lastGainT = latestPt.t;
+    for (var si = points.length - 1; si >= 0; si--) {
+      if (points[si].pct < latestPt.pct) {
+        lastGainT = points[Math.min(points.length - 1, si + 1)].t;
+        break;
+      }
+      lastGainT = points[si].t;
+    }
+    var stallSec = Math.max(0, latestPt.t - lastGainT);
+
+    if (latestPt.pct >= 100) {
+      return {
+        status: 'complete',
+        ratePctPerSec: 0,
+        ratePerMin: 0,
+        remainingSec: 0,
+        etaTotalSec: latestPt.t,
+        startT: latestPt.t,
+        startPct: 100,
+        stallSec: 0,
+        warningLevel: 'none',
+        gradeMeta: getProjectedGradeMeta(latestPt.t)
+      };
+    }
+
+    var totalDt = Math.max(0, latestPt.t - basePt.t);
+    var netGain = latestPt.pct - basePt.pct;
+    var overallRate = 0;
+
+    if (netGain > 0 && totalDt >= 1) {
+      overallRate = netGain / totalDt;
+    } else if (basePt.t >= 3 && latestPt.pct > 0) {
+      overallRate = latestPt.pct / Math.max(1, latestPt.t);
+    } else {
+      var initWarn = latestPt.t >= 45 ? 'critical' : (latestPt.t >= 26 ? 'warn' : 'none');
+      return { status: 'awaiting', stallSec: stallSec, warningLevel: initWarn, gradeMeta: null };
+    }
+
+    // Blend recent 45s pace (60%) with overall exam pace (40%) so trend responds to current speed without extreme jitter
+    var winStart = latestPt.t - 45;
+    var winPt = basePt;
+    for (var i = points.length - 1; i >= 0; i--) {
+      if (points[i].t <= winStart) {
+        winPt = points[i];
+        break;
+      }
+      winPt = points[i];
+    }
+    var winDt = Math.max(0, latestPt.t - winPt.t);
+    var winGain = latestPt.pct - winPt.pct;
+    var ratePctPerSec = (winDt >= 6 && winGain > 0)
+      ? ((winGain / winDt) * 0.6 + overallRate * 0.4)
+      : overallRate;
+
+    if (!isFinite(ratePctPerSec) || ratePctPerSec <= 0.0005) {
+      return { status: 'stalled', stallSec: stallSec, warningLevel: 'critical', gradeMeta: getProjectedGradeMeta(999) };
+    }
+
+    var remainingPct = Math.max(0, 100 - latestPt.pct);
+    var remainingSec = Math.max(1, Math.round(remainingPct / ratePctPerSec));
+    var etaTotalSec = latestPt.t + remainingSec;
+    var gradeMeta = getProjectedGradeMeta(etaTotalSec);
+
+    var warningLevel = 'none';
+    if (etaTotalSec > 540 || stallSec >= 45) {
+      warningLevel = 'critical';
+    } else if (stallSec >= 24) {
+      warningLevel = 'warn';
+    }
+
+    return {
+      status: 'active',
+      ratePctPerSec: ratePctPerSec,
+      ratePerMin: ratePctPerSec * 60,
+      remainingSec: remainingSec,
+      etaTotalSec: etaTotalSec,
+      startT: latestPt.t,
+      startPct: latestPt.pct,
+      stallSec: stallSec,
+      warningLevel: warningLevel,
+      gradeMeta: gradeMeta
+    };
+  }
+
+  function parseMMSSLabel(label) {
+    var m = String(label || '').match(/(\d+):(\d+)/);
+    if (!m) return -1;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  }
+
+  function jumpToMilestoneLog(milestonePt) {
+    if (!milestonePt) return;
+    playSfx('ui_tick');
+    uiState.missionPanelOpen = true;
+    uiState.missionPanelTab = 'log';
+    uiState.missionLogFilter = 'all';
+    syncMissionPanelLayout();
+    if (uiState.lastSnapshot) {
+      renderMissionPanel25D(uiState.lastSnapshot, true);
+    }
+
+    global.requestAnimationFrame(function () {
+      var listEl = $('hud25d-mission-log-list');
+      if (!listEl) return;
+      var items = listEl.querySelectorAll('.mp-log-item');
+      if (!items || !items.length) return;
+
+      var targetT = Number(milestonePt.t) || 0;
+      var keywords = [];
+      var msText = String(milestonePt.milestone || '');
+      if (msText.indexOf('轨控') !== -1 || msText.indexOf('控制台') !== -1) keywords.push('轨控', '调度', '变电', '控制台', '改写');
+      if (msText.indexOf('检票员') !== -1) keywords.push('检票员', '肃清', '封印');
+      if (msText.indexOf('线索') !== -1) keywords.push('线索', '破译');
+      if (msText.indexOf('区域') !== -1 || msText.indexOf('勘察') !== -1) keywords.push('勘探', '区域');
+      if (msText.indexOf('撤离') !== -1) keywords.push('撤离', '0号站台');
+
+      var bestEl = items[0];
+      var bestScore = -1e9;
+      for (var i = 0; i < items.length; i++) {
+        var el = items[i];
+        var secAttr = parseInt(el.getAttribute('data-log-sec'), 10);
+        var logT = (!isNaN(secAttr) && secAttr >= 0) ? secAttr : parseMMSSLabel(el.getAttribute('data-log-time'));
+        var diff = logT >= 0 ? Math.abs(logT - targetT) : 999;
+        var score = -diff * 3;
+        var txt = el.textContent || '';
+        for (var ki = 0; ki < keywords.length; ki++) {
+          if (txt.indexOf(keywords[ki]) !== -1) {
+            score += 24;
+            break;
+          }
+        }
+        if (diff <= 3) score += 30;
+        if (score > bestScore) {
+          bestScore = score;
+          bestEl = el;
+        }
+      }
+
+      if (bestEl) {
+        try {
+          bestEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (_) {
+          bestEl.scrollIntoView();
+        }
+        bestEl.classList.remove('mp-log-jump-highlight');
+        void bestEl.offsetWidth;
+        bestEl.classList.add('mp-log-jump-highlight');
+        global.setTimeout(function () {
+          bestEl.classList.remove('mp-log-jump-highlight');
+        }, 1850);
+      }
+    });
+  }
+
+  function renderMissionProgressChart25D(forceRedraw) {
+    var history = Array.isArray(uiState.missionProgressHistory) ? uiState.missionProgressHistory : [];
+    var points = history.length
+      ? history
+      : [{ t: 0, timeLabel: '00:00', pct: 0, milestone: null }];
+    var latestPt = points[points.length - 1];
+    var isComplete = latestPt.pct >= 100;
+    var forecast = computeMissionForecast(points);
+
+    var metaEl = $('hud25d-progress-chart-meta');
+    if (metaEl) {
+      var peakPct = 0;
+      var milestoneCount = 0;
+      for (var m = 0; m < history.length; m++) {
+        if (history[m].pct > peakPct) peakPct = history[m].pct;
+        if (history[m].milestone) milestoneCount += 1;
+      }
+      metaEl.textContent = '峰值 ' + peakPct + '% · ' + milestoneCount + ' 个里程碑';
+    }
+
+    var etaEl = $('hud25d-progress-chart-eta');
+    var prevForecastPct = uiState.missionForecastLastPct;
+    var pctDidUpdate = prevForecastPct >= 0 && latestPt.pct !== prevForecastPct;
+    if (pctDidUpdate) {
+      uiState.lastStallWarnActive = false;
+    }
+
+    // Trigger restrained stall warning audio once when entering stall/timeout warning (35s cooldown)
+    if (forecast.warningLevel !== 'none') {
+      var nowTs = Date.now();
+      if (!uiState.lastStallWarnActive && (nowTs - (uiState.lastStallWarnAt || 0) >= 35000)) {
+        uiState.lastStallWarnActive = true;
+        uiState.lastStallWarnAt = nowTs;
+        if (uiState.currentScene === 'exam' && !uiState.examEnded) {
+          playSfx('stall_warn');
+        }
+      }
+    } else {
+      uiState.lastStallWarnActive = false;
+    }
+
+    if (etaEl) {
+      etaEl.classList.remove('active', 'complete', 'warn', 'critical');
+      if (forecast.status === 'complete') {
+        var doneGrade = forecast.gradeMeta ? (' · ' + forecast.gradeMeta.code + '级节奏') : '';
+        etaEl.textContent = '已达 100% · 用时 ' + formatChartMMSS(latestPt.t) + doneGrade;
+        etaEl.classList.add('complete');
+      } else if (forecast.status === 'active') {
+        var gTag = forecast.gradeMeta ? (' · ' + forecast.gradeMeta.label) : '';
+        if (forecast.warningLevel === 'critical') {
+          etaEl.textContent = (forecast.etaTotalSec > 540 ? '超时风险' : ('停滞 ' + forecast.stallSec + 's')) +
+            ' · 余 ' + formatChartDuration(forecast.remainingSec);
+          etaEl.classList.add('critical');
+        } else if (forecast.warningLevel === 'warn') {
+          etaEl.textContent = '停滞 ' + forecast.stallSec + 's · 余 ' + formatChartDuration(forecast.remainingSec);
+          etaEl.classList.add('warn');
+        } else {
+          etaEl.textContent = '预计余 ' + formatChartDuration(forecast.remainingSec) + gTag;
+          etaEl.classList.add('active');
+        }
+        if (pctDidUpdate) {
+          etaEl.classList.remove('eta-flash');
+          void etaEl.offsetWidth;
+          etaEl.classList.add('eta-flash');
+        }
+      } else if (forecast.status === 'stalled' || forecast.warningLevel !== 'none') {
+        etaEl.textContent = '推进停滞 ' + forecast.stallSec + 's · 请加快节奏';
+        etaEl.classList.add(forecast.warningLevel === 'critical' ? 'critical' : 'warn');
+      } else {
+        etaEl.textContent = '推进后测算剩余时间';
+      }
+    }
+
+    if (!uiState.missionPanelOpen || uiState.missionPanelTab !== 'progress') {
+      return;
+    }
+
+    var host = $('hud25d-progress-chart');
+    if (!host) return;
+    var tooltipEl = $('hud25d-progress-tooltip');
+
+    var d3Lib = global.d3;
+    if (!d3Lib || typeof d3Lib.select !== 'function') {
+      var existingFb = host.querySelector('.mp-chart-fallback');
+      if (!existingFb) {
+        var fb = document.createElement('div');
+        fb.className = 'mp-chart-fallback';
+        fb.textContent = '折线图引擎加载中…';
+        host.insertBefore(fb, tooltipEl || null);
+      }
+      return;
+    }
+
+    var width = Math.floor(host.clientWidth || 0);
+    var height = Math.floor(host.clientHeight || 0);
+    if (width < 80 || height < 48) {
+      return;
+    }
+
+    if (
+      !forceRedraw &&
+      uiState.missionHistoryVersion === uiState.missionChartRenderedVer &&
+      width === uiState.missionChartRenderedWidth &&
+      height === uiState.missionChartRenderedHeight
+    ) {
+      return;
+    }
+
+    uiState.missionChartRenderedVer = uiState.missionHistoryVersion;
+    uiState.missionChartRenderedWidth = width;
+    uiState.missionChartRenderedHeight = height;
+
+    var staleFb = host.querySelector('.mp-chart-fallback');
+    if (staleFb && staleFb.parentNode) staleFb.parentNode.removeChild(staleFb);
+
+    var plotPoints = points.length === 1
+      ? [
+          points[0],
+          {
+            t: Math.max(points[0].t + 1, 1),
+            timeLabel: points[0].timeLabel,
+            pct: points[0].pct,
+            milestone: null,
+            _synthetic: true
+          }
+        ]
+      : points;
+
+    var margin = { top: 10, right: 10, bottom: 18, left: 30 };
+    var innerW = Math.max(40, width - margin.left - margin.right);
+    var innerH = Math.max(32, height - margin.top - margin.bottom);
+
+    var maxT = Math.max(60, latestPt.t);
+    var hasForecastCurve = false;
+    var forecastEndT = latestPt.t;
+    var forecastEndPct = latestPt.pct;
+    var forecastCapped = false;
+    var forecastPoints = null;
+
+    if (forecast.status === 'active') {
+      var horizonCap = Math.round(Math.max(60, latestPt.t) * 2.6 + 60);
+      forecastCapped = forecast.etaTotalSec > horizonCap;
+      forecastEndT = forecastCapped ? horizonCap : forecast.etaTotalSec;
+      forecastEndPct = forecastCapped
+        ? clamp(latestPt.pct + forecast.ratePctPerSec * (forecastEndT - latestPt.t), latestPt.pct, 100)
+        : 100;
+      if (forecastEndT > latestPt.t) {
+        hasForecastCurve = true;
+        maxT = Math.max(maxT, forecastEndT);
+        forecastPoints = [
+          { t: latestPt.t, pct: latestPt.pct },
+          { t: forecastEndT, pct: forecastEndPct }
+        ];
+      }
+    }
+
+    // Snap X-axis slightly outward to show the nearest upcoming grade benchmark (S 03:30 / A 06:00 / 限 09:00) when close
+    for (var bIdx = 0; bIdx < GRADE_BENCHMARKS.length; bIdx++) {
+      var bSec = GRADE_BENCHMARKS[bIdx].sec;
+      if (bSec > maxT && bSec <= maxT * 1.24) {
+        maxT = bSec;
+        break;
+      }
+    }
+
+    var xScale = d3Lib.scaleLinear().domain([0, maxT]).range([0, innerW]);
+    var yScale = d3Lib.scaleLinear().domain([0, 100]).range([innerH, 0]);
+
+    var prefersReducedMotion = Boolean(
+      global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches
+    );
+    var forecastJustAppeared = hasForecastCurve && !uiState.missionForecastVisible;
+    var progressUpdated = latestPt.pct !== uiState.missionForecastLastPct;
+    var shouldAnimateForecast = Boolean(
+      hasForecastCurve &&
+      !prefersReducedMotion &&
+      (forecastJustAppeared || progressUpdated || forceRedraw)
+    );
+    uiState.missionForecastVisible = hasForecastCurve;
+    uiState.missionForecastLastPct = latestPt.pct;
+
+    var d3Host = d3Lib.select(host);
+    var svg = d3Host.select('svg.hud25d-mp-chart-svg');
+    if (svg.empty()) {
+      svg = d3Host.insert('svg', '#hud25d-progress-tooltip')
+        .attr('class', 'hud25d-mp-chart-svg')
+        .attr('role', 'img')
+        .attr('aria-label', '考场任务总进度百分比实时波动与预测趋势折线图');
+    }
+    svg.attr('viewBox', '0 0 ' + width + ' ' + height)
+      .attr('width', width)
+      .attr('height', height);
+    if (typeof svg.selectAll('*').interrupt === 'function') {
+      svg.selectAll('*').interrupt();
+    }
+    svg.selectAll('*').remove();
+
+    var defs = svg.append('defs');
+    var grad = defs.append('linearGradient')
+      .attr('id', 'mp-progress-area-grad')
+      .attr('x1', '0%').attr('y1', '0%')
+      .attr('x2', '0%').attr('y2', '100%');
+    grad.append('stop')
+      .attr('offset', '0%')
+      .attr('stop-color', isComplete ? '#58c4a6' : '#6fd8ea')
+      .attr('stop-opacity', 0.24);
+    grad.append('stop')
+      .attr('offset', '100%')
+      .attr('stop-color', isComplete ? '#58c4a6' : '#6fd8ea')
+      .attr('stop-opacity', 0.01);
+
+    var g = svg.append('g')
+      .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    // Horizontal reference grid (0% / 50% / 100%)
+    var gridG = g.append('g').attr('class', 'mp-chart-grid');
+    [0, 50, 100].forEach(function (val) {
+      gridG.append('line')
+        .attr('x1', 0)
+        .attr('x2', innerW)
+        .attr('y1', yScale(val))
+        .attr('y2', yScale(val));
+    });
+
+    // Grade time benchmark vertical reference lines (S 03:30 / A 06:00 / 限 09:00)
+    var benchG = g.append('g').attr('class', 'mp-chart-benchmarks');
+    for (var bi = 0; bi < GRADE_BENCHMARKS.length; bi++) {
+      var bm = GRADE_BENCHMARKS[bi];
+      if (bm.sec > 0 && bm.sec <= maxT) {
+        var bx = xScale(bm.sec);
+        benchG.append('line')
+          .attr('class', 'mp-chart-bench-line ' + bm.cls)
+          .attr('x1', bx)
+          .attr('x2', bx)
+          .attr('y1', 0)
+          .attr('y2', innerH);
+        var alignRight = bx > innerW - 34;
+        benchG.append('text')
+          .attr('class', 'mp-chart-bench-label ' + bm.cls)
+          .attr('x', alignRight ? (bx - 3) : (bx + 3))
+          .attr('y', 8)
+          .attr('text-anchor', alignRight ? 'end' : 'start')
+          .text(bm.id === 'LIMIT' ? '限' : bm.id);
+      }
+    }
+
+    // Y Axis
+    var yAxis = d3Lib.axisLeft(yScale)
+      .tickValues([0, 50, 100])
+      .tickSize(0)
+      .tickPadding(5)
+      .tickFormat(function (d) { return d + '%'; });
+    g.append('g')
+      .attr('class', 'mp-chart-axis mp-chart-y-axis')
+      .call(yAxis)
+      .call(function (sel) { sel.select('.domain').remove(); });
+
+    // X Axis (00:00 -> current or mid -> domain max / ETA)
+    var midTick = (hasForecastCurve && latestPt.t >= maxT * 0.22 && latestPt.t <= maxT * 0.78)
+      ? latestPt.t
+      : Math.round(maxT / 2);
+    var xAxis = d3Lib.axisBottom(xScale)
+      .tickValues([0, midTick, maxT])
+      .tickSize(3)
+      .tickPadding(4)
+      .tickFormat(function (d) { return formatChartMMSS(d); });
+    g.append('g')
+      .attr('class', 'mp-chart-axis mp-chart-x-axis')
+      .attr('transform', 'translate(0,' + innerH + ')')
+      .call(xAxis);
+
+    // Area under actual curve
+    var areaGen = d3Lib.area()
+      .x(function (d) { return xScale(d.t); })
+      .y0(innerH)
+      .y1(function (d) { return yScale(d.pct); })
+      .curve(d3Lib.curveMonotoneX);
+
+    g.append('path')
+      .datum(plotPoints)
+      .attr('fill', 'url(#mp-progress-area-grad)')
+      .attr('d', areaGen);
+
+    // Predictive dashed trend curve (based on current completion velocity)
+    var forecastToneCls = forecast.warningLevel === 'critical'
+      ? ' critical'
+      : (forecast.warningLevel === 'warn' ? ' warn' : '');
+
+    if (hasForecastCurve && forecastPoints) {
+      var nowX = xScale(latestPt.t);
+      var nowY = yScale(latestPt.pct);
+      var endX = xScale(forecastEndT);
+      var endY = yScale(forecastEndPct);
+      var easeOut = d3Lib.easeCubicOut || function (t) { return 1 - Math.pow(1 - t, 3); };
+      var easePop = d3Lib.easeBackOut ? d3Lib.easeBackOut.overshoot(1.6) : easeOut;
+
+      var nowDivider = g.append('line')
+        .attr('class', 'mp-chart-now-divider')
+        .attr('x1', nowX)
+        .attr('x2', nowX)
+        .attr('y1', 0)
+        .attr('y2', innerH);
+
+      var forecastPath = g.append('path')
+        .attr('class', 'mp-chart-forecast-line' + forecastToneCls);
+
+      var canTransition = shouldAnimateForecast && typeof forecastPath.transition === 'function';
+
+      if (canTransition) {
+        var animNow = Date.now();
+        var prevElapsed = animNow - (uiState.missionForecastAnimAt || 0);
+        var isContinuing = !forecastJustAppeared && !forceRedraw && prevElapsed > 0 && prevElapsed < 520;
+        var startFrac = isContinuing ? clamp(prevElapsed / 540, 0.2, 0.85) : 0;
+        var sweepDuration = isContinuing ? Math.max(200, Math.round(540 * (1 - startFrac))) : 540;
+        if (!isContinuing) {
+          uiState.missionForecastAnimAt = animNow;
+        }
+        var initX = nowX + (endX - nowX) * startFrac;
+        var initY = nowY + (endY - nowY) * startFrac;
+        var initPathD = 'M' + nowX + ',' + nowY + 'L' + initX + ',' + initY;
+
+        if (!isContinuing) {
+          nowDivider
+            .style('opacity', 0)
+            .transition()
+            .duration(240)
+            .ease(easeOut)
+            .style('opacity', 1);
+        }
+
+        var extendTween = function () {
+          return function (t) {
+            var frac = startFrac + (1 - startFrac) * t;
+            var cx = nowX + (endX - nowX) * frac;
+            var cy = nowY + (endY - nowY) * frac;
+            return 'M' + nowX + ',' + nowY + 'L' + cx + ',' + cy;
+          };
+        };
+
+        // Soft sweeping glow aura behind the extending dashed trend line
+        g.insert('path', '.mp-chart-forecast-line')
+          .attr('class', 'mp-chart-forecast-glow')
+          .attr('d', initPathD)
+          .style('opacity', 0.55)
+          .transition()
+          .duration(sweepDuration)
+          .ease(easeOut)
+          .attrTween('d', extendTween)
+          .transition()
+          .duration(260)
+          .style('opacity', 0)
+          .remove();
+
+        // Main dashed forecast line extends smoothly from current point to forecast target
+        forecastPath
+          .attr('d', initPathD)
+          .style('opacity', isContinuing ? 0.82 : 0.35)
+          .transition()
+          .duration(sweepDuration)
+          .ease(easeOut)
+          .attrTween('d', extendTween)
+          .style('opacity', 0.92);
+
+        // Luminous leading spark riding the tip of the extending dashed curve
+        g.append('circle')
+          .attr('class', 'mp-chart-forecast-head')
+          .attr('cx', initX)
+          .attr('cy', initY)
+          .attr('r', 2.8)
+          .style('opacity', 0.95)
+          .transition()
+          .duration(sweepDuration)
+          .ease(easeOut)
+          .attr('cx', endX)
+          .attr('cy', endY)
+          .transition()
+          .duration(180)
+          .attr('r', 0.6)
+          .style('opacity', 0)
+          .remove();
+      } else {
+        forecastPath.attr('d', 'M' + nowX + ',' + nowY + 'L' + endX + ',' + endY);
+      }
+
+      if (!forecastCapped) {
+        var etaX = endX;
+        var etaY = yScale(100);
+        var forecastDrop = g.append('line')
+          .attr('class', 'mp-chart-forecast-drop')
+          .attr('x1', etaX)
+          .attr('x2', etaX)
+          .attr('y1', etaY)
+          .attr('y2', canTransition ? etaY : innerH);
+
+        var forecastTarget = g.append('circle')
+          .attr('class', 'mp-chart-forecast-target')
+          .attr('cx', etaX)
+          .attr('cy', etaY)
+          .attr('r', canTransition ? 0 : 3.2);
+
+        if (canTransition) {
+          var dropDelay = Math.max(80, Math.round(sweepDuration * 0.62));
+          var targetDelay = Math.max(120, Math.round(sweepDuration * 0.76));
+
+          forecastDrop
+            .style('opacity', 0)
+            .transition()
+            .delay(dropDelay)
+            .duration(220)
+            .ease(easeOut)
+            .attr('y2', innerH)
+            .style('opacity', 1);
+
+          forecastTarget
+            .style('opacity', 0)
+            .transition()
+            .delay(targetDelay)
+            .duration(220)
+            .ease(easePop)
+            .attr('r', 3.2)
+            .style('opacity', 1);
+
+          g.append('circle')
+            .attr('class', 'mp-chart-forecast-ripple')
+            .attr('cx', etaX)
+            .attr('cy', etaY)
+            .attr('r', 2.2)
+            .style('opacity', 0)
+            .transition()
+            .delay(targetDelay + 20)
+            .duration(1)
+            .style('opacity', 0.8)
+            .transition()
+            .duration(420)
+            .ease(easeOut)
+            .attr('r', 9.5)
+            .style('opacity', 0)
+            .remove();
+        }
+      }
+    }
+
+    // Main actual progress curve
+    var lineGen = d3Lib.line()
+      .x(function (d) { return xScale(d.t); })
+      .y(function (d) { return yScale(d.pct); })
+      .curve(d3Lib.curveMonotoneX);
+
+    g.append('path')
+      .datum(plotPoints)
+      .attr('class', 'mp-chart-line' + (isComplete ? ' complete' : ''))
+      .attr('d', lineGen);
+
+    // Milestone node markers
+    var milestonePts = points.filter(function (d) { return Boolean(d.milestone); });
+    g.selectAll('circle.mp-chart-milestone')
+      .data(milestonePts)
+      .enter()
+      .append('circle')
+      .attr('class', function (d) { return 'mp-chart-milestone' + (d.pct >= 100 ? ' complete' : ''); })
+      .attr('cx', function (d) { return xScale(d.t); })
+      .attr('cy', function (d) { return yScale(d.pct); })
+      .attr('r', 3.5);
+
+    // Live endpoint dot
+    g.append('circle')
+      .attr('class', 'mp-chart-endpoint' + (isComplete ? ' complete' : ''))
+      .attr('cx', xScale(latestPt.t))
+      .attr('cy', yScale(latestPt.pct))
+      .attr('r', 3);
+
+    // Crosshair & focus dot (hidden until hover)
+    var crosshair = g.append('line')
+      .attr('class', 'mp-chart-crosshair')
+      .attr('y1', 0)
+      .attr('y2', innerH)
+      .style('opacity', 0);
+
+    var focusDot = g.append('circle')
+      .attr('class', 'mp-chart-focus-dot')
+      .attr('r', 4)
+      .style('opacity', 0);
+
+    var bisectTime = d3Lib.bisector(function (d) { return d.t; }).left;
+    var hoveredMilestonePt = null;
+    var overlayRect = null;
+
+    function findNearMilestone(mx, my) {
+      var best = null;
+      var bestDist = 14;
+      for (var mi = 0; mi < milestonePts.length; mi++) {
+        var mp = milestonePts[mi];
+        var d = Math.hypot(mx - xScale(mp.t), my - yScale(mp.pct));
+        if (d <= bestDist) {
+          bestDist = d;
+          best = mp;
+        }
+      }
+      return best;
+    }
+
+    function hideHover() {
+      hoveredMilestonePt = null;
+      if (overlayRect) overlayRect.style('cursor', 'crosshair');
+      crosshair.style('opacity', 0);
+      focusDot.style('opacity', 0);
+      if (tooltipEl) tooltipEl.classList.add('hidden');
+    }
+
+    function positionTooltip(cx, cy) {
+      if (!tooltipEl) return;
+      var ttW = tooltipEl.offsetWidth || 128;
+      var ttH = tooltipEl.offsetHeight || 30;
+      var anchorX = margin.left + cx;
+      var anchorY = margin.top + cy;
+      var tx = (anchorX + 10 + ttW <= width - 4) ? (anchorX + 10) : Math.max(4, anchorX - ttW - 10);
+      var ty = clamp(anchorY - ttH - 6, 2, Math.max(2, height - ttH - 4));
+      tooltipEl.style.transform = 'translate3d(' + Math.round(tx) + 'px,' + Math.round(ty) + 'px,0)';
+    }
+
+    function updateHover(event) {
+      if (!points.length) return;
+      var coords = typeof d3Lib.pointer === 'function' ? d3Lib.pointer(event, this) : [0, 0];
+      var mx = clamp(coords[0], 0, innerW);
+      var my = clamp(coords[1], 0, innerH);
+      var targetT = xScale.invert(mx);
+
+      var nearMs = findNearMilestone(mx, my);
+      hoveredMilestonePt = nearMs;
+      if (overlayRect) overlayRect.style('cursor', nearMs ? 'pointer' : 'crosshair');
+
+      if (!nearMs && hasForecastCurve && targetT > latestPt.t) {
+        var hoverT = clamp(targetT, latestPt.t, forecastEndT);
+        var hoverPct = clamp(
+          Math.round(latestPt.pct + forecast.ratePctPerSec * (hoverT - latestPt.t)),
+          latestPt.pct,
+          100
+        );
+        var cxF = xScale(hoverT);
+        var cyF = yScale(hoverPct);
+        var deltaNow = Math.max(0, Math.round(hoverT - latestPt.t));
+        var warnCls = forecast.warningLevel === 'critical' ? ' critical' : (forecast.warningLevel === 'warn' ? ' warn' : '');
+
+        crosshair
+          .attr('x1', cxF)
+          .attr('x2', cxF)
+          .classed('forecast', true)
+          .style('opacity', 1);
+        focusDot
+          .attr('cx', cxF)
+          .attr('cy', cyF)
+          .classed('milestone', false)
+          .classed('forecast', true)
+          .style('opacity', 1);
+
+        if (tooltipEl) {
+          var gradeLine = forecast.gradeMeta
+            ? (' · ' + esc(forecast.gradeMeta.label))
+            : '';
+          tooltipEl.innerHTML =
+            '<div class="mp-chart-tt-row">' +
+              '<span>预计 ' + esc(formatChartMMSS(hoverT)) + '</span>' +
+              '<span class="mp-chart-tt-pct forecast' + warnCls + '">~' + hoverPct + '%</span>' +
+            '</div>' +
+            '<div class="mp-chart-tt-forecast">距今 +' + esc(formatChartDuration(deltaNow)) + ' · 达标余 ' + esc(formatChartDuration(forecast.remainingSec)) + '</div>' +
+            '<div class="mp-chart-tt-forecast">速率 +' + forecast.ratePerMin.toFixed(1) + '%/分' + gradeLine + '</div>' +
+            (forecast.warningLevel !== 'none'
+              ? ('<div class="mp-chart-tt-warn">' + (forecast.etaTotalSec > 540 ? '按当前速度将超过 09:00 上限' : ('已停滞 ' + forecast.stallSec + ' 秒，建议推进目标')) + '</div>')
+              : '');
+          tooltipEl.classList.remove('hidden');
+          positionTooltip(cxF, cyF);
+        }
+        return;
+      }
+
+      var chosen = nearMs;
+      if (!chosen) {
+        var idx = bisectTime(points, targetT, 1);
+        var p0 = points[Math.max(0, idx - 1)];
+        var p1 = points[Math.min(points.length - 1, idx)];
+        chosen = (!p1 || (targetT - p0.t <= p1.t - targetT)) ? p0 : p1;
+      }
+      if (!chosen) return;
+
+      var cx = xScale(chosen.t);
+      var cy = yScale(chosen.pct);
+      crosshair
+        .attr('x1', cx)
+        .attr('x2', cx)
+        .classed('forecast', false)
+        .style('opacity', 1);
+      focusDot
+        .attr('cx', cx)
+        .attr('cy', cy)
+        .classed('milestone', Boolean(chosen.milestone))
+        .classed('forecast', false)
+        .style('opacity', 1);
+
+      if (tooltipEl) {
+        tooltipEl.innerHTML =
+          '<div class="mp-chart-tt-row">' +
+            '<span>' + esc(chosen.timeLabel || formatChartMMSS(chosen.t)) + '</span>' +
+            '<span class="mp-chart-tt-pct' + (chosen.pct >= 100 ? ' complete' : '') + '">' + chosen.pct + '%</span>' +
+          '</div>' +
+          (chosen.milestone ? ('<div class="mp-chart-tt-milestone">' + esc(chosen.milestone) + '</div>') : '') +
+          (chosen.milestone ? '<div class="mp-chart-tt-hint">点击跳转对应日志 →</div>' : '');
+        tooltipEl.classList.remove('hidden');
+        positionTooltip(cx, cy);
+      }
+    }
+
+    overlayRect = g.append('rect')
+      .attr('class', 'mp-chart-overlay')
+      .attr('width', innerW)
+      .attr('height', innerH)
+      .on('pointermove', updateHover)
+      .on('pointerenter', updateHover)
+      .on('pointerleave', hideHover)
+      .on('click', function (event) {
+        var coords = typeof d3Lib.pointer === 'function' ? d3Lib.pointer(event, this) : [0, 0];
+        var mx = clamp(coords[0], 0, innerW);
+        var my = clamp(coords[1], 0, innerH);
+        var clickedMs = findNearMilestone(mx, my) || hoveredMilestonePt;
+        if (clickedMs) {
+          jumpToMilestoneLog(clickedMs);
+        }
+      });
   }
 
   function handleWorld25DRadioEvent(entry) {
@@ -1888,15 +3406,84 @@
       mappedEnding = customMeta.mapped;
     }
 
+    // Capture full mission progress curve, milestones & branches for post-exam debrief replay
+    var reviewHistory = Array.isArray(uiState.missionProgressHistory)
+      ? uiState.missionProgressHistory.map(function (pt) {
+          return {
+            t: Number(pt.t) || 0,
+            timeLabel: pt.timeLabel || formatChartMMSS(pt.t),
+            pct: clamp(Math.round(Number(pt.pct) || 0), 0, 100),
+            milestone: pt.milestone || null
+          };
+        })
+      : [];
+    var finalElapsed = Math.max(
+      0,
+      Math.round(Number(endStats.elapsedSec != null ? endStats.elapsedSec : (snap.elapsedSec || (reviewHistory.length ? reviewHistory[reviewHistory.length - 1].t : 0))))
+    );
+    var finalPctVal = reviewHistory.length ? reviewHistory[reviewHistory.length - 1].pct : 0;
+    if (endingType === 'perfect_override' || endingType === 'kill_inspector') {
+      finalPctVal = Math.max(finalPctVal, 100);
+    }
+    if (!reviewHistory.length) {
+      reviewHistory.push({ t: 0, timeLabel: '00:00', pct: 0, milestone: null });
+    }
+    if (finalElapsed > reviewHistory[reviewHistory.length - 1].t || finalPctVal !== reviewHistory[reviewHistory.length - 1].pct) {
+      reviewHistory.push({
+        t: Math.max(finalElapsed, reviewHistory[reviewHistory.length - 1].t),
+        timeLabel: formatChartMMSS(Math.max(finalElapsed, reviewHistory[reviewHistory.length - 1].t)),
+        pct: finalPctVal,
+        milestone: finalPctVal >= 100 ? '考场目标达成 · 脱出结算' : null
+      });
+    }
+    var reviewPeak = 0;
+    var reviewMilestones = [];
+    for (var ri = 0; ri < reviewHistory.length; ri++) {
+      if (reviewHistory[ri].pct > reviewPeak) reviewPeak = reviewHistory[ri].pct;
+      if (reviewHistory[ri].milestone) {
+        reviewMilestones.push({
+          t: reviewHistory[ri].t,
+          timeLabel: reviewHistory[ri].timeLabel,
+          pct: reviewHistory[ri].pct,
+          label: reviewHistory[ri].milestone
+        });
+      }
+    }
+    var reviewBranches = Array.isArray(snap.branches)
+      ? snap.branches.map(function (b) {
+          return {
+            id: b.id,
+            name: b.name || b.id,
+            status: b.status || 'pending',
+            routeTag: b.routeTag || '逻辑分支',
+            updatedAt: b.updatedAt || '',
+            outcome: b.outcome || b.summary || ''
+          };
+        })
+      : [];
+    var reviewSnapshot = {
+      history: reviewHistory,
+      elapsedSec: Math.max(finalElapsed, reviewHistory[reviewHistory.length - 1].t),
+      finalPct: finalPctVal,
+      peakPct: reviewPeak,
+      milestones: reviewMilestones,
+      branches: reviewBranches,
+      avgRatePerMin: finalElapsed > 0 ? Number(((finalPctVal / finalElapsed) * 60).toFixed(1)) : 0
+    };
+    uiState.lastExamReview = reviewSnapshot;
+
     if (INFINITY.Engine && typeof INFINITY.Engine.extractFromScenario === 'function') {
       INFINITY.Engine.extractFromScenario(mappedEnding);
       var postState = getStateSafe();
-      if (postState && postState.lastSettlement && customMeta) {
-        postState.lastSettlement.endingType = endingType;
-        postState.lastSettlement.endingTitle = customMeta.title;
-        postState.lastSettlement.endingLabel = customMeta.title;
-        postState.lastSettlement.summary = customMeta.summary;
-        postState.lastSettlement.overridePct = Math.round(Number(endStats.overridePct != null ? endStats.overridePct : (snap.overridePct || 0)));
+      if (postState && postState.lastSettlement) {
+        postState.lastSettlement.review = reviewSnapshot;
+        if (customMeta) {
+          postState.lastSettlement.endingType = endingType;
+          postState.lastSettlement.endingTitle = customMeta.title;
+          postState.lastSettlement.endingLabel = customMeta.title;
+          postState.lastSettlement.summary = customMeta.summary;
+          postState.lastSettlement.overridePct = Math.round(Number(endStats.overridePct != null ? endStats.overridePct : (snap.overridePct || 0)));
+        }
         if (typeof INFINITY.Engine.save === 'function') {
           INFINITY.Engine.save();
         }
@@ -1918,6 +3505,29 @@
     uiState.lastSnapshot = null;
     uiState.hotbarSig = '';
     uiState.lastAudioThreat = -1;
+    uiState.missionPanelOpen = !(global.innerWidth && global.innerWidth <= 1280);
+    uiState.missionPanelExpanded = false;
+    uiState.missionPanelTab = 'progress';
+    uiState.missionLogFilter = 'all';
+    uiState.missionProgressSig = '';
+    uiState.missionLogRenderedVer = -1;
+    uiState.missionLogRenderedFilter = '';
+    uiState.missionCelebratedBars = {};
+    uiState.missionProgressInitialized = false;
+    uiState.lastCelebrationAt = 0;
+    uiState.missionProgressHistory = [];
+    uiState.missionHistoryVersion = 0;
+    uiState.missionChartRenderedVer = -1;
+    uiState.missionChartRenderedWidth = 0;
+    uiState.missionChartRenderedHeight = 0;
+    uiState.missionForecastVisible = false;
+    uiState.missionForecastLastPct = -1;
+    uiState.missionForecastAnimAt = 0;
+    uiState.lastStallWarnAt = 0;
+    uiState.lastStallWarnActive = false;
+    syncMissionPanelCompletionState(false);
+    if ($('hud25d-progress-tooltip')) $('hud25d-progress-tooltip').classList.add('hidden');
+    syncMissionPanelLayout();
     uiState.radioLog = [
       {
         type: 'system',
@@ -2048,6 +3658,183 @@
 
   /* ===================== SCENE 3: SETTLEMENT ===================== */
 
+  function renderSettlementReviewChart(review) {
+    var host = $('settlement-progress-chart');
+    var tooltipEl = $('settlement-progress-tooltip');
+    if (!host || !review || !Array.isArray(review.history) || !review.history.length) return;
+    var d3Lib = global.d3;
+    if (!d3Lib || typeof d3Lib.select !== 'function') {
+      host.innerHTML = '<div class="mp-chart-fallback">复盘折线图引擎加载中…</div>';
+      return;
+    }
+
+    var width = Math.floor(host.clientWidth || 720);
+    var height = Math.floor(host.clientHeight || 176);
+    if (width < 120 || height < 80) return;
+
+    var points = review.history;
+    var latestPt = points[points.length - 1];
+    var isComplete = latestPt.pct >= 100;
+    var plotPoints = points.length === 1
+      ? [points[0], { t: Math.max(points[0].t + 1, 1), timeLabel: points[0].timeLabel, pct: points[0].pct, milestone: null }]
+      : points;
+
+    var margin = { top: 14, right: 16, bottom: 22, left: 36 };
+    var innerW = Math.max(80, width - margin.left - margin.right);
+    var innerH = Math.max(60, height - margin.top - margin.bottom);
+    var maxT = Math.max(60, latestPt.t);
+    for (var bi = 0; bi < GRADE_BENCHMARKS.length; bi++) {
+      if (GRADE_BENCHMARKS[bi].sec > maxT && GRADE_BENCHMARKS[bi].sec <= maxT * 1.25) {
+        maxT = GRADE_BENCHMARKS[bi].sec;
+        break;
+      }
+    }
+
+    var xScale = d3Lib.scaleLinear().domain([0, maxT]).range([0, innerW]);
+    var yScale = d3Lib.scaleLinear().domain([0, 100]).range([innerH, 0]);
+
+    var d3Host = d3Lib.select(host);
+    var svg = d3Host.select('svg.settlement-review-svg');
+    if (svg.empty()) {
+      svg = d3Host.insert('svg', '#settlement-progress-tooltip')
+        .attr('class', 'settlement-review-svg hud25d-mp-chart-svg')
+        .attr('role', 'img')
+        .attr('aria-label', '本局考场任务推进复盘折线图');
+    }
+    svg.attr('viewBox', '0 0 ' + width + ' ' + height)
+      .attr('width', width)
+      .attr('height', height);
+    svg.selectAll('*').remove();
+
+    var defs = svg.append('defs');
+    var grad = defs.append('linearGradient')
+      .attr('id', 'settlement-area-grad')
+      .attr('x1', '0%').attr('y1', '0%')
+      .attr('x2', '0%').attr('y2', '100%');
+    grad.append('stop')
+      .attr('offset', '0%')
+      .attr('stop-color', isComplete ? '#58c4a6' : '#6fd8ea')
+      .attr('stop-opacity', 0.28);
+    grad.append('stop')
+      .attr('offset', '100%')
+      .attr('stop-color', isComplete ? '#58c4a6' : '#6fd8ea')
+      .attr('stop-opacity', 0.02);
+
+    var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    var gridG = g.append('g').attr('class', 'mp-chart-grid');
+    [0, 25, 50, 75, 100].forEach(function (val) {
+      gridG.append('line').attr('x1', 0).attr('x2', innerW).attr('y1', yScale(val)).attr('y2', yScale(val));
+    });
+
+    // Benchmark reference lines
+    var benchG = g.append('g').attr('class', 'mp-chart-benchmarks');
+    for (var bj = 0; bj < GRADE_BENCHMARKS.length; bj++) {
+      var bm = GRADE_BENCHMARKS[bj];
+      if (bm.sec > 0 && bm.sec <= maxT) {
+        var bx = xScale(bm.sec);
+        benchG.append('line')
+          .attr('class', 'mp-chart-bench-line ' + bm.cls)
+          .attr('x1', bx).attr('x2', bx).attr('y1', 0).attr('y2', innerH);
+        var alignRight = bx > innerW - 52;
+        benchG.append('text')
+          .attr('class', 'mp-chart-bench-label ' + bm.cls)
+          .attr('x', alignRight ? (bx - 4) : (bx + 4))
+          .attr('y', 10)
+          .attr('text-anchor', alignRight ? 'end' : 'start')
+          .text(bm.shortLabel);
+      }
+    }
+
+    var yAxis = d3Lib.axisLeft(yScale).tickValues([0, 50, 100]).tickSize(0).tickPadding(6).tickFormat(function (d) { return d + '%'; });
+    g.append('g').attr('class', 'mp-chart-axis mp-chart-y-axis').call(yAxis).call(function (sel) { sel.select('.domain').remove(); });
+
+    var xAxis = d3Lib.axisBottom(xScale)
+      .tickValues([0, Math.round(maxT * 0.25), Math.round(maxT * 0.5), Math.round(maxT * 0.75), maxT])
+      .tickSize(3).tickPadding(5).tickFormat(function (d) { return formatChartMMSS(d); });
+    g.append('g').attr('class', 'mp-chart-axis mp-chart-x-axis').attr('transform', 'translate(0,' + innerH + ')').call(xAxis);
+
+    var areaGen = d3Lib.area()
+      .x(function (d) { return xScale(d.t); })
+      .y0(innerH)
+      .y1(function (d) { return yScale(d.pct); })
+      .curve(d3Lib.curveMonotoneX);
+    g.append('path').datum(plotPoints).attr('fill', 'url(#settlement-area-grad)').attr('d', areaGen);
+
+    var lineGen = d3Lib.line()
+      .x(function (d) { return xScale(d.t); })
+      .y(function (d) { return yScale(d.pct); })
+      .curve(d3Lib.curveMonotoneX);
+    g.append('path').datum(plotPoints).attr('class', 'mp-chart-line' + (isComplete ? ' complete' : '')).attr('d', lineGen);
+
+    var milestonePts = points.filter(function (d) { return Boolean(d.milestone); });
+    g.selectAll('circle.mp-chart-milestone')
+      .data(milestonePts)
+      .enter()
+      .append('circle')
+      .attr('class', function (d) { return 'mp-chart-milestone' + (d.pct >= 100 ? ' complete' : ''); })
+      .attr('cx', function (d) { return xScale(d.t); })
+      .attr('cy', function (d) { return yScale(d.pct); })
+      .attr('r', 4.2);
+
+    g.append('circle')
+      .attr('class', 'mp-chart-endpoint' + (isComplete ? ' complete' : ''))
+      .attr('cx', xScale(latestPt.t))
+      .attr('cy', yScale(latestPt.pct))
+      .attr('r', 3.6);
+
+    var crosshair = g.append('line').attr('class', 'mp-chart-crosshair').attr('y1', 0).attr('y2', innerH).style('opacity', 0);
+    var focusDot = g.append('circle').attr('class', 'mp-chart-focus-dot').attr('r', 4.5).style('opacity', 0);
+    var bisectTime = d3Lib.bisector(function (d) { return d.t; }).left;
+
+    function hideTt() {
+      crosshair.style('opacity', 0);
+      focusDot.style('opacity', 0);
+      if (tooltipEl) tooltipEl.classList.add('hidden');
+    }
+
+    function moveTt(event) {
+      var coords = typeof d3Lib.pointer === 'function' ? d3Lib.pointer(event, this) : [0, 0];
+      var mx = clamp(coords[0], 0, innerW);
+      var targetT = xScale.invert(mx);
+      var idx = bisectTime(points, targetT, 1);
+      var p0 = points[Math.max(0, idx - 1)];
+      var p1 = points[Math.min(points.length - 1, idx)];
+      var chosen = (!p1 || (targetT - p0.t <= p1.t - targetT)) ? p0 : p1;
+      if (!chosen) return;
+
+      var cx = xScale(chosen.t);
+      var cy = yScale(chosen.pct);
+      crosshair.attr('x1', cx).attr('x2', cx).style('opacity', 1);
+      focusDot.attr('cx', cx).attr('cy', cy).classed('milestone', Boolean(chosen.milestone)).style('opacity', 1);
+
+      if (tooltipEl) {
+        tooltipEl.innerHTML =
+          '<div class="mp-chart-tt-row">' +
+            '<span>' + esc(chosen.timeLabel || formatChartMMSS(chosen.t)) + '</span>' +
+            '<span class="mp-chart-tt-pct' + (chosen.pct >= 100 ? ' complete' : '') + '">' + chosen.pct + '%</span>' +
+          '</div>' +
+          (chosen.milestone ? ('<div class="mp-chart-tt-milestone">' + esc(chosen.milestone) + '</div>') : '');
+        tooltipEl.classList.remove('hidden');
+        var ttW = tooltipEl.offsetWidth || 130;
+        var ttH = tooltipEl.offsetHeight || 30;
+        var anchorX = margin.left + cx;
+        var anchorY = margin.top + cy;
+        var tx = (anchorX + 12 + ttW <= width - 4) ? (anchorX + 12) : Math.max(4, anchorX - ttW - 12);
+        var ty = clamp(anchorY - ttH - 8, 2, Math.max(2, height - ttH - 4));
+        tooltipEl.style.transform = 'translate3d(' + Math.round(tx) + 'px,' + Math.round(ty) + 'px,0)';
+      }
+    }
+
+    g.append('rect')
+      .attr('class', 'mp-chart-overlay')
+      .attr('width', innerW)
+      .attr('height', innerH)
+      .on('pointermove', moveTt)
+      .on('pointerenter', moveTt)
+      .on('pointerleave', hideTt);
+  }
+
   function renderSettlement(state) {
     var container = $('settlement-container');
     if (!container) return;
@@ -2059,12 +3846,71 @@
     var endingTitle = s.endingTitle || s.endingLabel || s.title || '《零号回廊 · 停摆站台》结算完成';
     var summary = s.summary || s.epilogue || '你们在零号列车第三次鸣笛前改写了死局，活着回到了深红漩涡大厅。';
     var cluesTotal = s.cluesFoundCount != null ? s.cluesFoundCount : (s.cluesFound != null ? s.cluesFound : 0);
+    var review = s.review || uiState.lastExamReview || null;
+
+    var reviewHtml = '';
+    if (review && Array.isArray(review.history) && review.history.length) {
+      var triggeredBranches = (review.branches || []).filter(function (b) { return b.status && b.status !== 'pending'; });
+      var branchStatusLabels = { completed: '已达成', active: '推进中', triggered: '已触发', warning: '高危警报' };
+      var milestonesHtml = (review.milestones && review.milestones.length)
+        ? review.milestones.map(function (ms) {
+            return (
+              '<li class="settlement-ms-row">' +
+                '<span class="mono settlement-ms-time">' + esc(ms.timeLabel || formatChartMMSS(ms.t)) + '</span>' +
+                '<span class="settlement-ms-label">' + esc(ms.label) + '</span>' +
+                '<span class="mono settlement-ms-pct">' + ms.pct + '%</span>' +
+              '</li>'
+            );
+          }).join('')
+        : '<li class="settlement-empty">本局尚未达成阶段性里程碑。</li>';
+
+      var branchesHtml = triggeredBranches.length
+        ? triggeredBranches.map(function (b) {
+            var stLbl = branchStatusLabels[b.status] || b.status;
+            return (
+              '<li class="settlement-br-row">' +
+                '<div class="settlement-br-top">' +
+                  '<span class="settlement-br-name">' + esc(b.name) + '</span>' +
+                  '<span class="mp-branch-status status-' + esc(b.status) + '">' + esc(stLbl) + '</span>' +
+                '</div>' +
+                '<div class="settlement-br-desc">' + esc(b.outcome || b.routeTag) + '</div>' +
+              '</li>'
+            );
+          }).join('')
+        : '<li class="settlement-empty">本局未触发特殊逻辑分支。</li>';
+
+      reviewHtml =
+        '<section class="settlement-review" aria-label="本局考场任务推进复盘">' +
+          '<div class="settlement-review-head">' +
+            '<span class="settlement-review-title">考场推进复盘曲线</span>' +
+            '<span class="settlement-review-meta mono">' +
+              '总用时 ' + esc(formatChartMMSS(review.elapsedSec)) +
+              ' · 最终 ' + review.finalPct + '%' +
+              ' · 均速 +' + (review.avgRatePerMin || 0) + '%/分' +
+              ' · ' + (review.milestones ? review.milestones.length : 0) + ' 个里程碑' +
+            '</span>' +
+          '</div>' +
+          '<div id="settlement-progress-chart" class="settlement-review-chart">' +
+            '<div id="settlement-progress-tooltip" class="hud25d-mp-chart-tooltip hidden" role="tooltip"></div>' +
+          '</div>' +
+          '<div class="settlement-review-cols">' +
+            '<div class="settlement-review-col">' +
+              '<h3 class="settlement-col-title">关键里程碑时间轴</h3>' +
+              '<ul class="settlement-ms-list">' + milestonesHtml + '</ul>' +
+            '</div>' +
+            '<div class="settlement-review-col">' +
+              '<h3 class="settlement-col-title">已触发逻辑分支 (' + triggeredBranches.length + '/' + (review.branches ? review.branches.length : 0) + ')</h3>' +
+              '<ul class="settlement-br-list">' + branchesHtml + '</ul>' +
+            '</div>' +
+          '</div>' +
+        '</section>';
+    }
 
     container.innerHTML =
       '<div class="settlement-card">' +
         '<div class="settlement-hero">' +
           '<div>' +
-            '<p class="eyebrow crimson">EXAM SETTLEMENT // 死考终局评级</p>' +
+            '<p class="eyebrow crimson">考场终局结算</p>' +
             '<h1 class="scene-title">' + esc(endingTitle) + '</h1>' +
             '<p class="item-desc" style="margin-top:8px;">' + esc(summary) + '</p>' +
           '</div>' +
@@ -2075,10 +3921,17 @@
           '<div class="settlement-stat"><span class="tele-k">破译线索数</span><div class="mono accent-cyan" style="font-size:22px;font-weight:700;">' + cluesTotal + '</div></div>' +
           '<div class="settlement-stat"><span class="tele-k">当前权限等级</span><div class="mono accent-emerald" style="font-size:22px;font-weight:700;">' + esc((getPlayer(state).permission || 'C') + ' 级') + '</div></div>' +
         '</div>' +
-        '<div style="display:flex;justify-content:flex-end;gap:10px;">' +
+        reviewHtml +
+        '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">' +
           '<button id="btn-return-hall" class="cta-crimson compact" type="button">返回深红漩涡大厅 →</button>' +
         '</div>' +
       '</div>';
+
+    if (review && Array.isArray(review.history) && review.history.length) {
+      global.requestAnimationFrame(function () {
+        renderSettlementReviewChart(review);
+      });
+    }
 
     if ($('btn-return-hall')) {
       $('btn-return-hall').addEventListener('click', function () {
@@ -2291,9 +4144,41 @@
       });
     }
 
-    // Delegated clicks inside Hall view & Loadout rail
+    function triggerTaskGuidance(guideNode) {
+      if (!guideNode) return;
+      var guideKey = guideNode.getAttribute('data-guide-task');
+      if (guideKey && INFINITY.World25D && typeof INFINITY.World25D.focusObjectiveTarget === 'function') {
+        var focusRes = INFINITY.World25D.focusObjectiveTarget(guideKey);
+        if (focusRes) {
+          guideNode.classList.remove('mp-task-guided');
+          void guideNode.offsetWidth;
+          guideNode.classList.add('mp-task-guided');
+          global.setTimeout(function () {
+            guideNode.classList.remove('mp-task-guided');
+          }, 900);
+        }
+      }
+    }
+
+    if ($('hud25d-mission-progress-list')) {
+      $('hud25d-mission-progress-list').addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        var guideNode = e.target && e.target.closest ? e.target.closest('[data-guide-task]') : null;
+        if (!guideNode) return;
+        e.preventDefault();
+        triggerTaskGuidance(guideNode);
+      });
+    }
+
+    // Delegated clicks inside Hall view, Loadout rail & Exam HUD
     document.addEventListener('click', function (e) {
-      var target = e.target.closest('button');
+      var guideNode = e.target && e.target.closest ? e.target.closest('[data-guide-task]') : null;
+      if (guideNode) {
+        triggerTaskGuidance(guideNode);
+        return;
+      }
+
+      var target = e.target && e.target.closest ? e.target.closest('button') : null;
       if (!target) return;
 
       // Shop buy
@@ -2424,6 +4309,28 @@
         return;
       }
 
+      // Mission side panel tab switch
+      if (target.hasAttribute('data-mission-tab')) {
+        playSfx('ui_tick');
+        uiState.missionPanelTab = target.getAttribute('data-mission-tab') || 'progress';
+        syncMissionPanelLayout();
+        if (uiState.lastSnapshot) {
+          renderMissionPanel25D(uiState.lastSnapshot, true);
+        }
+        return;
+      }
+
+      // Mission log category filter
+      if (target.hasAttribute('data-mission-filter')) {
+        playSfx('ui_tick');
+        uiState.missionLogFilter = target.getAttribute('data-mission-filter') || 'all';
+        syncMissionPanelLayout();
+        if (uiState.lastSnapshot) {
+          renderMissionPanel25D(uiState.lastSnapshot, true);
+        }
+        return;
+      }
+
       // AI Preset pill
       if (target.hasAttribute('data-ai-preset')) {
         var pk = target.getAttribute('data-ai-preset');
@@ -2438,6 +4345,56 @@
         }
       }
     });
+
+    // Mission Progress & Historical Log Side Panel controls
+    if ($('btn-toggle-mission-panel')) {
+      $('btn-toggle-mission-panel').addEventListener('click', function () {
+        playSfx('ui_tick');
+        uiState.missionPanelOpen = !uiState.missionPanelOpen;
+        if (!uiState.missionPanelOpen) uiState.missionPanelExpanded = false;
+        syncMissionPanelLayout();
+      });
+    }
+    if ($('btn-mission-collapse')) {
+      $('btn-mission-collapse').addEventListener('click', function () {
+        playSfx('ui_tick');
+        uiState.missionPanelOpen = false;
+        uiState.missionPanelExpanded = false;
+        syncMissionPanelLayout();
+      });
+    }
+    if ($('hud25d-mission-collapsed-tab')) {
+      $('hud25d-mission-collapsed-tab').addEventListener('click', function () {
+        playSfx('ui_tick');
+        uiState.missionPanelOpen = true;
+        syncMissionPanelLayout();
+      });
+    }
+    if ($('btn-mission-expand')) {
+      $('btn-mission-expand').addEventListener('click', function () {
+        playSfx('ui_tick');
+        uiState.missionPanelOpen = true;
+        uiState.missionPanelExpanded = !uiState.missionPanelExpanded;
+        syncMissionPanelLayout();
+      });
+    }
+
+    // Observe chart container resizes for responsive D3 redraws
+    var chartHost = $('hud25d-progress-chart');
+    if (chartHost && typeof global.ResizeObserver === 'function' && !uiState.missionChartResizeObserver) {
+      uiState.missionChartResizeObserver = new global.ResizeObserver(function () {
+        if (uiState.currentScene === 'exam' && uiState.missionPanelOpen && uiState.missionPanelTab === 'progress') {
+          renderMissionProgressChart25D(true);
+        }
+      });
+      uiState.missionChartResizeObserver.observe(chartHost);
+    } else if (chartHost) {
+      global.addEventListener('resize', function () {
+        if (uiState.currentScene === 'exam' && uiState.missionPanelOpen && uiState.missionPanelTab === 'progress') {
+          renderMissionProgressChart25D(true);
+        }
+      });
+    }
 
     // 2.5D Contextual [E] Interact & [Space] Bullet-Time clickable pills
     if ($('hud25d-interact-pill')) {
@@ -2494,7 +4451,7 @@
       });
     }
 
-    // Global Enter / Escape shortcuts during 2.5D Exam
+    // Global Enter / Escape / L shortcuts during 2.5D Exam
     document.addEventListener('keydown', function (e) {
       if (uiState.currentScene !== 'exam') return;
 
@@ -2507,6 +4464,23 @@
         if ($('clues-modal') && !$('clues-modal').classList.contains('hidden')) {
           $('clues-modal').classList.add('hidden');
           syncModalPause25D();
+          return;
+        }
+        if (uiState.missionPanelExpanded) {
+          uiState.missionPanelExpanded = false;
+          syncMissionPanelLayout();
+          return;
+        }
+      }
+
+      if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey && !e.altKey && !isAnyModalOpen()) {
+        var tagL = document.activeElement && document.activeElement.tagName;
+        if (tagL !== 'INPUT' && tagL !== 'TEXTAREA' && tagL !== 'SELECT') {
+          e.preventDefault();
+          playSfx('ui_tick');
+          uiState.missionPanelOpen = !uiState.missionPanelOpen;
+          if (!uiState.missionPanelOpen) uiState.missionPanelExpanded = false;
+          syncMissionPanelLayout();
           return;
         }
       }
@@ -2674,6 +4648,7 @@
   INFINITY.UI = {
     init: init,
     render: renderAll,
+    renderMissionPanel: renderMissionPanel25D,
     showToast: showToast,
     openAiModal: openAiModal
   };

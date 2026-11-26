@@ -244,6 +244,7 @@
     this.inputPaused = false;
     this.hitStopTimer = 0;
     this.timeRemainingSec = EXAM_DURATION_SEC;
+    this.focusWaypoint = null;
 
     // Input state
     this.keys = Object.create(null);
@@ -257,6 +258,7 @@
     this.camLook = { x: 10, z: 10 };
     this.camKickX = 0;
     this.camKickZ = 0;
+    this.camFovPunch = 0;
     this.shakeIntensity = 0;
     this.shakeTimer = 0;
 
@@ -336,6 +338,84 @@
       elapsedSec: 0
     };
 
+    // Real-time Mission Progress, Triggered Logic Branches & Historical Log
+    this.visitedZones = ['concourse'];
+    this.missionLog = [];
+    this.missionLogVersion = 0;
+    this.missionFlags = Object.create(null);
+    this.branches = {
+      track_override: {
+        id: 'track_override',
+        name: '逆轨出环路线',
+        routeTag: 'S级真破局',
+        status: 'locked', // locked | active | triggered | completed | warning
+        progressPct: 0,
+        summary: '联动「信号调度室」与「旧变电间」反转主轨极性至 100%，解锁 0 号站台应急闸门。',
+        outcome: '尚未启动任一轨控终端',
+        updatedAt: null
+      },
+      inspector_hunt: {
+        id: 'inspector_hunt',
+        name: '正面肃清检票员',
+        routeTag: 'A+级破局',
+        status: 'locked',
+        progressPct: 0,
+        summary: '正面击杀或使用规则锁链 100% 封印零号检票员，直接破除黄线即决法则。',
+        outcome: '尚未与零号检票员正式交锋',
+        updatedAt: null
+      },
+      fake_broadcast: {
+        id: 'fake_broadcast',
+        name: '拟态假播报反制',
+        routeTag: '规则陷阱',
+        status: 'locked',
+        progressPct: 0,
+        summary: '43.2Hz 伪造系统播报将诱导考生越过黄线；可借腕表校时拆穿或以 EMP 脉冲切断。',
+        outcome: '暂未截获拟态播报信号',
+        updatedAt: null
+      },
+      yellow_line: {
+        id: 'yellow_line',
+        name: '黄线即决违例',
+        routeTag: '高危判定',
+        status: 'locked',
+        progressPct: 0,
+        summary: '道岔反转未满 100% 时踏入 0 号站台黄线内侧，将立刻触发检票员强制追猎锁定。',
+        outcome: '尚未触犯黄线禁令',
+        updatedAt: null
+      },
+      shenyan_secret: {
+        id: 'shenyan_secret',
+        name: '沈砚伪造车票暗线',
+        routeTag: '隐藏情报',
+        status: 'locked',
+        progressPct: 0,
+        summary: '查明独行老生沈砚的真实动机与应急通道遗留物证，识破诱导越线陷阱。',
+        outcome: '尚未发现相关隐藏证物',
+        updatedAt: null
+      },
+      ghost_train: {
+        id: 'ghost_train',
+        name: '零号列车强登分支',
+        routeTag: 'B级次优撤离',
+        status: 'locked',
+        progressPct: 0,
+        summary: '每周期停靠 0 号站台的幽灵列车；未反转道岔时强行登车可冒险脱出但错失高评。',
+        outcome: '等待零号列车首次进站',
+        updatedAt: null
+      },
+      squad_tactics: {
+        id: 'squad_tactics',
+        name: '活体小队战术协同',
+        routeTag: '队伍联动',
+        status: 'locked',
+        progressPct: 0,
+        summary: '通过加密短波向严辞、陆烬、许檀、沈砚下达分区执行或集火指令。',
+        outcome: '小队按自主策略展开行动',
+        updatedAt: null
+      }
+    };
+
     // UI overlay pools
     this.speechBubbles = Object.create(null); // actorId -> { el, text, ttl, maxTtl }
     this.floatingTexts = []; // { el, x, y, z, vy, ttl, maxTtl }
@@ -397,6 +477,26 @@
     return this.trackTex(createFallbackTexture(this.THREE, colors[id] || '#88aabb', '#ffffff'));
   };
 
+  EngineSession.prototype.getCharNormalTex = function (id, frame) {
+    if (this.spritesApi && typeof this.spritesApi.getCharNormalTexture === 'function') {
+      try {
+        var t = this.spritesApi.getCharNormalTexture(id, frame || 'idle');
+        if (t) return t;
+      } catch (_) {}
+    }
+    return null;
+  };
+
+  EngineSession.prototype.getCharEmissiveTex = function (id, frame) {
+    if (this.spritesApi && typeof this.spritesApi.getCharEmissiveTexture === 'function') {
+      try {
+        var t = this.spritesApi.getCharEmissiveTexture(id, frame || 'idle');
+        if (t) return t;
+      } catch (_) {}
+    }
+    return this.getCharTex(id, frame);
+  };
+
   EngineSession.prototype.getPropTex = function (name, fallbackColor) {
     if (this.spritesApi && typeof this.spritesApi.getPropTexture === 'function') {
       try {
@@ -417,6 +517,81 @@
     if (this.callbacks && typeof this.callbacks.onRadioEvent === 'function') {
       try { this.callbacks.onRadioEvent(entry); } catch (_) {}
     }
+  };
+
+  EngineSession.prototype.formatElapsedMMSS = function (sec) {
+    var s = Math.max(0, Math.floor(Number(sec) || 0));
+    var mm = Math.floor(s / 60);
+    var ss = s % 60;
+    return String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+  };
+
+  EngineSession.prototype.recordMissionEvent = function (category, title, detail, opts) {
+    var o = opts || {};
+    var elapsed = Math.floor(this.stats ? this.stats.elapsedSec : 0);
+    var pZoneId = (this.player && this.mapApi) ? (this.mapApi.getZoneAt(this.player.x, this.player.z) || 'concourse') : 'concourse';
+    var pZone = getZoneInfo(this.mapApi, o.zoneId || pZoneId);
+    var entry = {
+      id: 'ML_' + (++this.missionLogVersion),
+      elapsedSec: elapsed,
+      timeLabel: this.formatElapsedMMSS(elapsed),
+      zoneId: pZone.id,
+      zoneCode: pZone.code,
+      zoneName: pZone.name,
+      category: category || 'progress', // progress | branch | clue | warning | squad
+      title: String(title || '考场记录'),
+      detail: String(detail || ''),
+      branchId: o.branchId || null,
+      badge: o.badge || null
+    };
+    this.missionLog.unshift(entry);
+    if (this.missionLog.length > 80) {
+      this.missionLog.length = 80;
+    }
+    return entry;
+  };
+
+  EngineSession.prototype.setBranchState = function (branchId, status, outcome, progressPct) {
+    var b = this.branches && this.branches[branchId];
+    if (!b) return null;
+    var elapsed = Math.floor(this.stats ? this.stats.elapsedSec : 0);
+    b.status = status || b.status;
+    if (outcome) b.outcome = String(outcome);
+    if (progressPct != null && isFinite(Number(progressPct))) {
+      b.progressPct = clamp(Math.round(Number(progressPct)), 0, 100);
+    }
+    b.updatedAt = this.formatElapsedMMSS(elapsed);
+    this.missionLogVersion += 1;
+    return b;
+  };
+
+  EngineSession.prototype.getBranchesList = function () {
+    var order = [
+      'track_override',
+      'inspector_hunt',
+      'fake_broadcast',
+      'yellow_line',
+      'shenyan_secret',
+      'ghost_train',
+      'squad_tactics'
+    ];
+    var out = [];
+    for (var i = 0; i < order.length; i++) {
+      var b = this.branches[order[i]];
+      if (b) {
+        out.push({
+          id: b.id,
+          name: b.name,
+          routeTag: b.routeTag,
+          status: b.status,
+          progressPct: b.progressPct,
+          summary: b.summary,
+          outcome: b.outcome,
+          updatedAt: b.updatedAt
+        });
+      }
+    }
+    return out;
   };
 
   // ---------------------------------------------------------------------------
@@ -441,10 +616,23 @@
     var width = Math.max(this.containerEl.clientWidth || 960, 320);
     var height = Math.max(this.containerEl.clientHeight || 560, 240);
 
+    // Detect software WebGL (SwiftShader / llvmpipe) to pace frames & keep rendering responsive
+    var isSoftwareGl = false;
+    try {
+      var probeCanvas = document.createElement('canvas');
+      var probeGl = probeCanvas.getContext('webgl2') || probeCanvas.getContext('webgl');
+      if (probeGl) {
+        var dbgExt = probeGl.getExtension('WEBGL_debug_renderer_info');
+        var glName = dbgExt ? probeGl.getParameter(dbgExt.UNMASKED_RENDERER_WEBGL) : probeGl.getParameter(probeGl.RENDERER);
+        isSoftwareGl = /SwiftShader|llvmpipe|Software|Mesa/i.test(String(glName || ''));
+      }
+    } catch (_) {}
+    this.isSoftwareGl = isSoftwareGl;
+
     // WebGL Renderer with graceful error guard
     try {
       this.renderer = new THREE.WebGLRenderer({
-        antialias: false,
+        antialias: !isSoftwareGl,
         alpha: false,
         powerPreference: 'high-performance'
       });
@@ -460,27 +648,29 @@
       return false;
     }
 
-    this.renderer.setPixelRatio(Math.min(global.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(global.devicePixelRatio || 1, 2));
     this.renderer.setSize(width, height, false);
-    this.renderer.setClearColor(0x08090d, 1);
+    this.renderer.setClearColor(0x070a10, 1);
+    if (THREE.sRGBEncoding !== undefined) {
+      this.renderer.outputEncoding = THREE.sRGBEncoding;
+    }
     if (THREE.ACESFilmicToneMapping !== undefined) {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 1.06;
+      this.renderer.toneMappingExposure = 1.15;
     }
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
     this.renderer.domElement.style.display = 'block';
-    this.renderer.domElement.style.imageRendering = 'pixelated';
     this.renderer.domElement.style.cursor = 'crosshair';
     this.containerEl.appendChild(this.renderer.domElement);
 
     // Build HTML overlay (speech bubbles, damage numbers, world HP tags, vignette, interact prompt)
     this.buildHtmlOverlay();
 
-    // Scene & Fog (Signalis / HLD obsidian atmosphere)
+    // Scene & Atmospheric Depth Fog
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x08090d);
-    this.scene.fog = new THREE.FogExp2(0x08090d, 0.036);
+    this.scene.background = new THREE.Color(0x070a10);
+    this.scene.fog = new THREE.FogExp2(0x070a10, 0.030);
 
     // Elevated angled 2.5D camera
     this.camera = new THREE.PerspectiveCamera(38, width / height, 0.5, 120);
@@ -518,17 +708,34 @@
     if (INFINITY.Audio && typeof INFINITY.Audio.setScene === 'function') {
       try { INFINITY.Audio.setScene('station_tense'); } catch (_) {}
     }
+    this.recordMissionEvent(
+      'progress',
+      '接入《零号回廊 · 停摆站台》',
+      '主目标：联动信号调度室与旧变电间反转主轨至 100%，或正面肃清/封印零号检票员后从 0 号站台撤离。',
+      { zoneId: 'concourse' }
+    );
     this.showSpeechBubble('yanci', '全员核对腕表秒针。别信未经校验的站台广播。');
     this.showSpeechBubble('xutan', '我去信号调度室查道岔协议，有情况立刻切无线电！');
     this.showSpeechBubble('lujin', '我守换乘长廊，检票员露头我会第一时间拦住。');
     this.emitHudSnapshot();
 
-    // Start 60fps loop
+    // Start 60fps loop (with gentle yield pacing on software WebGL so UI/browser stays responsive)
     var self = this;
+    function scheduleNext() {
+      if (!self.mounted) return;
+      if (self.isSoftwareGl) {
+        self.rafId = global.setTimeout(function () {
+          if (!self.mounted) return;
+          self.rafId = global.requestAnimationFrame(tick);
+        }, 28);
+      } else {
+        self.rafId = global.requestAnimationFrame(tick);
+      }
+    }
     function tick(now) {
       if (!self.mounted) return;
-      self.rafId = global.requestAnimationFrame(tick);
       self.frame(now);
+      scheduleNext();
     }
     this.rafId = global.requestAnimationFrame(tick);
     return true;
@@ -612,13 +819,38 @@
     var slots = [];
     for (var i = 0; i < 4; i++) {
       var src = rawSlots[i] || DEFAULT_SLOTS[i];
+      var archId = src.archetype || DEFAULT_SLOTS[i].archetype;
+      var slotColor = src.color || DEFAULT_SLOTS[i].color;
+      var vfxProfile = src.vfxProfile || (
+        this.skillsApi && typeof this.skillsApi.buildVfxProfile === 'function'
+          ? this.skillsApi.buildVfxProfile(src, archId, src.tier || 'C', slotColor)
+          : {
+              motif: 'cyber_tactical',
+              motifLabel: '战术霓虹',
+              primaryColor: slotColor,
+              secondaryColor: '#ffffff',
+              coreColor: '#ffffff',
+              sigilStyle: 'tactical_hud',
+              orbiterType: 'drone_bit',
+              particleStyle: 'holo_grid',
+              ringLayers: 2,
+              tier: src.tier || 'C',
+              tierRank: 1,
+              tierIntensity: 1.0,
+              isFused: false,
+              isGamble: false,
+              isHighTier: false,
+              shapeVariant: i % 4
+            }
+      );
       slots.push({
         index: i,
         key: String(i + 1),
-        archetype: src.archetype || DEFAULT_SLOTS[i].archetype,
+        archetype: archId,
         itemId: src.itemId || null,
         name: src.name || DEFAULT_SLOTS[i].name,
-        color: src.color || DEFAULT_SLOTS[i].color,
+        tier: src.tier || vfxProfile.tier || 'C',
+        color: slotColor,
         cooldownMax: Math.max(0.8, Number(src.cooldown) || DEFAULT_SLOTS[i].cooldown),
         cooldownLeft: 0,
         energyCost: Math.max(0, Number(src.energyCost) || DEFAULT_SLOTS[i].energyCost),
@@ -626,7 +858,12 @@
         radius: Number(src.radius) || DEFAULT_SLOTS[i].radius || 3.6,
         duration: Number(src.duration) || DEFAULT_SLOTS[i].duration || 4.0,
         desc: src.desc || '',
-        icon: src.icon || DEFAULT_SLOTS[i].icon
+        icon: src.icon || DEFAULT_SLOTS[i].icon,
+        vfxProfile: vfxProfile,
+        particlePreset: src.particlePreset || (this.skillsApi && typeof this.skillsApi.getParticlePreset === 'function' ? this.skillsApi.getParticlePreset(src) : null),
+        resonance: src.resonance || null,
+        resonanceAppliedOnSlot: Boolean(src.resonanceAppliedOnSlot),
+        lastResonanceRadioAt: -99
       });
     }
 
@@ -638,11 +875,41 @@
       range: 3.1,
       color: '#6fd8ea'
     };
+    if (!basic.vfxProfile) {
+      basic.vfxProfile = slots[0] ? slots[0].vfxProfile : {
+        motif: 'sword_qi',
+        primaryColor: basic.color || '#6fd8ea',
+        secondaryColor: '#ffffff',
+        coreColor: '#ffffff',
+        sigilStyle: 'bagua',
+        tierIntensity: 1.0,
+        shapeVariant: 0
+      };
+    }
+
+    var charVisual = (built && built.characterVisual) || {
+      primaryMotif: (slots[0] && slots[0].vfxProfile && slots[0].vfxProfile.motif) || 'sword_qi',
+      secondaryMotif: (slots[1] && slots[1].vfxProfile && slots[1].vfxProfile.motif) || 'cyber_tactical',
+      auraColor: (slots[0] && slots[0].color) || '#6fd8ea',
+      accentColor: (slots[1] && slots[1].color) || '#f0c46c',
+      rimColor: '#ffffff',
+      sigilStyle: (slots[0] && slots[0].vfxProfile && slots[0].vfxProfile.sigilStyle) || 'bagua',
+      orbiterType: (slots[0] && slots[0].vfxProfile && slots[0].vfxProfile.orbiterType) || 'sword',
+      orbiterCount: 2,
+      tierRank: 1,
+      highestTier: 'C',
+      hasFused: false,
+      hasGamble: false,
+      weaponStyle: basic.style || 'tactical'
+    };
 
     this.loadout = {
       basicAttack: basic,
       slots: slots,
-      styleLabel: (built && built.styleLabel) || '标准特勤构筑'
+      styleLabel: (built && built.styleLabel) || '标准特勤构筑',
+      characterVisual: charVisual,
+      bloodlines: (built && Array.isArray(built.bloodlines)) ? built.bloodlines : [],
+      resonanceSummary: (built && built.resonanceSummary) || null
     };
   };
 
@@ -652,37 +919,46 @@
   EngineSession.prototype.buildLighting = function () {
     var THREE = this.THREE;
 
-    // Deep moody base lighting
-    var amb = new THREE.AmbientLight(0x27344a, 0.62);
+    // Atmospheric PBR studio lighting: cool subterranean fill + raking directional key + warm rim contrast
+    // Designed to bring out tangent-space normal maps on floors, glazed bricks, pillars, and HD-2D characters!
+    var amb = new THREE.AmbientLight(0x3a4d6b, 0.78);
     this.scene.add(amb);
 
-    var hemi = new THREE.HemisphereLight(0x3b4f6e, 0x090b10, 0.42);
+    var hemi = new THREE.HemisphereLight(0x6e92bd, 0x161d2b, 0.86);
     this.scene.add(hemi);
+
+    var dirKey = new THREE.DirectionalLight(0xd8f0ff, 0.96);
+    dirKey.position.set(14, 18, 16);
+    this.scene.add(dirKey);
+
+    var dirRim = new THREE.DirectionalLight(0xffa060, 0.44);
+    dirRim.position.set(-18, 10, -14);
+    this.scene.add(dirRim);
 
     // Player directional flashlight (SpotLight) + soft personal halo
     var flashTarget = new THREE.Object3D();
     flashTarget.position.set(12, 0.2, 10);
     this.scene.add(flashTarget);
 
-    var flash = new THREE.SpotLight(0xd4f2ff, 2.35, 22, Math.PI / 4.0, 0.58, 1.35);
-    flash.position.set(10, 2.1, 10);
+    var flash = new THREE.SpotLight(0xdcf5ff, 2.55, 25, Math.PI / 3.8, 0.58, 1.3);
+    flash.position.set(10, 2.15, 10);
     flash.target = flashTarget;
     this.scene.add(flash);
     this.flashLight = flash;
     this.flashTarget = flashTarget;
 
-    var pGlow = new THREE.PointLight(0x7cc8e8, 0.95, 7.2, 1.7);
-    pGlow.position.set(10, 1.6, 10);
+    var pGlow = new THREE.PointLight(0x88d4f2, 1.25, 9.2, 1.55);
+    pGlow.position.set(10, 1.75, 10);
     this.scene.add(pGlow);
     this.playerGlow = pGlow;
 
     // Inspector's ominous crimson lantern (bleeds down corridors before sighting!)
-    var iLantern = new THREE.PointLight(0xff1e36, 3.6, 17.5, 1.45);
+    var iLantern = new THREE.PointLight(0xff1e36, 4.0, 18.5, 1.4);
     iLantern.position.set(45, 1.7, 18);
     this.scene.add(iLantern);
     this.inspectorLantern = iLantern;
 
-    // Station overhead flickering lights (pooled nearest 8 for 60fps shader safety)
+    // Station overhead flickering lights (pooled nearest 4 for shader safety)
     var defs = [];
     if (typeof this.mapApi.getLights === 'function') {
       try { defs = this.mapApi.getLights() || []; } catch (_) { defs = []; }
@@ -692,41 +968,22 @@
         x: Number(d.x) || 10,
         z: Number(d.z) || 10,
         color: hexToInt(d.color, 0x7fb8d8),
-        intensity: Number(d.intensity) || 1.15,
-        distance: Number(d.distance) || 11,
+        intensity: Number(d.intensity) || 1.35,
+        distance: Number(d.distance) || 13,
         flicker: typeof d.flicker === 'number' ? d.flicker : (d.flicker ? 0.22 : 0),
         seed: (idx + 1) * 1.73
       };
     });
 
-    // Visual glowing ceiling/fixture bulbs for ALL station lights (1 InstancedMesh)
-    if (this.stationLightDefs.length > 0) {
-      var bulbGeo = this.trackGeo(new THREE.BoxGeometry(0.45, 0.12, 0.45));
-      var bulbMat = this.trackMat(new THREE.MeshBasicMaterial({ color: 0xbfe8ff }));
-      this.stationBulbMat = bulbMat;
-      var bulbMesh = new THREE.InstancedMesh(bulbGeo, bulbMat, this.stationLightDefs.length);
-      var col = new THREE.Color();
-      for (var bi = 0; bi < this.stationLightDefs.length; bi++) {
-        var ld = this.stationLightDefs[bi];
-        this._dummy.position.set(ld.x, 3.26, ld.z);
-        this._dummy.rotation.set(0, 0, 0);
-        this._dummy.scale.set(1, 1, 1);
-        this._dummy.updateMatrix();
-        bulbMesh.setMatrixAt(bi, this._dummy.matrix);
-        col.setHex(ld.color);
-        if (typeof bulbMesh.setColorAt === 'function') {
-          bulbMesh.setColorAt(bi, col);
-        }
-      }
-      bulbMesh.instanceMatrix.needsUpdate = true;
-      if (bulbMesh.instanceColor) bulbMesh.instanceColor.needsUpdate = true;
-      this.scene.add(bulbMesh);
+    // Hanging industrial fluorescent fixtures + steel beams + volumetric light cones
+    if (INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.buildLightFixtures === 'function') {
+      this.stationBulbMat = INFINITY.SceneArchitect.buildLightFixtures(this, this.stationLightDefs);
     }
 
     var poolSize = Math.min(4, this.stationLightDefs.length);
     for (var pi = 0; pi < poolSize; pi++) {
-      var pl = new THREE.PointLight(0x88b8d8, 0.0, 12, 1.6);
-      pl.position.set(0, WALL_HEIGHT + 0.2, 0);
+      var pl = new THREE.PointLight(0x88b8d8, 0.0, 13, 1.5);
+      pl.position.set(0, WALL_HEIGHT + 0.15, 0);
       this.scene.add(pl);
       this.stationLightPool.push(pl);
     }
@@ -736,6 +993,17 @@
   // Station 2.5D Geometry Builder (Instanced Crisp Pixel Floors & Extruded Walls)
   // ---------------------------------------------------------------------------
   EngineSession.prototype.buildStationGeometry = function () {
+    if (INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.buildStation === 'function') {
+      INFINITY.SceneArchitect.buildStation(this, {
+        WALL_HEIGHT: WALL_HEIGHT,
+        FLOOR_Y: FLOOR_Y,
+        PLATFORM_Y: PLATFORM_Y,
+        HAZARD_Y: HAZARD_Y,
+        RAIL_Y: RAIL_Y,
+        TRAIN_X: TRAIN_X
+      });
+      return;
+    }
     var THREE = this.THREE;
     var mapApi = this.mapApi;
     var gridW = mapApi.GRID_W || 56;
@@ -959,6 +1227,13 @@
   // Ghost Train No.0 (4-Car Articulated Specter Train sliding down x = 51.5)
   // ---------------------------------------------------------------------------
   EngineSession.prototype.buildGhostTrain = function () {
+    if (INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.buildGhostTrain === 'function') {
+      this.train = INFINITY.SceneArchitect.buildGhostTrain(this, {
+        RAIL_Y: RAIL_Y,
+        TRAIN_X: TRAIN_X
+      });
+      return;
+    }
     var THREE = this.THREE;
     var group = new THREE.Group();
 
@@ -1040,6 +1315,10 @@
   // Interactable Props (Clues, Override Consoles, Exit Gate)
   // ---------------------------------------------------------------------------
   EngineSession.prototype.buildInteractables = function () {
+    if (INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.buildInteractables === 'function') {
+      INFINITY.SceneArchitect.buildInteractables(this);
+      return;
+    }
     var THREE = this.THREE;
     var defs = [];
     if (typeof this.mapApi.getInteractables === 'function') {
@@ -1122,18 +1401,32 @@
     var THREE = this.THREE;
     var group = new THREE.Group();
 
-    // Contact shadow disc
-    var shGeo = this.trackGeo(new THREE.CircleGeometry(isBoss ? 0.68 : 0.44, 18));
+    // Grounded contact shadow disc + directional angled cast shadow
+    var shGeo = this.trackGeo(new THREE.CircleGeometry(isBoss ? 0.72 : 0.46, 20));
     shGeo.rotateX(-Math.PI / 2);
     var shMat = this.trackMat(new THREE.MeshBasicMaterial({
       color: 0x020306,
       transparent: true,
-      opacity: 0.58,
+      opacity: 0.62,
       depthWrite: false
     }));
     var shadow = new THREE.Mesh(shGeo, shMat);
-    shadow.position.y = 0.06;
+    shadow.position.y = 0.058;
     group.add(shadow);
+
+    var castGeo = this.trackGeo(new THREE.CircleGeometry(isBoss ? 0.78 : 0.48, 18));
+    castGeo.rotateX(-Math.PI / 2);
+    var castMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0x020408,
+      transparent: true,
+      opacity: 0.32,
+      depthWrite: false
+    }));
+    var castShadow = new THREE.Mesh(castGeo, castMat);
+    castShadow.position.set(-0.32, 0.054, -0.34);
+    castShadow.scale.set(1.38, 1, 0.85);
+    castShadow.rotation.y = 0.45;
+    group.add(castShadow);
 
     // Subtle role accent base ring
     var bGeo = this.trackGeo(new THREE.RingGeometry(isBoss ? 0.62 : 0.40, isBoss ? 0.74 : 0.49, 24));
@@ -1141,29 +1434,45 @@
     var bMat = this.trackMat(new THREE.MeshBasicMaterial({
       color: hexToInt(accentHex, 0x6fd8ea),
       transparent: true,
-      opacity: isBoss ? 0.65 : 0.42,
+      opacity: isBoss ? 0.62 : 0.38,
       side: THREE.DoubleSide,
       depthWrite: false
     }));
     var baseRing = new THREE.Mesh(bGeo, bMat);
-    baseRing.position.y = 0.07;
+    baseRing.position.y = 0.068;
     group.add(baseRing);
 
-    // Angled HD-2D billboard sprite plane (receives dynamic lighting!)
+    // Angled HD-2D PBR billboard sprite plane with tangent-space Normal Map + Selective Emissive Map!
     var texIdle = this.getCharTex(id, 'idle');
+    var normIdle = this.getCharNormalTex(id, 'idle');
+    var emIdle = this.getCharEmissiveTex(id, 'idle');
+    var dims = (INFINITY.PixelSprites && typeof INFINITY.PixelSprites.getSpriteDimensions === 'function')
+      ? INFINITY.PixelSprites.getSpriteDimensions(id)
+      : { width: isBoss ? 160 : 128, height: isBoss ? 192 : 128 };
     var pGeo = this.trackGeo(new THREE.PlaneGeometry(width, height));
-    var pMat = this.trackMat(new THREE.MeshLambertMaterial({
+    var pMat = this.trackMat(new THREE.MeshStandardMaterial({
       map: texIdle,
-      emissiveMap: texIdle,
+      normalMap: normIdle || null,
+      normalScale: new THREE.Vector2(1.25, 1.25),
+      emissiveMap: emIdle || texIdle,
       emissive: 0xffffff,
-      emissiveIntensity: isBoss ? 0.48 : 0.34,
+      emissiveIntensity: isBoss ? 1.05 : 0.88,
+      roughness: 0.56,
+      metalness: 0.16,
       transparent: true,
-      alphaTest: 0.35,
+      alphaTest: 0.14,
       side: THREE.DoubleSide
     }));
+    var statusUniforms = this.applyActorStatusShader(pMat, {
+      id: id,
+      vitalColor: accentHex || (isBoss ? '#ff384c' : '#6fd8ea'),
+      isHostile: isBoss,
+      texelX: 1.0 / (dims.width || 128),
+      texelY: 1.0 / (dims.height || 128)
+    });
     var sprite = new THREE.Mesh(pGeo, pMat);
     sprite.position.y = height * 0.5 + 0.05;
-    sprite.rotation.x = -0.34;
+    sprite.rotation.x = -0.32;
     group.add(sprite);
 
     this.scene.add(group);
@@ -1171,10 +1480,174 @@
       group: group,
       sprite: sprite,
       mat: pMat,
+      statusUniforms: statusUniforms,
       baseRing: baseRing,
       baseRingMat: bMat,
-      shadow: shadow
+      shadow: shadow,
+      castShadow: castShadow
     };
+  };
+
+  EngineSession.prototype.applyActorStatusShader = function (mat, opts) {
+    var THREE = this.THREE;
+    var cfg = opts || {};
+    var seedHash = 0;
+    var idStr = String(cfg.id || 'actor');
+    for (var i = 0; i < idStr.length; i++) {
+      seedHash = ((seedHash << 5) - seedHash + idStr.charCodeAt(i)) | 0;
+    }
+    var glitchSeed = (Math.abs(seedHash) % 997) / 997.0;
+
+    var uniforms = {
+      uStatusTime: { value: 0.0 },
+      uHpRatio: { value: 1.0 },
+      uSanRatio: { value: 1.0 },
+      uVitalColor: { value: new THREE.Color(hexToInt(cfg.vitalColor, 0x6fd8ea)) },
+      uIsHostile: { value: cfg.isHostile ? 1.0 : 0.0 },
+      uGlitchSeed: { value: glitchSeed },
+      uTexelSize: { value: new THREE.Vector2(cfg.texelX || (1.0 / 32.0), cfg.texelY || (1.0 / 32.0)) }
+    };
+
+    mat.userData.statusUniforms = uniforms;
+    mat.customProgramCacheKey = function () {
+      return 'actor_hp_san_status_v1';
+    };
+
+    mat.onBeforeCompile = function (shader) {
+      shader.uniforms.uStatusTime = uniforms.uStatusTime;
+      shader.uniforms.uHpRatio = uniforms.uHpRatio;
+      shader.uniforms.uSanRatio = uniforms.uSanRatio;
+      shader.uniforms.uVitalColor = uniforms.uVitalColor;
+      shader.uniforms.uIsHostile = uniforms.uIsHostile;
+      shader.uniforms.uGlitchSeed = uniforms.uGlitchSeed;
+      shader.uniforms.uTexelSize = uniforms.uTexelSize;
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <map_pars_fragment>',
+          [
+            '#include <map_pars_fragment>',
+            'uniform float uStatusTime;',
+            'uniform float uHpRatio;',
+            'uniform float uSanRatio;',
+            'uniform vec3 uVitalColor;',
+            'uniform float uIsHostile;',
+            'uniform float uGlitchSeed;',
+            'uniform vec2 uTexelSize;',
+            'float actorHash21(vec2 p) {',
+            '  p = fract(p * vec2(123.34, 456.21));',
+            '  p += dot(p, p + 45.32);',
+            '  return fract(p.x * p.y);',
+            '}'
+          ].join('\n')
+        )
+        .replace(
+          '#include <map_fragment>',
+          [
+            'vec2 statusUv = vec2(0.5);',
+            'float statusSanLow = smoothstep(0.68, 0.12, uSanRatio);',
+            'float statusHpHigh = smoothstep(0.68, 0.96, uHpRatio);',
+            'float statusHpLow = smoothstep(0.42, 0.10, uHpRatio);',
+            'float statusRim = 0.0;',
+            'float statusGlitchNoise = 0.0;',
+            'float statusScanTear = 0.0;',
+            '#ifdef USE_MAP',
+            '  statusUv = vUv;',
+            '  if (statusSanLow > 0.005) {',
+            '    float bandId = floor(vUv.y * 26.0);',
+            '    float timeStep = floor(uStatusTime * (10.0 + statusSanLow * 14.0));',
+            '    float tearRand = actorHash21(vec2(bandId + uGlitchSeed * 17.0, timeStep));',
+            '    float tearTrigger = step(0.84 - statusSanLow * 0.34, tearRand);',
+            '    float tearDir = (actorHash21(vec2(bandId * 3.1, timeStep + 7.0)) - 0.5) * 2.0;',
+            '    statusScanTear = tearTrigger;',
+            '    statusUv.x = clamp(statusUv.x + tearTrigger * tearDir * (0.025 + statusSanLow * 0.075), 0.0, 1.0);',
+            '  }',
+            '  vec4 sampledDiffuseColor = texture2D( map, statusUv );',
+            '  if (statusSanLow > 0.005) {',
+            '    float rgbShift = (0.008 + statusSanLow * 0.024) * (0.65 + 0.35 * sin(uStatusTime * 19.0 + vUv.y * 24.0) + statusScanTear * 1.1);',
+            '    vec4 sR = texture2D( map, clamp(statusUv + vec2(rgbShift, 0.0), 0.0, 1.0) );',
+            '    vec4 sB = texture2D( map, clamp(statusUv - vec2(rgbShift, 0.0), 0.0, 1.0) );',
+            '    float splitAlpha = max(sampledDiffuseColor.a, max(sR.a, sB.a) * (0.58 * statusSanLow));',
+            '    vec3 baseRgb = sampledDiffuseColor.rgb;',
+            '    vec3 ghostRgb = vec3(sR.r * sR.a, baseRgb.g * sampledDiffuseColor.a, sB.b * sB.a);',
+            '    float coreMask = step(0.35, sampledDiffuseColor.a);',
+            '    vec3 splitRgb = mix(',
+            '      ghostRgb,',
+            '      vec3(',
+            '        mix(baseRgb.r, max(sR.r, baseRgb.r * 1.12), 0.72 * statusSanLow),',
+            '        baseRgb.g * (1.0 - 0.16 * statusSanLow),',
+            '        mix(baseRgb.b, max(sB.b, baseRgb.b * 1.15), 0.76 * statusSanLow)',
+            '      ),',
+            '      coreMask',
+            '    );',
+            '    vec2 cell = floor(statusUv / max(uTexelSize, vec2(0.01)));',
+            '    float tCell = floor(uStatusTime * 18.0);',
+            '    float grain = actorHash21(cell + vec2(tCell * 1.37, uGlitchSeed * 31.0));',
+            '    float speckle = step(0.955 - statusSanLow * 0.15, grain);',
+            '    statusGlitchNoise = grain;',
+            '    float luma = dot(splitRgb, vec3(0.299, 0.587, 0.114));',
+            '    vec3 eerieTint = mix(vec3(0.76, 0.62, 0.96), vec3(0.98, 0.36, 0.52), uIsHostile);',
+            '    splitRgb = mix(splitRgb, vec3(luma) * eerieTint, statusSanLow * 0.36);',
+            '    vec3 artifactCol = mix(vec3(0.38, 0.92, 1.0), vec3(1.0, 0.24, 0.58), step(0.5, fract(grain * 13.7)));',
+            '    splitRgb = mix(splitRgb, artifactCol, speckle * statusSanLow * 0.78);',
+            '    float scanBar = smoothstep(0.65, 1.0, sin(vUv.y * 95.0 - uStatusTime * 22.0));',
+            '    splitRgb *= (1.0 - scanBar * statusSanLow * 0.24);',
+            '    sampledDiffuseColor = vec4(splitRgb, splitAlpha);',
+            '  }',
+            '  if (sampledDiffuseColor.a > 0.35 && (statusHpHigh > 0.005 || statusHpLow > 0.005 || statusSanLow > 0.005)) {',
+            '    float aL = texture2D( map, clamp(statusUv - vec2(uTexelSize.x, 0.0), 0.0, 1.0) ).a;',
+            '    float aR = texture2D( map, clamp(statusUv + vec2(uTexelSize.x, 0.0), 0.0, 1.0) ).a;',
+            '    float aU = texture2D( map, clamp(statusUv + vec2(0.0, uTexelSize.y), 0.0, 1.0) ).a;',
+            '    float aD = texture2D( map, clamp(statusUv - vec2(0.0, uTexelSize.y), 0.0, 1.0) ).a;',
+            '    float minNeighbor = min(min(aL, aR), min(aU, aD));',
+            '    statusRim = clamp((sampledDiffuseColor.a - minNeighbor) * 1.45, 0.0, 1.0);',
+            '  }',
+            '  if (statusHpLow > 0.005) {',
+            '    float hpLuma = dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114));',
+            '    sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, vec3(hpLuma * 0.92, hpLuma * 0.72, hpLuma * 0.72), statusHpLow * 0.32);',
+            '  }',
+            '  diffuseColor *= sampledDiffuseColor;',
+            '#endif'
+          ].join('\n')
+        )
+        .replace(
+          '#include <emissivemap_fragment>',
+          [
+            '#ifdef USE_EMISSIVEMAP',
+            '  vec4 emissiveColor = texture2D( emissiveMap, statusUv );',
+            '  totalEmissiveRadiance *= emissiveColor.rgb;',
+            '#endif'
+          ].join('\n')
+        )
+        .replace(
+          '#include <tonemapping_fragment>',
+          [
+            '  if (statusHpHigh > 0.005) {',
+            '    float breathe = 0.72 + 0.28 * sin(uStatusTime * 2.6 + uGlitchSeed * 6.2831);',
+            '    float sheenPhase = fract(uStatusTime * 0.28 + uGlitchSeed);',
+            '    float diag = statusUv.y * 0.82 + statusUv.x * 0.18;',
+            '    float sheenBand = smoothstep(0.18, 0.0, abs(diag - sheenPhase)) * 0.22;',
+            '    vec3 softGlow = uVitalColor * (statusRim * 0.58 * breathe + sheenBand * (0.45 + 0.55 * breathe) + 0.06 * breathe);',
+            '    gl_FragColor.rgb += softGlow * statusHpHigh;',
+            '  }',
+            '  if (statusHpLow > 0.005) {',
+            '    float beat1 = pow(max(0.0, sin(uStatusTime * 5.2 + uGlitchSeed)), 4.0);',
+            '    float beat2 = pow(max(0.0, sin(uStatusTime * 5.2 + 0.75 + uGlitchSeed)), 6.0) * 0.65;',
+            '    float pulse = 0.28 + 0.72 * max(beat1, beat2);',
+            '    vec3 critCol = vec3(1.0, 0.16, 0.24);',
+            '    gl_FragColor.rgb += critCol * (statusRim * 0.72 + 0.14) * pulse * statusHpLow;',
+            '  }',
+            '  if (statusSanLow > 0.005) {',
+            '    vec3 sanEdgeCol = mix(vec3(0.76, 0.36, 1.0), vec3(0.32, 0.94, 1.0), step(0.5, statusGlitchNoise));',
+            '    float flicker = 0.6 + 0.4 * sin(uStatusTime * 27.0 + uGlitchSeed * 11.0);',
+            '    gl_FragColor.rgb += sanEdgeCol * (statusRim * 0.62 + statusScanTear * 0.26) * flicker * statusSanLow;',
+            '  }',
+            '  #include <tonemapping_fragment>'
+          ].join('\n')
+        );
+    };
+
+    return uniforms;
   };
 
   EngineSession.prototype.buildActors = function () {
@@ -1189,22 +1662,17 @@
     var maxEnergy = Math.max(80, Number(pState.maxEnergy) || 100);
     var maxSanity = Math.max(80, Number(pState.maxSanity) || 100);
 
-    var pVis = this.createActorVisual('player', 1.35, 1.85, '#6fd8ea', false);
+    var charVis = (this.loadout && this.loadout.characterVisual) || {};
+    var pVis = this.createActorVisual('player', 1.68, 2.02, charVis.auraColor || '#6fd8ea', false);
     pVis.group.position.set(pPos.x, 0, pPos.z);
 
-    // Translucent hex shield sphere (hidden until aegis_shield active)
-    var shieldGeo = this.trackGeo(new THREE.IcosahedronGeometry(1.18, 1));
-    var shieldMat = this.trackMat(new THREE.MeshBasicMaterial({
-      color: 0x66e8ff,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.55,
-      blending: THREE.AdditiveBlending
-    }));
-    var shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
-    shieldMesh.position.y = 1.0;
-    shieldMesh.visible = false;
-    pVis.group.add(shieldMesh);
+    // Personal Fresnel Hex-Geodesic Aegis Shield Dome (hidden until aegis_shield active)
+    var aegisBuilt = (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.buildAegisShield === 'function')
+      ? INFINITY.VfxStudio.buildAegisShield(this, pVis.group, hexToInt(charVis.auraColor, 0x5ce8ff), hexToInt(charVis.accentColor, 0xf5cf76))
+      : null;
+
+    // Build-driven character aura sigil & orbiting relics reflecting the player's equipped bloodlines/items
+    var playerAura = this.buildPlayerBuildAura(pVis.group, charVis);
 
     this.player = {
       id: 'player',
@@ -1223,20 +1691,41 @@
       maxSanity: maxSanity,
       shieldHp: 0,
       shieldTimer: 0,
-      shieldMesh: shieldMesh,
+      shieldColor: 0x66e8ff,
+      shieldMesh: aegisBuilt ? aegisBuilt.shieldMesh : new THREE.Group(),
+      shieldShell: aegisBuilt ? aegisBuilt.shieldShell : null,
+      shieldMat: aegisBuilt ? aegisBuilt.shieldMat : null,
+      shieldCoreMat: aegisBuilt ? aegisBuilt.shieldCoreMat : null,
+      shieldRing: aegisBuilt ? aegisBuilt.shieldRing : null,
+      shieldOrbit2: aegisBuilt ? aegisBuilt.shieldOrbit2 : null,
+      shieldRingMat: aegisBuilt ? aegisBuilt.shieldRingMat : null,
+      aura: playerAura,
+      auraPulse: 0,
       overclockTimer: 0,
+      overclockColor: 0x4df8ff,
+      overclockArcCd: 0,
       afterimageAccum: 0,
       stealthTimer: 0,
+      stealthColor: 0x9e82ff,
       invulnTimer: 0,
       attackCd: 0,
       dashTimer: 0,
       dashVx: 0,
       dashVz: 0,
+      dashColor: 0xff4658,
+      channelTimer: 0,
+      lowHpPulseCd: 0,
       footstepAccum: 0,
+      stepRippleAccum: 0,
+      squashX: 1,
+      squashY: 1,
+      leanZ: 0,
       animFrame: 'idle',
       animTimer: 0,
+      idlePhase: 0,
       actionTimer: 0,
       hitFlash: 0,
+      whiteFlash: 0,
       vis: pVis
     };
 
@@ -1253,7 +1742,7 @@
       var meta = getCastMeta(sp.id);
       var zc = mapApi.getZoneCenter(sp.zone) || { x: 10, z: 10 };
       var safePos = mapApi.resolveCircleWallCollision(zc.x + sp.dx, zc.z + sp.dz, 0.4);
-      var vis = this.createActorVisual(sp.id, 1.32, 1.82, meta.accentColor, false);
+      var vis = this.createActorVisual(sp.id, 1.64, 1.98, meta.accentColor, false);
       vis.group.position.set(safePos.x, 0, safePos.z);
 
       var npc = {
@@ -1269,6 +1758,8 @@
         speed: sp.speed,
         hp: sp.hp,
         maxHp: sp.hp,
+        sanity: sp.id === 'shenyan' ? 62 : (sp.id === 'lujin' ? 92 : (sp.id === 'xutan' ? 96 : 100)),
+        maxSanity: 100,
         alive: true,
         facingLeft: false,
         order: 'auto',
@@ -1296,7 +1787,7 @@
     // Build Inspector Boss
     var bossCenter = mapApi.getZoneCenter('platform0') || { x: 46, z: 18 };
     var bossPos = mapApi.resolveCircleWallCollision(bossCenter.x - 2.0, bossCenter.z, 0.56);
-    var bossVis = this.createActorVisual('inspector', 1.85, 2.6, '#ff2a3c', true);
+    var bossVis = this.createActorVisual('inspector', 2.25, 2.85, '#ff2a3c', true);
     bossVis.group.position.set(bossPos.x, 0, bossPos.z);
 
     // Glowing crimson lantern orb attached to Inspector
@@ -1342,6 +1833,68 @@
     teleFill.visible = false;
     bossVis.group.add(teleFill);
 
+    // Parry-window shears glint star on Inspector (flashes bright gold-white during optimal parry timing!)
+    var glintGeo = this.trackGeo(new THREE.PlaneGeometry(1.35, 1.35));
+    var glintMat = this.trackMat(new THREE.MeshBasicMaterial({
+      map: this.getPropTex('vfx_impact_star', '#ffe484'),
+      color: 0xffe484,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending
+    }));
+    var teleParryGlint = new THREE.Mesh(glintGeo, glintMat);
+    teleParryGlint.position.set(0.65, 1.55, 0.2);
+    teleParryGlint.visible = false;
+    bossVis.group.add(teleParryGlint);
+
+    // Volumetric crimson lantern light cone sweeping from Inspector's left arm
+    var lConeGeo = this.trackGeo(new THREE.ConeGeometry(1.15, 2.5, 14, 1, true));
+    lConeGeo.rotateX(Math.PI * 0.42);
+    lConeGeo.translate(0, 0, 1.15);
+    var lConeMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xff2238,
+      transparent: true,
+      opacity: 0.14,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var lanternCone = new THREE.Mesh(lConeGeo, lConeMat);
+    lanternCone.position.set(-0.55, 1.25, 0.1);
+    bossVis.group.add(lanternCone);
+
+    // Progressive Golden Containment Seal Ring around Inspector (intensifies with sealedPct)
+    var sealGroup = new THREE.Group();
+    sealGroup.position.y = 0.14;
+    sealGroup.visible = false;
+    var sealDiscGeo = this.trackGeo(new THREE.PlaneGeometry(2.5, 2.5));
+    sealDiscGeo.rotateX(-Math.PI / 2);
+    var sealDiscMat = this.trackMat(new THREE.MeshBasicMaterial({
+      map: this.getPropTex('sigil_occult_eye', '#f0c46c'),
+      color: 0xf0c46c,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var sealDisc = new THREE.Mesh(sealDiscGeo, sealDiscMat);
+    sealGroup.add(sealDisc);
+    var sealBandGeo = this.trackGeo(new THREE.TorusGeometry(0.96, 0.045, 8, 28));
+    sealBandGeo.rotateX(Math.PI / 2);
+    var sealBandMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xffe082,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var sealBand = new THREE.Mesh(sealBandGeo, sealBandMat);
+    sealBand.position.y = 1.15;
+    sealGroup.add(sealBand);
+    bossVis.group.add(sealGroup);
+
     this.inspector = {
       id: 'inspector',
       name: '零号检票员',
@@ -1376,9 +1929,24 @@
       lungeHitDone: false,
       teleMesh: teleMesh,
       teleFill: teleFill,
+      teleParryGlint: teleParryGlint,
+      teleParryGlintMat: glintMat,
+      lanternCone: lanternCone,
+      lanternConeMat: lConeMat,
+      sealGroup: sealGroup,
+      sealDisc: sealDisc,
+      sealDiscMat: sealDiscMat,
+      sealBand: sealBand,
+      sealBandMat: sealBandMat,
+      mistAccum: 0,
+      rageArcAccum: 0,
+      squashX: 1,
+      squashY: 1,
+      leanZ: 0,
       facingLeft: false,
       animFrame: 'idle',
       animTimer: 0,
+      idlePhase: 0,
       actionTimer: 0,
       hitFlash: 0,
       whiteFlash: 0,
@@ -1386,6 +1954,178 @@
     };
 
     this.createWorldTag('inspector', '零号检票员', '#ff3b4f', true);
+  };
+
+  // Build player build-driven rotating sigil & 1..4 floating orbiting relics (covering all 500 items/bloodlines)
+  EngineSession.prototype.buildPlayerBuildAura = function (parentGroup, charVis) {
+    var THREE = this.THREE;
+    var auraGroup = new THREE.Group();
+    var primaryHex = hexToInt(charVis && charVis.auraColor, 0x6fd8ea);
+    var accentHex = hexToInt(charVis && charVis.accentColor, 0xf0c46c);
+    var sigilKey = 'sigil_' + ((charVis && charVis.sigilStyle) || 'bagua');
+    var orbiterType = (charVis && charVis.orbiterType) || 'sword';
+    var orbiterCount = clamp(Number(charVis && charVis.orbiterCount) || 2, 1, 4);
+
+    // Subtle under-foot build sigil
+    var sigilGeo = this.trackGeo(new THREE.PlaneGeometry(1.52, 1.52));
+    sigilGeo.rotateX(-Math.PI / 2);
+    var sigilMat = this.trackMat(new THREE.MeshBasicMaterial({
+      map: this.getPropTex(sigilKey, '#6fd8ea'),
+      color: primaryHex,
+      transparent: true,
+      opacity: 0.28 + Math.min(0.18, (Number(charVis && charVis.tierRank) || 0) * 0.04),
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var sigilMesh = new THREE.Mesh(sigilGeo, sigilMat);
+    sigilMesh.position.y = 0.08;
+    auraGroup.add(sigilMesh);
+
+    // Optional S-tier / A-tier / Fused harmonic tilted halo ring
+    var haloMesh = null;
+    var haloMat = null;
+    if ((charVis && charVis.tierRank >= 3) || (charVis && charVis.hasFused)) {
+      var haloGeo = this.trackGeo(new THREE.TorusGeometry(0.84, 0.024, 6, 32));
+      haloMat = this.trackMat(new THREE.MeshBasicMaterial({
+        color: charVis.hasFused ? accentHex : primaryHex,
+        transparent: true,
+        opacity: 0.45,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      }));
+      haloMesh = new THREE.Mesh(haloGeo, haloMat);
+      haloMesh.position.y = 1.05;
+      haloMesh.rotation.x = Math.PI * 0.36;
+      auraGroup.add(haloMesh);
+    }
+
+    // Orbiting relics (flying swords, golden talismans, cyber drone bits, blood shards, void prisms, etc.)
+    var orbiters = [];
+    for (var i = 0; i < orbiterCount; i++) {
+      var orbColor = (i % 2 === 1 && (charVis && charVis.hasFused)) ? accentHex : primaryHex;
+      var mesh;
+      var mat;
+      if (orbiterType === 'sword' || orbiterType === 'talisman' || orbiterType === 'drone_bit') {
+        var spriteKey = orbiterType === 'sword' ? 'vfx_sword_bit' : (orbiterType === 'talisman' ? 'vfx_talisman' : 'vfx_drone_bit');
+        var oGeo = this.trackGeo(new THREE.PlaneGeometry(0.46, 0.46));
+        mat = this.trackMat(new THREE.MeshBasicMaterial({
+          map: this.getPropTex(spriteKey, '#ffffff'),
+          color: orbiterType === 'talisman' ? 0xffffff : orbColor,
+          transparent: true,
+          opacity: 0.85,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending
+        }));
+        mesh = new THREE.Mesh(oGeo, mat);
+        mesh.rotation.x = -0.28;
+      } else if (orbiterType === 'blood_shard' || orbiterType === 'void_prism') {
+        var cGeo = this.trackGeo(new THREE.OctahedronGeometry(0.15, 0));
+        mat = this.trackMat(new THREE.MeshBasicMaterial({
+          color: orbColor,
+          wireframe: orbiterType === 'void_prism',
+          transparent: true,
+          opacity: 0.85,
+          blending: THREE.AdditiveBlending
+        }));
+        mesh = new THREE.Mesh(cGeo, mat);
+        mesh.scale.set(0.85, 1.5, 0.85);
+      } else if (orbiterType === 'bio_helix') {
+        var bGeo = this.trackGeo(new THREE.PlaneGeometry(0.36, 0.36));
+        mat = this.trackMat(new THREE.MeshBasicMaterial({
+          map: this.getPropTex('vfx_heal_cross', '#58e89a'),
+          color: orbColor,
+          transparent: true,
+          opacity: 0.82,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending
+        }));
+        mesh = new THREE.Mesh(bGeo, mat);
+      } else if (orbiterType === 'kinetic_plate') {
+        var kGeo = this.trackGeo(new THREE.BoxGeometry(0.24, 0.32, 0.06));
+        mat = this.trackMat(new THREE.MeshBasicMaterial({
+          color: orbColor,
+          transparent: true,
+          opacity: 0.78,
+          blending: THREE.AdditiveBlending
+        }));
+        mesh = new THREE.Mesh(kGeo, mat);
+      } else {
+        // rune_orb
+        var rGeo = this.trackGeo(new THREE.SphereGeometry(0.12, 8, 8));
+        mat = this.trackMat(new THREE.MeshBasicMaterial({
+          color: orbColor,
+          transparent: true,
+          opacity: 0.88,
+          blending: THREE.AdditiveBlending
+        }));
+        mesh = new THREE.Mesh(rGeo, mat);
+      }
+      auraGroup.add(mesh);
+      orbiters.push({
+        mesh: mesh,
+        mat: mat,
+        phase: (i / orbiterCount) * Math.PI * 2,
+        heightOffset: 0.88 + (i % 2) * 0.34,
+        radius: 0.74 + (i % 2) * 0.12
+      });
+    }
+
+    parentGroup.add(auraGroup);
+    return {
+      group: auraGroup,
+      sigilMesh: sigilMesh,
+      sigilMat: sigilMat,
+      baseSigilOpacity: sigilMat.opacity,
+      haloMesh: haloMesh,
+      haloMat: haloMat,
+      orbiters: orbiters,
+      angle: 0
+    };
+  };
+
+  EngineSession.prototype.updatePlayerBuildAura = function (realDt) {
+    var p = this.player;
+    if (!p || !p.aura) return;
+    var a = p.aura;
+    var isOverclock = p.overclockTimer > 0;
+    var isStealth = p.stealthTimer > 0;
+    if (p.auraPulse > 0) p.auraPulse = Math.max(0, p.auraPulse - realDt * 2.8);
+
+    var spinMult = isOverclock ? 3.2 : (1.0 + p.auraPulse * 2.4);
+    a.angle += realDt * 1.45 * spinMult;
+    a.sigilMesh.rotation.z -= realDt * 0.72 * spinMult;
+    var sc = 1.0 + p.auraPulse * 0.32 + Math.sin(this.elapsedReal * 2.8) * 0.04;
+    a.sigilMesh.scale.set(sc, sc, 1);
+
+    var alphaScale = isStealth ? 0.22 : 1.0;
+    a.sigilMat.opacity = clamp((a.baseSigilOpacity + p.auraPulse * 0.34) * alphaScale, 0.06, 0.85);
+
+    if (a.haloMesh && a.haloMat) {
+      a.haloMesh.rotation.z += realDt * 1.1 * spinMult;
+      a.haloMesh.rotation.y += realDt * 0.65 * spinMult;
+      a.haloMat.opacity = clamp((0.42 + p.auraPulse * 0.38) * alphaScale, 0.08, 0.88);
+    }
+
+    for (var i = 0; i < a.orbiters.length; i++) {
+      var o = a.orbiters[i];
+      var ang = a.angle + o.phase;
+      var rad = o.radius + p.auraPulse * 0.28;
+      o.mesh.position.set(
+        Math.cos(ang) * rad,
+        o.heightOffset + Math.sin(this.elapsedReal * 3.8 + o.phase) * 0.14,
+        Math.sin(ang) * rad
+      );
+      o.mesh.rotation.y = -ang + Math.PI * 0.5;
+      o.mat.opacity = (isOverclock ? 0.96 : 0.82) * alphaScale;
+    }
+  };
+
+  EngineSession.prototype.triggerActorSquash = function (actor, sx, sy) {
+    if (!actor) return;
+    actor.squashX = sx;
+    actor.squashY = sy;
   };
 
   EngineSession.prototype.createWorldTag = function (id, name, color, isBoss) {
@@ -1705,8 +2445,8 @@
       var rtH = Math.max(1, Math.floor(height * pr));
 
       var rt = new THREE.WebGLRenderTarget(rtW, rtH, {
-        minFilter: THREE.NearestFilter,
-        magFilter: THREE.NearestFilter,
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
         format: THREE.RGBAFormat,
         depthBuffer: true,
         stencilBuffer: false
@@ -1736,7 +2476,7 @@
         '',
         'vec3 brightPass(vec3 c) {',
         '  float luma = dot(c, vec3(0.299, 0.587, 0.114));',
-        '  return c * smoothstep(0.56, 0.86, luma);',
+        '  return c * smoothstep(0.76, 0.98, luma);',
         '}',
         '',
         'void main() {',
@@ -1765,20 +2505,20 @@
         '    col += vec3(0.06, 0.09, 0.12) * scanBar * glitch * 0.45;',
         '  }',
         '',
-        '  // Selective 9-tap bright-pass neon bloom (luma > 0.56)',
-        '  float spread = clamp(min(uResolution.x, uResolution.y) / 340.0, 1.2, 3.0);',
-        '  vec2 o1 = texel * (1.8 * spread);',
-        '  vec2 o2 = texel * (3.1 * spread);',
-        '  vec3 bloom = brightPass(col) * 0.20;',
-        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(o1.x, 0.0), 0.0, 1.0)).rgb) * 0.12;',
-        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv - vec2(o1.x, 0.0), 0.0, 1.0)).rgb) * 0.12;',
-        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(0.0, o1.y), 0.0, 1.0)).rgb) * 0.12;',
-        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv - vec2(0.0, o1.y), 0.0, 1.0)).rgb) * 0.12;',
-        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(o2.x, o2.y), 0.0, 1.0)).rgb) * 0.08;',
-        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(-o2.x, o2.y), 0.0, 1.0)).rgb) * 0.08;',
-        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(o2.x, -o2.y), 0.0, 1.0)).rgb) * 0.08;',
-        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(-o2.x, -o2.y), 0.0, 1.0)).rgb) * 0.08;',
-        '  col += bloom * vec3(1.08, 1.03, 1.06) * 0.68;',
+        '  // Selective 9-tap bright-pass neon bloom (calibrated threshold luma > 0.76, zero white washout!)',
+        '  float spread = clamp(min(uResolution.x, uResolution.y) / 360.0, 1.1, 2.6);',
+        '  vec2 o1 = texel * (1.7 * spread);',
+        '  vec2 o2 = texel * (2.9 * spread);',
+        '  vec3 bloom = brightPass(col) * 0.18;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(o1.x, 0.0), 0.0, 1.0)).rgb) * 0.11;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv - vec2(o1.x, 0.0), 0.0, 1.0)).rgb) * 0.11;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(0.0, o1.y), 0.0, 1.0)).rgb) * 0.11;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv - vec2(0.0, o1.y), 0.0, 1.0)).rgb) * 0.11;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(o2.x, o2.y), 0.0, 1.0)).rgb) * 0.07;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(-o2.x, o2.y), 0.0, 1.0)).rgb) * 0.07;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(o2.x, -o2.y), 0.0, 1.0)).rgb) * 0.07;',
+        '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(-o2.x, -o2.y), 0.0, 1.0)).rgb) * 0.07;',
+        '  col += bloom * vec3(1.04, 1.01, 1.04) * 0.36;',
         '',
         '  // Obsidian vignette + subtle micro film grain',
         '  vec2 centered = vUv * 2.0 - 1.0;',
@@ -2150,10 +2890,12 @@
     this.camera.position.set(this.camPos.x + sx + this.camKickX, 16.5 + sy, this.camPos.z + 13.5 + this.camKickZ);
     this.camera.lookAt(this.camLook.x + this.camKickX * 0.35, 0.6, this.camLook.z + this.camKickZ * 0.35);
 
-    // Subtle dynamic FOV modulation for Bullet-Time / Overclock
-    var targetFov = (this.slowMo || this.inputPaused) ? 35.8 : (p.overclockTimer > 0 ? 40.5 : 38.0);
-    if (Math.abs(this.camera.fov - targetFov) > 0.05) {
-      this.camera.fov = lerp(this.camera.fov, targetFov, 1 - Math.exp(-8 * realDt));
+    // Subtle dynamic FOV modulation for Bullet-Time / Overclock + impact zoom punch
+    this.camFovPunch *= Math.exp(-11.5 * realDt);
+    if (Math.abs(this.camFovPunch) < 0.02) this.camFovPunch = 0;
+    var targetFov = ((this.slowMo || this.inputPaused) ? 35.8 : (p.overclockTimer > 0 ? 40.5 : 38.0)) + this.camFovPunch;
+    if (Math.abs(this.camera.fov - targetFov) > 0.04) {
+      this.camera.fov = lerp(this.camera.fov, targetFov, 1 - Math.exp(-9.5 * realDt));
       this.camera.updateProjectionMatrix();
     }
   };
@@ -2179,7 +2921,9 @@
     if (p.attackCd > 0) p.attackCd = Math.max(0, p.attackCd - playerDt);
     if (p.invulnTimer > 0) p.invulnTimer = Math.max(0, p.invulnTimer - simDt);
     if (p.actionTimer > 0) p.actionTimer = Math.max(0, p.actionTimer - simDt);
+    if (p.channelTimer > 0) p.channelTimer = Math.max(0, p.channelTimer - simDt);
     if (p.hitFlash > 0) p.hitFlash = Math.max(0, p.hitFlash - realDt);
+    if (p.whiteFlash > 0) p.whiteFlash = Math.max(0, p.whiteFlash - realDt);
     if (this.exitWarnTimer > 0) this.exitWarnTimer = Math.max(0, this.exitWarnTimer - realDt);
 
     for (var si = 0; si < this.loadout.slots.length; si++) {
@@ -2189,12 +2933,22 @@
       }
     }
 
-    // Shield timer
+    // Fresnel Hex-Geodesic Shield timer & dual orbit spin
     if (p.shieldTimer > 0) {
       p.shieldTimer -= simDt;
       p.shieldMesh.visible = true;
-      p.shieldMesh.rotation.y += realDt * 1.4;
-      p.shieldMesh.rotation.x += realDt * 0.6;
+      if (p.shieldMat && p.shieldMat.uniforms && p.shieldMat.uniforms.uTime) {
+        p.shieldMat.uniforms.uTime.value = this.elapsedReal;
+      }
+      if (p.shieldShell) {
+        p.shieldShell.rotation.y += realDt * 0.95;
+      }
+      if (p.shieldRing) {
+        p.shieldRing.rotation.z -= realDt * 2.2;
+      }
+      if (p.shieldOrbit2) {
+        p.shieldOrbit2.rotation.z += realDt * 2.6;
+      }
       if (p.shieldTimer <= 0 || p.shieldHp <= 0) {
         p.shieldHp = 0;
         p.shieldTimer = 0;
@@ -2204,29 +2958,64 @@
       p.shieldMesh.visible = false;
     }
 
-    // Overclock timer & cyan afterimage trails
+    // Overclock timer, motif-colored afterimages & crackling speed micro-arcs
     if (p.overclockTimer > 0) {
       p.overclockTimer = Math.max(0, p.overclockTimer - simDt);
       p.afterimageAccum += simDt;
-      if (p.afterimageAccum >= 0.11) {
+      p.overclockArcCd = (p.overclockArcCd || 0) - realDt;
+      var ocColor = p.overclockColor || 0x4df8ff;
+      if (p.afterimageAccum >= 0.095) {
         p.afterimageAccum = 0;
-        this.spawnAfterimage(p.x, p.z, 'player', p.facingLeft, 0x4df8ff, 0.38);
+        this.spawnAfterimage(p.x, p.z, 'player', p.facingLeft, ocColor, 0.36, p.dashTimer > 0 ? 'dash' : 'walk1');
+      }
+      if (p.overclockArcCd <= 0) {
+        p.overclockArcCd = 0.24;
+        var oa = Math.random() * Math.PI * 2;
+        this.spawnLightningBolt(
+          p.x + Math.cos(oa) * 0.25, 0.55 + Math.random() * 0.7, p.z + Math.sin(oa) * 0.25,
+          p.x + Math.cos(oa + 1.4) * 0.95, 0.25 + Math.random() * 1.1, p.z + Math.sin(oa + 1.4) * 0.95,
+          ocColor, 0.14, 4
+        );
       }
     }
 
-    // Stealth veil visual opacity
+    // Stealth veil optical-camo scanline shimmer
     if (p.stealthTimer > 0) {
       p.stealthTimer = Math.max(0, p.stealthTimer - simDt);
-      p.vis.mat.opacity = 0.34;
+      p.vis.mat.opacity = 0.26 + Math.sin(this.elapsedReal * 24) * 0.07;
     } else {
       p.vis.mat.opacity = 1.0;
     }
 
-    // Blink beacon expiration
+    // Low-HP crimson Infinity wristwatch heartbeat pulse (< 35% HP)
+    if (p.hp > 0 && p.hp / Math.max(1, p.maxHp) <= 0.35) {
+      p.lowHpPulseCd = (p.lowHpPulseCd || 0) - realDt;
+      if (p.lowHpPulseCd <= 0) {
+        p.lowHpPulseCd = 1.15;
+        this.spawnShockRing(p.x, p.z, 1.35, 0xff2b44, 0.48);
+      }
+    }
+
+    // Update build-driven aura sigil & orbiting relics
+    this.updatePlayerBuildAura(realDt);
+
+    // Blink beacon expiration & sculpted spatial rift animation
     if (this.blinkBeacon) {
       this.blinkBeacon.ttl -= simDt;
-      this.blinkBeacon.mesh.rotation.y += realDt * 3.0;
-      this.blinkBeacon.mesh.position.y = 0.85 + Math.sin(this.elapsedReal * 5) * 0.12;
+      if (this.blinkBeacon.crystal) {
+        this.blinkBeacon.crystal.rotation.y += realDt * 3.0;
+        this.blinkBeacon.crystal.position.y = 1.2 + Math.sin(this.elapsedReal * 4.2) * 0.14;
+      } else if (this.blinkBeacon.mesh) {
+        this.blinkBeacon.mesh.rotation.y += realDt * 3.0;
+        this.blinkBeacon.mesh.position.y = 0.85 + Math.sin(this.elapsedReal * 5) * 0.12;
+      }
+      if (this.blinkBeacon.ringA) this.blinkBeacon.ringA.rotation.z += realDt * 2.2;
+      if (this.blinkBeacon.ringB) this.blinkBeacon.ringB.rotation.z -= realDt * 2.6;
+      if (this.blinkBeacon.sigil) this.blinkBeacon.sigil.rotation.z -= realDt * 1.4;
+      if (this.blinkBeacon.riftMat && this.blinkBeacon.riftMat.uniforms) {
+        this.blinkBeacon.riftMat.uniforms.uTime.value = this.elapsedReal;
+      }
+      if (this.blinkBeacon.ring) this.blinkBeacon.ring.rotation.z -= realDt * 1.8;
       if (this.blinkBeacon.ttl <= 0) {
         this.removeBlinkBeacon();
       }
@@ -2239,6 +3028,11 @@
       if (this.reconRevealTimer <= 0) {
         this.clearReconBeacons();
       }
+    }
+
+    // Active objective waypoint guidance beacon & player compass arrow
+    if (this.focusWaypoint) {
+      this.updateFocusWaypoint(realDt);
     }
 
     // Movement input (WASD / Arrows) or Dash
@@ -2256,7 +3050,7 @@
       p.dashTimer = Math.max(0, p.dashTimer - simDt);
       p.vx = p.dashVx;
       p.vz = p.dashVz;
-      this.spawnAfterimage(p.x, p.z, 'player', p.facingLeft, 0xff4658, 0.26);
+      this.spawnAfterimage(p.x, p.z, 'player', p.facingLeft, p.dashColor || 0xff4658, 0.28, 'dash');
     } else if (mx !== 0 || mz !== 0) {
       var len = Math.sqrt(mx * mx + mz * mz);
       p.vx = (mx / len) * speed;
@@ -2273,8 +3067,17 @@
       p.x = res.x;
       p.z = res.z;
 
+      var stepDist = Math.sqrt(p.vx * p.vx + p.vz * p.vz) * simDt;
+      // Grounded wet-slate puddle ripples / boot dust
+      p.stepRippleAccum = (p.stepRippleAccum || 0) + stepDist;
+      if (p.stepRippleAccum >= 1.35 && p.stealthTimer <= 0) {
+        p.stepRippleAccum = 0;
+        var rippleCol = isOverclock ? (p.overclockColor || 0x4df8ff) : (p.x >= 41 ? 0x9aa9be : 0x56b6cc);
+        this.spawnFootstepRipple(p.x, p.z, rippleCol, isOverclock ? 0.62 : 0.42);
+      }
+
       // Footsteps & acoustic ripples
-      p.footstepAccum += Math.sqrt(p.vx * p.vx + p.vz * p.vz) * simDt;
+      p.footstepAccum += stepDist;
       if (p.footstepAccum >= 2.2) {
         p.footstepAccum = 0;
         var noise = 24 * this.passives.noiseMult * (p.stealthTimer > 0 ? 0.2 : 1.0);
@@ -2294,9 +3097,24 @@
     // Facing toward mouse aim
     p.facingLeft = (this.aimWorld.x < p.x);
 
-    // Update sprite frame & position
+    // Update sprite frame & kinematics
     var moving = (Math.abs(p.vx) + Math.abs(p.vz)) > 0.2;
     this.updateActorSprite(p, simDt, moving);
+
+    // Track newly visited zones for real-time exploration progress & mission log
+    if (this.mapApi) {
+      var curZoneId = this.mapApi.getZoneAt(p.x, p.z);
+      if (curZoneId && this.visitedZones.indexOf(curZoneId) === -1) {
+        this.visitedZones.push(curZoneId);
+        var zInfo = getZoneInfo(this.mapApi, curZoneId);
+        this.recordMissionEvent(
+          'progress',
+          '抵达新区域 · ' + zInfo.name,
+          '已勘探站台区域 ' + this.visitedZones.length + ' / 6（' + zInfo.code + '）。',
+          { zoneId: curZoneId }
+        );
+      }
+    }
 
     // Yellow line rule check (entering hazard/rail strip before overridePct >= 100)
     if (p.x >= 49.0 && this.overridePct < 100 && this.inspector.alive && this.inspector.state !== 'HUNT') {
@@ -2306,51 +3124,149 @@
       this.emitSoundRipple(p.x, p.z, 90, 'yellow_line');
       this.spawnFloatingText(p.x, 2.2, p.z, '越过黄线！检票员锁定！', '#ff3b4f');
       playSfxSafe('alert');
+      if (!this.missionFlags.yellowLineViolated) {
+        this.missionFlags.yellowLineViolated = true;
+        this.setBranchState('yellow_line', 'warning', '未完成逆轨便越过 0 号站台黄线，触发检票员强制追猎！', 100);
+        this.recordMissionEvent(
+          'branch',
+          '触发逻辑分支 · 黄线即决违例',
+          '你在主轨极性未反转前踏入 0 号站台警戒黄线，零号检票员已切换为高危追猎锁定状态。',
+          { branchId: 'yellow_line', zoneId: 'platform0' }
+        );
+      } else {
+        this.recordMissionEvent(
+          'warning',
+          '再次越过黄线警戒区',
+          '检票员重新锁定你的坐标，请迅速撤离黄线内侧或展开结界防线。',
+          { branchId: 'yellow_line', zoneId: 'platform0' }
+        );
+      }
     }
   };
 
   EngineSession.prototype.updateActorSprite = function (actor, dt, moving) {
+    var safeDt = Math.max(0.001, dt || 0.016);
+    actor.idlePhase = (actor.idlePhase || 0) + safeDt;
+    if (actor.channelTimer > 0 && actor.id !== 'player') {
+      actor.channelTimer = Math.max(0, actor.channelTimer - safeDt);
+    }
+
+    var isDash = (actor.dashTimer > 0) || (actor.id === 'inspector' && actor.lungeActive > 0);
+    var isHurt = (actor.hitFlash > 0.09);
     var nextFrame = 'idle';
-    if (actor.actionTimer > 0) {
+    if (isHurt) {
+      nextFrame = 'hurt';
+    } else if (isDash) {
+      nextFrame = 'dash';
+    } else if (actor.actionTimer > 0) {
       nextFrame = 'action';
+    } else if (actor.channelTimer > 0) {
+      nextFrame = 'channel';
     } else if (moving) {
-      actor.animTimer += dt * 7.2;
+      actor.animTimer += safeDt * (actor.overclockTimer > 0 ? 10.5 : 7.4);
       nextFrame = (Math.floor(actor.animTimer) % 2 === 0) ? 'walk1' : 'walk2';
     } else {
       actor.animTimer = 0;
-      nextFrame = 'idle';
+      // Breathing idle cadence (idle <-> idle2)
+      nextFrame = (Math.sin(actor.idlePhase * 2.6) > 0.35) ? 'idle2' : 'idle';
     }
 
     if (actor.animFrame !== nextFrame) {
       actor.animFrame = nextFrame;
       var tex = this.getCharTex(actor.id, nextFrame);
+      var norm = this.getCharNormalTex(actor.id, nextFrame);
+      var emTex = this.getCharEmissiveTex(actor.id, nextFrame);
       if (tex && actor.vis.mat.map !== tex) {
         actor.vis.mat.map = tex;
-        actor.vis.mat.emissiveMap = tex;
+        if (norm) actor.vis.mat.normalMap = norm;
+        actor.vis.mat.emissiveMap = emTex || tex;
         actor.vis.mat.needsUpdate = true;
       }
     }
 
     actor.vis.group.position.set(actor.x, 0, actor.z);
-    actor.vis.sprite.scale.x = actor.facingLeft ? -1 : 1;
 
-    // Subtle walk bob
-    var baseY = (actor.id === 'inspector' ? 2.6 : 1.85) * 0.5 + 0.05;
-    actor.vis.sprite.position.y = baseY + (moving ? Math.abs(Math.sin(actor.animTimer * Math.PI)) * 0.08 : 0);
+    // Smooth squash-and-stretch spring recovery + subtle breathing micro-scale
+    var damp = 1 - Math.exp(-14 * safeDt);
+    actor.squashX = lerp(actor.squashX || 1, 1, damp);
+    actor.squashY = lerp(actor.squashY || 1, 1, damp);
+    var breatheScaleY = moving ? 1.0 : (1.0 + Math.sin(actor.idlePhase * 2.6) * 0.018);
+    var dirSign = actor.facingLeft ? -1 : 1;
+    actor.vis.sprite.scale.set(dirSign * actor.squashX, actor.squashY * breatheScaleY, 1);
 
-    // Hit flash tint (pure-white emissive impact flash takes top priority!)
+    // Velocity-driven body lean (tilts cleanly into movement & dashes!)
+    var targetLean = 0;
+    if (isHurt) {
+      targetLean = actor.facingLeft ? -0.14 : 0.14;
+    } else if (isDash) {
+      targetLean = actor.facingLeft ? 0.16 : -0.16;
+    } else if (moving && Math.abs(actor.vx || 0) > 0.25) {
+      targetLean = clamp(-(actor.vx || 0) * 0.014, -0.09, 0.09);
+    }
+    actor.leanZ = lerp(actor.leanZ || 0, targetLean, 1 - Math.exp(-12 * safeDt));
+    actor.vis.sprite.rotation.z = actor.leanZ;
+
+    // Subtle grounded walk bob & contact/cast shadow sync
+    var spriteH = (actor.id === 'inspector' ? 2.85 : (actor.id === 'player' ? 2.02 : 1.98));
+    var baseY = spriteH * 0.5 + 0.05;
+    var bobOffset = moving ? Math.abs(Math.sin(actor.animTimer * Math.PI)) * 0.085 : 0;
+    actor.vis.sprite.position.y = baseY + bobOffset + (actor.squashY - 1) * (spriteH * 0.35);
+    if (actor.vis.shadow) {
+      var shScale = 1.0 - bobOffset * 0.65;
+      actor.vis.shadow.scale.set(shScale, shScale, 1);
+    }
+    if (actor.vis.castShadow) {
+      var cScale = 1.0 - bobOffset * 0.45;
+      actor.vis.castShadow.scale.set(1.38 * cScale, 1, 0.85 * cScale);
+    }
+
+    // Hit flash / status emissive tint (pure-white impact flash takes top priority!)
     if (actor.whiteFlash > 0) {
       actor.vis.mat.emissive.setHex(0xffffff);
       actor.vis.mat.emissiveIntensity = 3.2;
     } else if (actor.hitFlash > 0) {
       actor.vis.mat.emissive.setHex(0xff7788);
-      actor.vis.mat.emissiveIntensity = 0.95;
+      actor.vis.mat.emissiveIntensity = 1.35;
     } else if (actor.id === 'inspector' && actor.stunTimer > 0) {
       actor.vis.mat.emissive.setHex(0x66e8ff);
-      actor.vis.mat.emissiveIntensity = 0.72;
+      actor.vis.mat.emissiveIntensity = 1.15;
+    } else if (actor.id === 'player' && actor.overclockTimer > 0) {
+      actor.vis.mat.emissive.setHex(actor.overclockColor || 0x4df8ff);
+      actor.vis.mat.emissiveIntensity = 1.05;
+    } else if (actor.id === 'player' && actor.stealthTimer > 0) {
+      actor.vis.mat.emissive.setHex(actor.stealthColor || 0x9e82ff);
+      actor.vis.mat.emissiveIntensity = 0.85;
     } else {
       actor.vis.mat.emissive.setHex(0xffffff);
-      actor.vis.mat.emissiveIntensity = actor.id === 'inspector' ? 0.48 : 0.34;
+      actor.vis.mat.emissiveIntensity = actor.id === 'inspector' ? 1.05 : 0.88;
+    }
+
+    // Dynamic HP / SAN per-unit GLSL shader uniform updates (all combat units)
+    if (actor.vis && actor.vis.statusUniforms) {
+      var su = actor.vis.statusUniforms;
+      var targetHpRatio = clamp((Number(actor.hp) || 0) / Math.max(1, Number(actor.maxHp) || 100), 0, 1);
+      var targetSanRatio = 1.0;
+
+      if (actor.id === 'inspector') {
+        // Boss anomaly stability drops when sealed, EMP-stunned, seal-chained, or in Phase-2 frenzy
+        var bossStab = 0.88 - (Number(actor.sealedPct) || 0) * 0.0068;
+        if (actor.stunTimer > 0) bossStab -= 0.44;
+        if (actor.chainTimer > 0) bossStab -= 0.22;
+        if (targetHpRatio < 0.55) bossStab -= 0.26;
+        targetSanRatio = clamp(bossStab, 0.06, 1.0);
+      } else if (typeof actor.sanity === 'number') {
+        targetSanRatio = clamp(actor.sanity / Math.max(1, Number(actor.maxSanity) || 100), 0, 1);
+      }
+
+      if (typeof actor.shaderHpRatio !== 'number') actor.shaderHpRatio = targetHpRatio;
+      if (typeof actor.shaderSanRatio !== 'number') actor.shaderSanRatio = targetSanRatio;
+      var shDamp = 1 - Math.exp(-7.5 * safeDt);
+      actor.shaderHpRatio = lerp(actor.shaderHpRatio, targetHpRatio, shDamp);
+      actor.shaderSanRatio = lerp(actor.shaderSanRatio, targetSanRatio, shDamp);
+
+      su.uStatusTime.value = this.elapsedReal;
+      su.uHpRatio.value = actor.shaderHpRatio;
+      su.uSanRatio.value = actor.shaderSanRatio;
     }
   };
 
@@ -2370,35 +3286,45 @@
     if (p.attackCd > 0 || this.ended) return;
 
     var basic = this.loadout.basicAttack;
+    var vfx = basic.vfxProfile || null;
     p.attackCd = Math.max(0.22, Number(basic.cooldown) || 0.36);
     p.actionTimer = 0.24;
+    p.auraPulse = Math.max(p.auraPulse || 0, 0.35);
+    this.triggerActorSquash(p, 1.14, 0.90);
 
     var dir = this.getAimDir();
-    var colorHex = hexToInt(basic.color, 0x6fd8ea);
+    var colorHex = hexToInt((vfx && vfx.primaryColor) || basic.color, 0x6fd8ea);
+    var secHex = hexToInt((vfx && vfx.secondaryColor) || basic.color, 0xffffff);
     var baseDmg = Number(basic.damage) || Number(basic.power) || 16;
     var dmg = Math.round(baseDmg * this.passives.damageMult);
     var kb = Number(basic.knockback) || 2.2;
     var isRanged = basic.mode === 'ranged' || basic.type === 'ranged' || (Number(basic.range) || 3.0) > 4.2;
 
     if (isRanged) {
+      // Crisp muzzle flare + comet projectile + build particle signature
+      this.spawnSparkBurst(p.x + dir.x * 0.65, 1.05, p.z + dir.z * 0.65, secHex, 5);
+      this.spawnSkillParticleFx(basic, p.x + dir.x * 0.55, 1.05, p.z + dir.z * 0.55, dir.angle, 2.2, { intensityScale: 0.52 });
       this.spawnProjectile({
         owner: 'player',
         x: p.x + dir.x * 0.55,
         z: p.z + dir.z * 0.55,
-        vx: dir.x * 21,
-        vz: dir.z * 21,
+        vx: dir.x * 22,
+        vz: dir.z * 22,
         damage: dmg,
         knockback: kb,
         color: colorHex,
-        radius: 0.28,
-        ttl: 0.9
+        secondaryColor: secHex,
+        radius: 0.24,
+        ttl: 0.9,
+        vfxProfile: vfx
       });
       this.emitSoundRipple(p.x, p.z, 38 * this.passives.noiseMult, 'attack');
       playSfxSafe('ui_click');
     } else {
-      // Crisp melee crescent arc
+      // Crisp layered melee crescent arc
       var range = Number(basic.range) || 3.2;
-      this.spawnSlashArc(p.x, p.z, dir.angle, range, colorHex, 0.22, false);
+      this.spawnSlashArc(p.x, p.z, dir.angle, range, colorHex, 0.23, false, vfx);
+      this.spawnSkillParticleFx(basic, p.x, 1.0, p.z, dir.angle, range * 0.85, { intensityScale: 0.52 });
       this.emitSoundRipple(p.x, p.z, 30 * this.passives.noiseMult, 'attack');
       playSfxSafe('sword_slash');
 
@@ -2406,7 +3332,8 @@
       if (this.inspector.alive && this.isPointInArc(p.x, p.z, dir.x, dir.z, this.inspector.x, this.inspector.z, range + this.inspector.radius, 0.35)) {
         this.damageInspector(dmg, dir.x * Math.max(2.2, kb), dir.z * Math.max(2.2, kb), false, {
           playerImpact: true,
-          hitStop: 0.05
+          hitStop: 0.048,
+          impactColor: colorHex
         });
         this.addCameraShake(0.16, 0.15);
       }
@@ -2445,21 +3372,98 @@
     if (!isBlinkRecall) {
       p.energy = Math.max(0, p.energy - sl.energyCost);
     }
-    p.actionTimer = 0.32;
+    p.actionTimer = 0.34;
+    p.auraPulse = 1.0;
+    this.triggerActorSquash(p, 1.18, 0.86);
     this.stats.skillsCast += 1;
 
     var dir = this.getAimDir();
-    var colorHex = hexToInt(sl.color, 0x6fd8ea);
+    var vfx = sl.vfxProfile || {
+      motif: 'cyber_tactical',
+      primaryColor: sl.color || '#6fd8ea',
+      secondaryColor: '#ffffff',
+      coreColor: '#ffffff',
+      sigilStyle: 'tactical_hud',
+      tierIntensity: 1.0,
+      isHighTier: false,
+      isFused: false,
+      isGamble: false,
+      shapeVariant: slotIdx % 4
+    };
+    var colorHex = hexToInt(vfx.primaryColor || sl.color, 0x6fd8ea);
+    var secHex = hexToInt(vfx.secondaryColor || sl.color, 0xffffff);
     var power = Math.round((sl.power || 28) * this.passives.damageMult);
     var radius = sl.radius || 3.6;
     var duration = sl.duration || 4.0;
     var ins = this.inspector;
 
+    // Evaluate Bloodline Resonance (血统共鸣系统) — apply numeric bonuses & trigger arena-wide global VFX
+    var resonance = sl.resonance;
+    if (!resonance && this.skillsApi && this.skillsApi.BloodlineResonance && this.loadout && this.loadout.bloodlines && this.loadout.bloodlines.length > 0) {
+      resonance = this.skillsApi.BloodlineResonance.evaluate(this.loadout.bloodlines, sl);
+    }
+    var activeResonance = (resonance && resonance.matched && !isBlinkRecall) ? resonance : null;
+    if (activeResonance) {
+      var rb = activeResonance.bonuses;
+      power = Math.round(power * (rb.powerMult || 1.0));
+      radius = Number((radius * (rb.radiusMult || 1.0)).toFixed(2));
+      duration = Number((duration * (rb.durationMult || 1.0)).toFixed(2));
+      if (rb.energyRefund > 0) {
+        p.energy = Math.min(p.maxEnergy, p.energy + rb.energyRefund);
+      }
+      if (rb.hpBonus > 0) {
+        p.hp = Math.min(p.maxHp, p.hp + rb.hpBonus);
+      }
+      if (rb.sanBonus > 0) {
+        p.sanity = Math.min(p.maxSanity, p.sanity + rb.sanBonus);
+      }
+      if (rb.slowBonusSec > 0 && ins && ins.alive && dist2D(p.x, p.z, ins.x, ins.z) <= Math.max(radius + 4.5, 9.5)) {
+        ins.chainTimer = Math.max(ins.chainTimer || 0, rb.slowBonusSec);
+        if (activeResonance.affinityId === 'frost') {
+          ins.stunTimer = Math.max(ins.stunTimer || 0, rb.slowBonusSec * 0.45);
+        }
+        this.spawnImpactStar(ins.x, 1.4, ins.z, activeResonance.colors.primaryHex, 2.3, 0.34);
+      }
+      this.spawnResonanceGlobalVfx(activeResonance, p.x, p.z, dir.angle);
+      this.spawnFloatingText(
+        p.x,
+        2.55,
+        p.z,
+        '✦ ' + activeResonance.resonanceName + ' · ' + activeResonance.summaryText,
+        activeResonance.colors.primary,
+        true
+      );
+      var nowSec = this.stats.elapsedSec || 0;
+      if (nowSec - (sl.lastResonanceRadioAt || -99) >= 12) {
+        sl.lastResonanceRadioAt = nowSec;
+        this.emitRadio({
+          type: 'spark',
+          speaker: '血统共鸣',
+          text: '【' + activeResonance.badgeText + '】「' + activeResonance.bloodlineName + '」与「' + (sl.name || '技能') + '」产生共鸣：' + activeResonance.summaryText + '。'
+        });
+      }
+    }
+
+    // Trigger predefined 500-skill Three.js Particle VFX choreography (arc_shock, shield_refract, etc.)
+    this.spawnSkillParticleFx(sl, p.x, 1.02, p.z, dir.angle, radius, activeResonance ? { intensityScale: 1.25 } : null);
+
+    // Signature Tier-S / Fused / Gamble flourish at caster origin (covers all 500 items' prestige tiers!)
+    if (vfx.isHighTier || vfx.isFused || activeResonance) {
+      this.spawnSigilPulse(p.x, p.z, 2.2 * (vfx.tierIntensity || 1.1) * (activeResonance ? 1.18 : 1.0), vfx.sigilStyle, activeResonance ? activeResonance.colors.primaryHex : colorHex, 0.52);
+    }
+    if (vfx.isGamble) {
+      this.spawnSparkBurst(p.x, 1.15, p.z, 0xff3858, 12);
+    }
+
     switch (sl.archetype) {
       case 'sword_arc': {
         var arcRange = Math.max(3.8, radius);
-        this.spawnSlashArc(p.x, p.z, dir.angle, arcRange, colorHex, 0.34, true);
-        this.spawnScorchDecal(p.x, p.z, dir.angle, arcRange);
+        this.spawnSlashArc(p.x, p.z, dir.angle, arcRange, colorHex, 0.36, true, vfx);
+        this.spawnScorchDecal(p.x, p.z, dir.angle, arcRange, colorHex);
+        // High-tier or variant 1/3 fires a follow-up cross-crescent!
+        if (vfx.isHighTier || vfx.isFused || vfx.shapeVariant === 1) {
+          this.spawnSlashArc(p.x, p.z, dir.angle + 0.14, arcRange * 0.92, secHex, 0.28, false, vfx);
+        }
         playSfxSafe('sword_slash');
         this.emitSoundRipple(p.x, p.z, 46 * this.passives.noiseMult, 'skill');
 
@@ -2471,33 +3475,39 @@
           ins.lungeActive = 0;
           ins.teleMesh.visible = false;
           ins.teleFill.visible = false;
+          if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
           ins.stunTimer = Math.max(ins.stunTimer, 2.8);
           p.energy = Math.min(p.maxEnergy, p.energy + 25);
           this.stats.parries += 1;
           var parryDmg = Math.round(power * 1.8);
           this.damageInspector(parryDmg, dir.x * 6.5, dir.z * 6.5, true, {
             playerImpact: true,
-            hitStop: 0.075
+            hitStop: 0.08,
+            impactColor: 0xffe484
           });
-          this.hitStopTimer = 0.075;
-          this.parryFlashTimer = 0.22;
+          this.hitStopTimer = 0.08;
+          this.parryFlashTimer = 0.24;
+          this.camFovPunch = -3.4;
           this.addCameraShake(0.48, 0.34);
           this.addCameraKick(dir.x * 0.62, dir.z * 0.62);
-          this.spawnShockRing(ins.x, ins.z, 4.8, 0xffe484, 0.48);
-          this.spawnShockRing(ins.x, ins.z, 2.6, 0xffffff, 0.28);
-          this.spawnSparkBurst(ins.x, 1.35, ins.z, 0xffe07d, 22);
+          this.spawnImpactStar(ins.x, 1.45, ins.z, 0xffe484, 3.2, 0.36);
+          this.spawnShockRing(ins.x, ins.z, 5.2, 0xffe484, 0.50);
+          this.spawnShockRing(ins.x, ins.z, 2.8, 0xffffff, 0.28);
+          this.spawnSparkBurst(ins.x, 1.35, ins.z, 0xffe07d, 26);
           playSfxSafe('parry_clang');
-          this.spawnFloatingText(ins.x, 3.0, ins.z, '✦ 完美弹反! 宵练断势', '#ffe484', true);
+          this.spawnFloatingText(ins.x, 3.0, ins.z, '✦ 完美弹反! ' + (sl.name || '宵练断势'), '#ffe484', true);
           this.emitRadio({
             type: 'spark',
             speaker: '系统校验',
-            text: '【完美弹反】你以宵练剑弧截断了零号检票员的处决突刺，使其陷入 2.8 秒硬直并返还 25 点能量！'
+            text: '【完美弹反】你以「' + (sl.name || '宵练剑弧') + '」截断了零号检票员的处决突刺，使其陷入 2.8 秒硬直并返还 25 点能量！'
           });
         } else if (ins.alive && this.isPointInArc(p.x, p.z, dir.x, dir.z, ins.x, ins.z, arcRange + ins.radius, 0.15)) {
-          this.damageInspector(power, dir.x * 5.0, dir.z * 5.0, false, {
+          this.damageInspector(power, dir.x * 5.0, dir.z * 5.0, vfx.isHighTier, {
             playerImpact: true,
-            hitStop: 0.05
+            hitStop: 0.055,
+            impactColor: colorHex
           });
+          this.spawnImpactStar(ins.x, 1.35, ins.z, colorHex, 1.9, 0.24);
           this.addCameraShake(0.24, 0.18);
         }
         sl.cooldownLeft = sl.cooldownMax;
@@ -2508,9 +3518,9 @@
         var wx = p.x + dir.x * 1.1;
         var wz = p.z + dir.z * 1.1;
         var wSafe = this.mapApi.resolveCircleWallCollision(wx, wz, 0.5);
-        this.spawnWardCircle(wSafe.x, wSafe.z, Math.max(3.0, radius), Math.max(6.5, duration), colorHex);
+        this.spawnWardCircle(wSafe.x, wSafe.z, Math.max(3.0, radius), Math.max(6.5, duration), colorHex, vfx);
         playSfxSafe('ward_hum');
-        this.spawnFloatingText(wSafe.x, 2.1, wSafe.z, '结界展开 · 阻断追踪', '#f0c46c');
+        this.spawnFloatingText(wSafe.x, 2.1, wSafe.z, (sl.name || '结界展开') + ' · 阻断追踪', vfx.primaryColor || '#f0c46c');
         sl.cooldownLeft = sl.cooldownMax;
         break;
       }
@@ -2531,7 +3541,8 @@
           radius: Math.max(4.4, radius),
           power: power,
           stunSec: Math.max(3.5, duration),
-          color: colorHex
+          color: colorHex,
+          vfxProfile: vfx
         });
         playSfxSafe('alert');
         sl.cooldownLeft = sl.cooldownMax;
@@ -2540,17 +3551,20 @@
 
       case 'rail_shot': {
         var endPt = this.raycastWall(p.x, p.z, dir.x, dir.z, 22);
-        this.spawnLaserBeam(p.x, p.z, endPt.x, endPt.z, colorHex, 0.36);
+        this.spawnLaserBeam(p.x, p.z, endPt.x, endPt.z, colorHex, 0.40, vfx);
         this.emitSoundRipple(p.x, p.z, 76 * this.passives.noiseMult, 'skill');
         this.addCameraShake(0.32, 0.22);
-        this.addCameraKick(-dir.x * 0.45, -dir.z * 0.45);
+        this.addCameraKick(-dir.x * 0.48, -dir.z * 0.48);
+        this.camFovPunch = 2.0;
         playSfxSafe('rail_fire');
 
-        if (ins.alive && this.segmentCircleHit(p.x, p.z, endPt.x, endPt.z, ins.x, ins.z, ins.radius + 0.5)) {
+        if (ins.alive && this.segmentCircleHit(p.x, p.z, endPt.x, endPt.z, ins.x, ins.z, ins.radius + 0.55)) {
           this.damageInspector(Math.round(power * 1.35), dir.x * 7.2, dir.z * 7.2, true, {
             playerImpact: true,
-            hitStop: 0.05
+            hitStop: 0.06,
+            impactColor: colorHex
           });
+          this.spawnImpactStar(ins.x, 1.35, ins.z, colorHex, 2.4, 0.28);
         }
         sl.cooldownLeft = sl.cooldownMax;
         break;
@@ -2558,63 +3572,87 @@
 
       case 'blink_mark': {
         if (!this.blinkBeacon) {
-          this.placeBlinkBeacon(p.x, p.z, colorHex);
+          this.placeBlinkBeacon(p.x, p.z, colorHex, vfx);
           playSfxSafe('ward_place');
-          this.spawnFloatingText(p.x, 2.0, p.z, '空间锚点已布设 (再按召回)', '#66e8ff');
+          this.spawnFloatingText(p.x, 2.0, p.z, (sl.name || '空间锚点') + '已布设 (再按召回)', vfx.primaryColor || '#66e8ff');
           sl.cooldownLeft = 0.4;
         } else {
           var ox = p.x;
           var oz = p.z;
           var bx = this.blinkBeacon.x;
           var bz = this.blinkBeacon.z;
-          for (var ai = 0; ai < 5; ai++) {
-            var frac = ai / 4;
-            this.spawnAfterimage(lerp(ox, bx, frac), lerp(oz, bz, frac), 'player', p.facingLeft, colorHex, 0.45 - frac * 0.06);
+          // Dimensional rift beam connecting origin -> destination
+          this.spawnLaserBeam(ox, oz, bx, bz, colorHex, 0.34, vfx);
+          this.spawnSigilPulse(ox, oz, 2.2, vfx.sigilStyle, secHex, 0.45);
+          for (var ai = 0; ai < 6; ai++) {
+            var frac = ai / 5;
+            this.spawnAfterimage(lerp(ox, bx, frac), lerp(oz, bz, frac), 'player', p.facingLeft, ai % 2 === 0 ? colorHex : secHex, 0.46 - frac * 0.06, 'dash');
           }
           p.x = bx;
           p.z = bz;
-          p.invulnTimer = 0.5;
-          this.spawnShockRing(bx, bz, 2.4, colorHex, 0.35);
+          p.invulnTimer = 0.55;
+          this.triggerActorSquash(p, 0.82, 1.24);
+          this.camFovPunch = -2.2;
+          this.spawnShockRing(bx, bz, 2.8, colorHex, 0.38);
+          this.spawnSigilPulse(bx, bz, 2.6, vfx.sigilStyle, colorHex, 0.52);
+          this.spawnSparkBurst(bx, 1.1, bz, secHex, 16);
           this.removeBlinkBeacon();
           playSfxSafe('vortex_buy');
-          this.spawnFloatingText(bx, 2.1, bz, '折跃回溯！', '#66e8ff');
+          this.spawnFloatingText(bx, 2.1, bz, '折跃回溯！', vfx.primaryColor || '#66e8ff');
           sl.cooldownLeft = sl.cooldownMax;
         }
         break;
       }
 
       case 'aegis_shield': {
-        p.shieldHp = 45;
+        p.shieldHp = Math.max(45, Math.round(power * 1.1));
         p.shieldTimer = Math.max(7.5, duration);
+        p.shieldColor = colorHex;
         p.shieldMesh.visible = true;
-        this.spawnShockRing(p.x, p.z, 2.2, colorHex, 0.35);
+        if (p.shieldMat && p.shieldMat.uniforms) {
+          if (p.shieldMat.uniforms.uColorA) p.shieldMat.uniforms.uColorA.value.setHex(colorHex);
+          if (p.shieldMat.uniforms.uColorB) p.shieldMat.uniforms.uColorB.value.setHex(secHex);
+        } else if (p.shieldMat && p.shieldMat.color) {
+          p.shieldMat.color.setHex(colorHex);
+        }
+        if (p.shieldRingMat && p.shieldRingMat.color) p.shieldRingMat.color.setHex(secHex);
+        this.spawnShockRing(p.x, p.z, 2.4, colorHex, 0.40);
         playSfxSafe('ward_place');
-        this.spawnFloatingText(p.x, 2.1, p.z, '护盾 +45 (反弹击退)', '#66e8ff');
+        this.spawnFloatingText(p.x, 2.1, p.z, (sl.name || '护盾') + ' +' + p.shieldHp, vfx.primaryColor || '#66e8ff');
         sl.cooldownLeft = sl.cooldownMax;
         break;
       }
 
       case 'overclock': {
         p.overclockTimer = Math.max(4.0, duration);
-        this.spawnShockRing(p.x, p.z, 3.2, 0x4df8ff, 0.42);
+        p.overclockColor = colorHex;
+        this.camFovPunch = 2.6;
+        if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnOverclockBurstVfx === 'function') {
+          INFINITY.VfxStudio.spawnOverclockBurstVfx(this, p.x, p.z, colorHex, vfx);
+        } else {
+          this.spawnShockRing(p.x, p.z, 3.6, colorHex, 0.44);
+          this.spawnSparkBurst(p.x, 1.1, p.z, colorHex, 18);
+        }
         playSfxSafe('crisis_freeze');
-        this.spawnFloatingText(p.x, 2.1, p.z, '神经超频! 移速×1.65', '#4df8ff');
+        this.spawnFloatingText(p.x, 2.1, p.z, (sl.name || '神经超频') + '! 移速×1.65', vfx.primaryColor || '#4df8ff');
         sl.cooldownLeft = sl.cooldownMax;
         break;
       }
 
       case 'heal_pulse': {
         var hRad = Math.max(6.2, radius);
-        this.spawnShockRing(p.x, p.z, hRad, 0x4af2a1, 0.65);
+        this.spawnHealPillarVfx(p.x, p.z, hRad, colorHex, secHex, vfx);
         playSfxSafe('ward_place');
         p.hp = Math.min(p.maxHp, p.hp + 30);
         p.sanity = Math.min(p.maxSanity, p.sanity + 20);
-        this.spawnFloatingText(p.x, 2.2, p.z, '+30 HP / +20 SAN', '#4af2a1');
+        this.spawnFloatingText(p.x, 2.2, p.z, '+30 HP / +20 SAN', vfx.primaryColor || '#4af2a1');
         for (var hi = 0; hi < this.squad.length; hi++) {
           var ally = this.squad[hi];
           if (ally.alive && dist2D(p.x, p.z, ally.x, ally.z) <= hRad) {
             ally.hp = Math.min(ally.maxHp, ally.hp + 30);
-            this.spawnFloatingText(ally.x, 2.1, ally.z, '+30 HP', '#4af2a1');
+            ally.sanity = Math.min(ally.maxSanity || 100, (ally.sanity != null ? ally.sanity : 100) + 20);
+            this.spawnHealPillarVfx(ally.x, ally.z, 1.6, colorHex, secHex, vfx);
+            this.spawnFloatingText(ally.x, 2.1, ally.z, '+30 HP / +20 SAN', vfx.primaryColor || '#4af2a1');
           }
         }
         sl.cooldownLeft = sl.cooldownMax;
@@ -2623,9 +3661,10 @@
 
       case 'stealth_veil': {
         p.stealthTimer = Math.max(5.0, duration);
-        this.spawnShockRing(p.x, p.z, 2.2, 0x8b7be8, 0.38);
+        p.stealthColor = colorHex;
+        this.spawnStealthBurstVfx(p.x, p.z, colorHex, secHex, vfx);
         playSfxSafe('vortex_buy');
-        this.spawnFloatingText(p.x, 2.1, p.z, '敛息隐匿 · 仇恨脱离', '#b4a3ff');
+        this.spawnFloatingText(p.x, 2.1, p.z, (sl.name || '敛息隐匿') + ' · 仇恨脱离', vfx.primaryColor || '#b4a3ff');
         // Immediately drop Inspector aggro
         if (ins.alive && ins.state === 'HUNT' && ins.huntTargetId === 'player') {
           ins.state = 'INVESTIGATE';
@@ -2635,6 +3674,7 @@
           ins.lungeWindup = 0;
           ins.teleMesh.visible = false;
           ins.teleFill.visible = false;
+          if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
         }
         sl.cooldownLeft = sl.cooldownMax;
         break;
@@ -2644,20 +3684,36 @@
         var chainRange = Math.max(10.5, radius);
         var dToBoss = dist2D(p.x, p.z, ins.x, ins.z);
         if (ins.alive && dToBoss <= chainRange) {
+          var sealAdd = 28 + (activeResonance && activeResonance.bonuses ? (activeResonance.bonuses.sealBonusPct || 0) : 0);
           ins.chainTimer = Math.max(ins.chainTimer, Math.max(5.0, duration));
-          ins.sealedPct = Math.min(100, ins.sealedPct + 28);
-          this.spawnSealChainsVfx(p.x, p.z, ins.x, ins.z, 0xf0c46c);
-          this.damageInspector(Math.round(power * 0.75), 0, 0, false);
-          this.spawnFloatingText(ins.x, 2.8, ins.z, '规则封印 +28% (' + Math.round(ins.sealedPct) + '%)', '#f0c46c');
+          ins.sealedPct = Math.min(100, ins.sealedPct + sealAdd);
+          this.spawnSealChainsVfx(p.x, p.z, ins.x, ins.z, colorHex, vfx);
+          this.damageInspector(Math.round(power * 0.75), 0, 0, false, { impactColor: colorHex });
+          this.spawnImpactStar(ins.x, 1.4, ins.z, colorHex, 2.1, 0.30);
+          this.spawnFloatingText(ins.x, 2.8, ins.z, '规则封印 +' + sealAdd + '% (' + Math.round(ins.sealedPct) + '%)', vfx.primaryColor || '#f0c46c');
           playSfxSafe('fusion');
           this.addCameraShake(0.28, 0.25);
+
+          var sealPctNow = Math.round(ins.sealedPct);
+          this.setBranchState(
+            'inspector_hunt',
+            sealPctNow >= 100 ? 'completed' : 'active',
+            '规则锁链命中！当前封印进度 ' + sealPctNow + '%（剩余 HP ' + Math.round(ins.hp) + '）。',
+            Math.max(sealPctNow, Math.round(((ins.maxHp - ins.hp) / Math.max(1, ins.maxHp)) * 100))
+          );
+          this.recordMissionEvent(
+            'progress',
+            '规则锁链封印推进至 ' + sealPctNow + '%',
+            '「' + (sl.name || '规则锁链') + '」束缚住零号检票员，封印度提升 +28%。',
+            { branchId: 'inspector_hunt' }
+          );
 
           if (ins.sealedPct >= 100) {
             this.defeatInspector(true);
           }
         } else {
           // Lash forward along aim if out of range
-          this.spawnSealChainsVfx(p.x, p.z, p.x + dir.x * 7.5, p.z + dir.z * 7.5, 0xf0c46c);
+          this.spawnSealChainsVfx(p.x, p.z, p.x + dir.x * 7.5, p.z + dir.z * 7.5, colorHex, vfx);
           this.spawnFloatingText(p.x, 2.1, p.z, '锁链未命中目标 (距检票员过远)', '#d6b274');
           playSfxSafe('blade_ring');
         }
@@ -2667,10 +3723,10 @@
 
       case 'recon_pulse': {
         this.reconRevealTimer = Math.max(6.5, duration);
-        this.spawnShockRing(p.x, p.z, Math.max(22, radius), 0x58e6d8, 0.9);
+        this.spawnReconSweepVfx(p.x, p.z, Math.max(22, radius), colorHex, secHex, vfx);
         this.rebuildReconBeacons();
         playSfxSafe('alert');
-        this.spawnFloatingText(p.x, 2.2, p.z, '声呐穿透扫描 · 目标显形', '#58e6d8');
+        this.spawnFloatingText(p.x, 2.2, p.z, (sl.name || '声呐扫描') + ' · 目标显形', vfx.primaryColor || '#58e6d8');
         this.emitRadio({
           type: 'system',
           text: '【声呐回波】已穿透站台隔墙标记：零号检票员、沈砚坐标与全部未拾取线索。'
@@ -2681,9 +3737,9 @@
 
       case 'turret_drone': {
         var dxPos = this.mapApi.resolveCircleWallCollision(p.x + dir.x * 1.2, p.z + dir.z * 1.2, 0.35);
-        this.spawnTurretDrone(dxPos.x, dxPos.z, Math.max(14.0, duration), colorHex);
+        this.spawnTurretDrone(dxPos.x, dxPos.z, Math.max(14.0, duration), colorHex, vfx);
         playSfxSafe('vortex_buy');
-        this.spawnFloatingText(dxPos.x, 2.1, dxPos.z, '浮游机炮部署 (14s)', '#58c4a6');
+        this.spawnFloatingText(dxPos.x, 2.1, dxPos.z, (sl.name || '浮游机炮') + ' 部署', vfx.primaryColor || '#58c4a6');
         sl.cooldownLeft = sl.cooldownMax;
         break;
       }
@@ -2703,7 +3759,8 @@
           tx: fSafe.x, tz: fSafe.z,
           duration: Math.max(0.24, Math.min(0.42, fd * 0.04)),
           flareDuration: Math.max(8.0, duration),
-          color: 0xffa838
+          color: colorHex,
+          vfxProfile: vfx
         });
         playSfxSafe('ui_click');
         sl.cooldownLeft = sl.cooldownMax;
@@ -2715,9 +3772,12 @@
         p.dashTimer = 0.16;
         p.dashVx = dir.x * (dashDist / 0.16);
         p.dashVz = dir.z * (dashDist / 0.16);
-        p.invulnTimer = Math.max(p.invulnTimer, 0.32);
+        p.dashColor = colorHex;
+        p.invulnTimer = Math.max(p.invulnTimer, 0.34);
+        this.triggerActorSquash(p, 1.32, 0.76);
+        this.spawnShockRing(p.x, p.z, 1.8, colorHex, 0.24);
 
-        // Schedule shockwave slam at end of short dash
+        // Schedule ground-fissure shockwave slam at end of short dash
         var self = this;
         var slamRad = Math.max(3.6, radius);
         var slamDmg = Math.round(power * 1.45);
@@ -2727,9 +3787,10 @@
           update: function (dt) {
             this.ttl -= dt;
             if (this.ttl <= 0) {
-              self.spawnShockRing(p.x, p.z, slamRad, 0xff2c44, 0.45);
-              self.spawnSparkBurst(p.x, 0.5, p.z, 0xff3b4f, 18);
-              self.addCameraShake(0.42, 0.28);
+              self.triggerActorSquash(p, 1.36, 0.70);
+              self.camFovPunch = -2.8;
+              self.spawnBerserkSlamVfx(p.x, p.z, slamRad, colorHex, secHex, vfx);
+              self.addCameraShake(0.46, 0.30);
               self.emitSoundRipple(p.x, p.z, 72 * self.passives.noiseMult, 'skill');
               playSfxSafe('fusion');
               if (ins.alive && dist2D(p.x, p.z, ins.x, ins.z) <= slamRad + ins.radius) {
@@ -2738,8 +3799,10 @@
                 var bl = Math.max(0.01, Math.sqrt(bx * bx + bz * bz));
                 self.damageInspector(slamDmg, (bx / bl) * 6.8, (bz / bl) * 6.8, true, {
                   playerImpact: true,
-                  hitStop: 0.05
+                  hitStop: 0.065,
+                  impactColor: colorHex
                 });
+                self.spawnImpactStar(ins.x, 1.35, ins.z, colorHex, 2.8, 0.32);
                 ins.stunTimer = Math.max(ins.stunTimer, 1.0);
               }
             }
@@ -2752,12 +3815,13 @@
 
       default: {
         // Safe fallback slash
-        this.spawnSlashArc(p.x, p.z, dir.angle, 3.6, colorHex, 0.28, true);
+        this.spawnSlashArc(p.x, p.z, dir.angle, 3.6, colorHex, 0.28, true, vfx);
         playSfxSafe('sword_slash');
         if (ins.alive && dist2D(p.x, p.z, ins.x, ins.z) <= 4.0) {
           this.damageInspector(power, dir.x * 3.5, dir.z * 3.5, false, {
             playerImpact: true,
-            hitStop: 0.05
+            hitStop: 0.05,
+            impactColor: colorHex
           });
         }
         sl.cooldownLeft = sl.cooldownMax;
@@ -2771,84 +3835,49 @@
   // ---------------------------------------------------------------------------
   // Skill Entities: Wards, Drones, Decoys, Blink Beacon, Recon Beacons
   // ---------------------------------------------------------------------------
-  EngineSession.prototype.spawnWardCircle = function (x, z, radius, duration, colorHex) {
+  EngineSession.prototype.spawnWardCircle = function (x, z, radius, duration, colorHex, vfx) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.buildWardCircle === 'function') {
+      var ward = INFINITY.VfxStudio.buildWardCircle(this, x, z, radius, duration, colorHex, vfx);
+      ward.colorHex = colorHex || 0xf0c46c;
+      this.wards.push(ward);
+      if (this.inspector.alive) {
+        this.enforceWardBlockOnInspector();
+      }
+      return;
+    }
     var THREE = this.THREE;
     var group = new THREE.Group();
     group.position.set(x, 0.09, z);
-
-    var sigilTex = this.getPropTex('ward_sigil', '#f0c46c');
+    var secHex = hexToInt(vfx && vfx.secondaryColor, 0x6fd8ea);
+    var sigilKey = (vfx && vfx.sigilStyle) ? ('sigil_' + vfx.sigilStyle) : 'sigil_bagua';
+    var sigilTex = this.getPropTex(sigilKey, '#f0c46c');
     var discGeo = new THREE.PlaneGeometry(radius * 2, radius * 2);
     discGeo.rotateX(-Math.PI / 2);
-    var discMat = new THREE.MeshBasicMaterial({
-      map: sigilTex,
-      color: colorHex || 0xf0c46c,
-      transparent: true,
-      opacity: 0.58,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
+    var discMat = new THREE.MeshBasicMaterial({ map: sigilTex, color: colorHex || 0xf0c46c, transparent: true, opacity: 0.72, depthWrite: false, blending: THREE.AdditiveBlending });
     var disc = new THREE.Mesh(discGeo, discMat);
     group.add(disc);
-
-    var ringGeo = new THREE.RingGeometry(radius - 0.14, radius, 40);
-    ringGeo.rotateX(-Math.PI / 2);
-    var ringMat = new THREE.MeshBasicMaterial({
-      color: 0x6fd8ea,
-      transparent: true,
-      opacity: 0.85,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-    var ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.position.y = 0.02;
-    group.add(ring);
-
-    // Translucent vertical cylinder barrier wall
-    var wallGeo = new THREE.CylinderGeometry(radius, radius, 1.35, 32, 1, true);
-    var wallMat = new THREE.MeshBasicMaterial({
-      color: colorHex || 0xf0c46c,
-      transparent: true,
-      opacity: 0.12,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-    var wall = new THREE.Mesh(wallGeo, wallMat);
-    wall.position.y = 0.68;
-    group.add(wall);
-
     this.scene.add(group);
-    this.wards.push({
-      x: x,
-      z: z,
-      radius: radius,
-      ttl: duration,
-      maxTtl: duration,
-      group: group,
-      disc: disc,
-      ring: ring,
-      geos: [discGeo, ringGeo, wallGeo],
-      mats: [discMat, ringMat, wallMat]
-    });
-
-    // If Inspector is already inside newly deployed ward, push it cleanly outside!
-    if (this.inspector.alive) {
-      this.enforceWardBlockOnInspector();
-    }
+    this.wards.push({ x: x, z: z, radius: radius, ttl: duration, maxTtl: duration, colorHex: colorHex || 0xf0c46c, group: group, disc: disc, ring: disc, geos: [discGeo], mats: [discMat] });
+    if (this.inspector.alive) this.enforceWardBlockOnInspector();
   };
 
   EngineSession.prototype.updateWards = function (simDt) {
     for (var i = this.wards.length - 1; i >= 0; i--) {
       var w = this.wards[i];
       w.ttl -= simDt;
-      w.disc.rotation.y += simDt * 0.65;
-      w.ring.rotation.z -= simDt * 1.1;
+      if (typeof w.updateVisual === 'function') {
+        w.updateVisual(simDt, this.elapsedReal);
+      } else {
+        if (w.disc) w.disc.rotation.y += simDt * 0.72;
+        if (w.ring) w.ring.rotation.z -= simDt * 1.15;
+      }
       if (w.ttl < 1.2) {
         var fade = clamp(w.ttl / 1.2, 0, 1);
-        w.mats[0].opacity = 0.58 * fade;
-        w.mats[1].opacity = 0.85 * fade;
-        w.mats[2].opacity = 0.12 * fade;
+        for (var mi = 0; mi < w.mats.length; mi++) {
+          var mt = w.mats[mi];
+          if (mt.uniforms && mt.uniforms.uOpacity) mt.uniforms.uOpacity.value = 0.68 * fade;
+          else if (typeof mt.opacity === 'number') mt.opacity = Math.min(mt.opacity, fade);
+        }
       }
       if (w.ttl <= 0) {
         this.spawnWardEmbers(w.x, w.z, w.radius);
@@ -2886,8 +3915,11 @@
         if (ins.lungeActive > 0) {
           ins.lungeActive = 0;
           ins.stunTimer = Math.max(ins.stunTimer, 0.8);
+          this.triggerActorSquash(ins, 0.78, 1.24);
           this.spawnFloatingText(ins.x, 2.5, ins.z, '结界弹阻！', '#f0c46c');
-          this.spawnSparkBurst(ins.x, 1.0, ins.z, 0xf0c46c, 12);
+          this.spawnImpactStar(ins.x, 1.25, ins.z, w.colorHex || 0xf0c46c, 2.2, 0.28);
+          this.spawnShockRing(ins.x, ins.z, 2.4, w.colorHex || 0xf0c46c, 0.35);
+          this.spawnSparkBurst(ins.x, 1.0, ins.z, w.colorHex || 0xf0c46c, 16);
           playSfxSafe('ward_hum');
         }
         blocked = true;
@@ -2896,49 +3928,14 @@
     return blocked;
   };
 
-  EngineSession.prototype.placeBlinkBeacon = function (x, z, colorHex) {
-    var THREE = this.THREE;
+  EngineSession.prototype.placeBlinkBeacon = function (x, z, colorHex, vfx) {
     this.removeBlinkBeacon();
-
-    var group = new THREE.Group();
-    group.position.set(x, 0, z);
-
-    var tex = this.getPropTex('kunai', '#66e8ff');
-    var kGeo = new THREE.PlaneGeometry(0.9, 0.9);
-    var kMat = new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      alphaTest: 0.25,
-      side: THREE.DoubleSide
-    });
-    var mesh = new THREE.Mesh(kGeo, kMat);
-    mesh.position.y = 0.85;
-    group.add(mesh);
-
-    var rGeo = new THREE.RingGeometry(0.45, 0.62, 20);
-    rGeo.rotateX(-Math.PI / 2);
-    var rMat = new THREE.MeshBasicMaterial({
-      color: colorHex || 0x66e8ff,
-      transparent: true,
-      opacity: 0.78,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-    var ring = new THREE.Mesh(rGeo, rMat);
-    ring.position.y = 0.09;
-    group.add(ring);
-
-    this.scene.add(group);
-    this.blinkBeacon = {
-      x: x,
-      z: z,
-      ttl: 18.0,
-      group: group,
-      mesh: mesh,
-      geos: [kGeo, rGeo],
-      mats: [kMat, rMat]
-    };
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.buildBlinkBeacon === 'function') {
+      var b = INFINITY.VfxStudio.buildBlinkBeacon(this, x, z, colorHex, vfx);
+      b.ttl = 18.0;
+      this.blinkBeacon = b;
+      return;
+    }
   };
 
   EngineSession.prototype.removeBlinkBeacon = function () {
@@ -2949,58 +3946,20 @@
     this.blinkBeacon = null;
   };
 
-  EngineSession.prototype.spawnTurretDrone = function (x, z, duration, colorHex) {
-    var THREE = this.THREE;
-    // Cap active drones at 2
+  EngineSession.prototype.spawnTurretDrone = function (x, z, duration, colorHex, vfx) {
     if (this.drones.length >= 2) {
       var old = this.drones.shift();
       this.scene.remove(old.group);
       old.geos.forEach(function (g) { g.dispose(); });
       old.mats.forEach(function (m) { m.dispose(); });
     }
-
-    var group = new THREE.Group();
-    group.position.set(x, 0, z);
-
-    var tex = this.getPropTex('drone', '#58c4a6');
-    var pGeo = new THREE.PlaneGeometry(0.95, 0.95);
-    var pMat = new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      alphaTest: 0.25,
-      side: THREE.DoubleSide
-    });
-    var sprite = new THREE.Mesh(pGeo, pMat);
-    sprite.position.y = 1.45;
-    sprite.rotation.x = -0.32;
-    group.add(sprite);
-
-    var rGeo = new THREE.RingGeometry(0.35, 0.48, 18);
-    rGeo.rotateX(-Math.PI / 2);
-    var rMat = new THREE.MeshBasicMaterial({
-      color: colorHex || 0x58c4a6,
-      transparent: true,
-      opacity: 0.65,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-    var ring = new THREE.Mesh(rGeo, rMat);
-    ring.position.y = 0.09;
-    group.add(ring);
-
-    this.scene.add(group);
-    this.drones.push({
-      x: x,
-      z: z,
-      ttl: duration,
-      fireCd: 0.35,
-      group: group,
-      sprite: sprite,
-      ring: ring,
-      geos: [pGeo, rGeo],
-      mats: [pMat, rMat]
-    });
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.buildTurretDrone === 'function') {
+      var d = INFINITY.VfxStudio.buildTurretDrone(this, x, z, duration, colorHex, vfx);
+      d.colorHex = colorHex || 0x58f5c8;
+      d.secHex = hexToInt(vfx && vfx.secondaryColor, 0x58f5c8);
+      d.recoil = 0;
+      this.drones.push(d);
+    }
   };
 
   EngineSession.prototype.updateDrones = function (simDt) {
@@ -3009,24 +3968,33 @@
       var dr = this.drones[i];
       dr.ttl -= simDt;
       dr.fireCd -= simDt;
-      dr.sprite.position.y = 1.45 + Math.sin(this.elapsedReal * 5.2 + i) * 0.14;
-      dr.ring.rotation.z += simDt * 2.4;
+      dr.recoil = Math.max(0, (dr.recoil || 0) - simDt * 5.0);
+      dr.group.position.y = 1.38 + Math.sin(this.elapsedReal * 4.5 + i) * 0.14 + dr.recoil * 0.10;
+      if (dr.ring) dr.ring.rotation.z += simDt * 2.8;
+      if (ins.alive) {
+        dr.group.rotation.y = Math.atan2(ins.x - dr.x, ins.z - dr.z);
+      } else {
+        dr.group.rotation.y += simDt * 1.2;
+      }
 
       if (dr.fireCd <= 0 && ins.alive) {
         var d = dist2D(dr.x, dr.z, ins.x, ins.z);
         if (d <= 13.5 && this.mapApi.hasLineOfSight(dr.x, dr.z, ins.x, ins.z)) {
           dr.fireCd = 0.85;
+          dr.recoil = 1.0;
           var dx = (ins.x - dr.x) / Math.max(0.01, d);
           var dz = (ins.z - dr.z) / Math.max(0.01, d);
+          this.spawnSparkBurst(dr.x + dx * 0.35, 1.38, dr.z + dz * 0.35, dr.secHex || 0x58f5c8, 6);
           this.spawnProjectile({
             owner: 'drone',
             x: dr.x,
             z: dr.z,
-            vx: dx * 18,
-            vz: dz * 18,
+            vx: dx * 19,
+            vz: dz * 19,
             damage: Math.round(9 * this.passives.damageMult),
             knockback: 1.0,
-            color: 0x58f5c8,
+            color: dr.colorHex || 0x58f5c8,
+            secondaryColor: dr.secHex || 0xffffff,
             radius: 0.22,
             ttl: 0.9
           });
@@ -3035,6 +4003,7 @@
       }
 
       if (dr.ttl <= 0) {
+        this.spawnSparkBurst(dr.x, 1.2, dr.z, dr.colorHex || 0x58f5c8, 10);
         this.scene.remove(dr.group);
         dr.geos.forEach(function (g) { g.dispose(); });
         dr.mats.forEach(function (m) { m.dispose(); });
@@ -3043,42 +4012,13 @@
     }
   };
 
-  EngineSession.prototype.spawnDecoyFlare = function (x, z, duration) {
-    var THREE = this.THREE;
-    var group = new THREE.Group();
-    group.position.set(x, 0, z);
-
-    var cGeo = new THREE.CylinderGeometry(0.14, 0.18, 0.42, 10);
-    var cMat = new THREE.MeshBasicMaterial({ color: 0xffa838 });
-    var mesh = new THREE.Mesh(cGeo, cMat);
-    mesh.position.y = 0.22;
-    group.add(mesh);
-
-    var rGeo = new THREE.RingGeometry(0.35, 0.55, 20);
-    rGeo.rotateX(-Math.PI / 2);
-    var rMat = new THREE.MeshBasicMaterial({
-      color: 0xffa838,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-    var ring = new THREE.Mesh(rGeo, rMat);
-    ring.position.y = 0.09;
-    group.add(ring);
-
-    this.scene.add(group);
-    this.decoys.push({
-      x: x,
-      z: z,
-      ttl: duration,
-      pulseCd: 0.05,
-      group: group,
-      geos: [cGeo, rGeo],
-      mats: [cMat, rMat]
-    });
-    this.spawnFloatingText(x, 1.5, z, '声学诱饵启动！', '#ffa838');
+  EngineSession.prototype.spawnDecoyFlare = function (x, z, duration, colorHex, vfx) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.buildDecoyFlare === 'function') {
+      var dc = INFINITY.VfxStudio.buildDecoyFlare(this, x, z, duration, colorHex, vfx);
+      dc.colorHex = colorHex || 0xffa838;
+      this.decoys.push(dc);
+    }
+    this.spawnFloatingText(x, 1.5, z, '全息声噪诱饵启动！', (vfx && vfx.primaryColor) || '#ffa838');
   };
 
   EngineSession.prototype.updateDecoys = function (simDt) {
@@ -3086,10 +4026,18 @@
       var dc = this.decoys[i];
       dc.ttl -= simDt;
       dc.pulseCd -= simDt;
+      if (dc.orb) {
+        dc.orb.rotation.y += simDt * 4.2;
+        dc.orb.position.y = 1.25 + Math.sin(this.elapsedReal * 5 + i) * 0.12;
+      }
+      if (dc.holoMat && dc.holoMat.uniforms && dc.holoMat.uniforms.uTime) {
+        dc.holoMat.uniforms.uTime.value = this.elapsedReal;
+      }
       if (dc.pulseCd <= 0) {
         dc.pulseCd = 1.3;
         this.emitSoundRipple(dc.x, dc.z, 86, 'decoy');
-        this.spawnSparkBurst(dc.x, 0.4, dc.z, 0xffa838, 6);
+        this.spawnShockRing(dc.x, dc.z, 2.8, dc.colorHex || 0xffa838, 0.55);
+        this.spawnSparkBurst(dc.x, 0.65, dc.z, dc.colorHex || 0xffa838, 8);
       }
       if (dc.ttl <= 0) {
         this.scene.remove(dc.group);
@@ -3152,16 +4100,292 @@
     this.reconBeacons = [];
   };
 
+  EngineSession.prototype.clearFocusWaypoint = function () {
+    var fw = this.focusWaypoint;
+    if (!fw) return;
+    if (this.scene) {
+      if (fw.beaconGroup) this.scene.remove(fw.beaconGroup);
+      if (fw.arrowMesh) this.scene.remove(fw.arrowMesh);
+    }
+    if (Array.isArray(fw.geos)) {
+      for (var i = 0; i < fw.geos.length; i++) {
+        try { fw.geos[i].dispose(); } catch (_) {}
+      }
+    }
+    if (Array.isArray(fw.mats)) {
+      for (var j = 0; j < fw.mats.length; j++) {
+        try { fw.mats[j].dispose(); } catch (_) {}
+      }
+    }
+    this.focusWaypoint = null;
+  };
+
+  EngineSession.prototype.focusObjectiveTarget = function (taskKey) {
+    if (!this.mounted || !this.scene || !this.player) return null;
+    var p = this.player;
+    var key = String(taskKey || '');
+    var target = null;
+    var bestDist = Infinity;
+
+    if (key.indexOf('console_') === 0) {
+      var cid = key.slice('console_'.length);
+      var exact = this.interactablesById[cid];
+      if (exact && !exact.done) {
+        target = { x: exact.x, z: exact.z, label: exact.label || cid, color: '#6fd8ea', hex: 0x6fd8ea, ref: null };
+      }
+    } else if (key === 'override') {
+      for (var ci = 0; ci < this.interactables.length; ci++) {
+        var con = this.interactables[ci];
+        if (con.type === 'console' && !con.done) {
+          var dc = dist2D(p.x, p.z, con.x, con.z);
+          if (dc < bestDist) {
+            bestDist = dc;
+            target = { x: con.x, z: con.z, label: con.label || '轨控终端', color: '#6fd8ea', hex: 0x6fd8ea, ref: null };
+          }
+        }
+      }
+    } else if (key === 'inspector') {
+      if (this.inspector && this.inspector.alive) {
+        target = {
+          x: this.inspector.x,
+          z: this.inspector.z,
+          label: '零号检票员',
+          color: '#e85d4a',
+          hex: 0xe85d4a,
+          ref: this.inspector
+        };
+      }
+    } else if (key === 'clues') {
+      for (var cli = 0; cli < this.interactables.length; cli++) {
+        var clue = this.interactables[cli];
+        if (clue.type === 'clue' && !clue.done) {
+          var dcl = dist2D(p.x, p.z, clue.x, clue.z);
+          if (dcl < bestDist) {
+            bestDist = dcl;
+            target = { x: clue.x, z: clue.z, label: clue.label || '未破译线索', color: '#d6b274', hex: 0xd6b274, ref: null };
+          }
+        }
+      }
+    } else if (key === 'zones') {
+      var zonesObj = (this.mapApi && this.mapApi.ZONES) || DEFAULT_ZONES;
+      var zKeys = Object.keys(zonesObj);
+      for (var zi = 0; zi < zKeys.length; zi++) {
+        var zk = zKeys[zi];
+        if (this.visitedZones.indexOf(zk) === -1) {
+          var zInfo = zonesObj[zk];
+          if (zInfo && zInfo.cx != null && zInfo.cz != null) {
+            var dz = dist2D(p.x, p.z, zInfo.cx, zInfo.cz);
+            if (dz < bestDist) {
+              bestDist = dz;
+              target = {
+                x: zInfo.cx,
+                z: zInfo.cz,
+                label: (zInfo.code ? (zInfo.code + ' ') : '') + (zInfo.name || zk),
+                color: '#6fd8ea',
+                hex: 0x6fd8ea,
+                ref: null
+              };
+            }
+          }
+        }
+      }
+    } else if (key === 'exit') {
+      for (var ei = 0; ei < this.interactables.length; ei++) {
+        var ex = this.interactables[ei];
+        if (ex.type === 'exit') {
+          target = { x: ex.x, z: ex.z, label: ex.label || '0号站台撤离锚点', color: '#58c4a6', hex: 0x58c4a6, ref: null };
+          break;
+        }
+      }
+      if (!target) {
+        var p0 = getZoneInfo(this.mapApi, 'platform0');
+        target = { x: p0.cx, z: p0.cz, label: '0号站台撤离通道', color: '#58c4a6', hex: 0x58c4a6, ref: null };
+      }
+    }
+
+    if (!target) {
+      return null;
+    }
+
+    this.clearFocusWaypoint();
+
+    var THREE = this.THREE;
+    var geos = [];
+    var mats = [];
+
+    // 1. Target beacon group (vertical beam + pulsing ground ring)
+    var beaconGroup = new THREE.Group();
+    beaconGroup.position.set(target.x, 0, target.z);
+
+    var beamGeo = new THREE.CylinderGeometry(0.14, 0.34, 4.2, 14, 1, true);
+    var beamMat = new THREE.MeshBasicMaterial({
+      color: target.hex,
+      transparent: true,
+      opacity: 0.44,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending
+    });
+    var beamMesh = new THREE.Mesh(beamGeo, beamMat);
+    beamMesh.position.y = 2.1;
+    beamMesh.renderOrder = 11;
+    beaconGroup.add(beamMesh);
+    geos.push(beamGeo);
+    mats.push(beamMat);
+
+    var ringGeo = new THREE.RingGeometry(0.55, 0.85, 24);
+    ringGeo.rotateX(-Math.PI / 2);
+    var ringMat = new THREE.MeshBasicMaterial({
+      color: target.hex,
+      transparent: true,
+      opacity: 0.78,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending
+    });
+    var ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.position.y = 0.08;
+    ringMesh.renderOrder = 11;
+    beaconGroup.add(ringMesh);
+    geos.push(ringGeo);
+    mats.push(ringMat);
+
+    this.scene.add(beaconGroup);
+
+    // 2. Orbiting ground directional chevron arrow around player pointing toward target
+    var arrowShape = new THREE.Shape();
+    arrowShape.moveTo(0, 0.42);
+    arrowShape.lineTo(-0.24, -0.22);
+    arrowShape.lineTo(0, -0.06);
+    arrowShape.lineTo(0.24, -0.22);
+    arrowShape.closePath();
+    var arrowGeo = new THREE.ShapeGeometry(arrowShape);
+    arrowGeo.rotateX(-Math.PI / 2);
+    var arrowMat = new THREE.MeshBasicMaterial({
+      color: target.hex,
+      transparent: true,
+      opacity: 0.88,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending
+    });
+    var arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
+    arrowMesh.position.set(p.x, 0.14, p.z);
+    arrowMesh.renderOrder = 12;
+    this.scene.add(arrowMesh);
+    geos.push(arrowGeo);
+    mats.push(arrowMat);
+
+    var dMeters = Math.round(dist2D(p.x, p.z, target.x, target.z));
+    this.focusWaypoint = {
+      taskKey: key,
+      x: target.x,
+      z: target.z,
+      label: target.label,
+      color: target.color,
+      ref: target.ref,
+      ttl: 7.5,
+      maxTtl: 7.5,
+      beaconGroup: beaconGroup,
+      beamMesh: beamMesh,
+      beamMat: beamMat,
+      ringMesh: ringMesh,
+      ringMat: ringMat,
+      arrowMesh: arrowMesh,
+      arrowMat: arrowMat,
+      geos: geos,
+      mats: mats
+    };
+
+    this.updateFocusWaypoint(0);
+    playSfxSafe('waypoint_ping');
+    this.spawnFloatingText(p.x, 2.35, p.z, '指引 · ' + target.label + ' (' + dMeters + 'm)', target.color);
+    this.emitHudSnapshot();
+    return { label: target.label, dist: dMeters, color: target.color };
+  };
+
+  EngineSession.prototype.updateFocusWaypoint = function (realDt) {
+    var fw = this.focusWaypoint;
+    if (!fw || !this.player) return;
+
+    if (fw.ref) {
+      if (fw.ref.alive === false) {
+        this.clearFocusWaypoint();
+        return;
+      }
+      fw.x = fw.ref.x;
+      fw.z = fw.ref.z;
+    }
+
+    fw.ttl -= realDt;
+    var p = this.player;
+    var dx = fw.x - p.x;
+    var dz = fw.z - p.z;
+    var dist = Math.sqrt(dx * dx + dz * dz);
+
+    if (fw.ttl <= 0 || (dist <= 2.2 && !fw.ref && realDt > 0)) {
+      this.clearFocusWaypoint();
+      return;
+    }
+
+    var fade = fw.ttl < 1.2 ? clamp(fw.ttl / 1.2, 0, 1) : 1;
+    var pulse = 0.5 + 0.5 * Math.sin(this.elapsedReal * 7.5);
+
+    fw.beaconGroup.position.set(fw.x, 0, fw.z);
+    fw.beamMesh.rotation.y += realDt * 2.4;
+    fw.beamMat.opacity = (0.28 + pulse * 0.26) * fade;
+
+    var ringScale = 0.85 + pulse * 0.55;
+    fw.ringMesh.scale.set(ringScale, 1, ringScale);
+    fw.ringMat.opacity = (0.85 - pulse * 0.42) * fade;
+
+    if (dist > 1.8) {
+      var nx = dx / dist;
+      var nz = dz / dist;
+      var orbitR = 1.42 + pulse * 0.14;
+      fw.arrowMesh.visible = true;
+      fw.arrowMesh.position.set(p.x + nx * orbitR, 0.14, p.z + nz * orbitR);
+      // Shape tip points along -Z after rotateX(-PI/2), so align rotation.y with atan2(-dx, -dz)
+      fw.arrowMesh.rotation.y = Math.atan2(-dx, -dz);
+      fw.arrowMat.opacity = (0.65 + pulse * 0.3) * fade;
+    } else {
+      fw.arrowMesh.visible = false;
+    }
+  };
+
   // ---------------------------------------------------------------------------
   // Projectiles & EMP / Decoy Arc Projectiles
   // ---------------------------------------------------------------------------
   EngineSession.prototype.spawnProjectile = function (cfg) {
     var THREE = this.THREE;
-    var geo = new THREE.SphereGeometry(cfg.radius || 0.24, 8, 8);
-    var mat = new THREE.MeshBasicMaterial({ color: cfg.color || 0x6fd8ea });
-    var mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(cfg.x, 1.05, cfg.z);
-    this.scene.add(mesh);
+    var group = new THREE.Group();
+    var r = cfg.radius || 0.24;
+    var col = cfg.color || 0x6fd8ea;
+    var sec = cfg.secondaryColor || 0xffffff;
+
+    // Bright core + elongated comet tail along velocity vector
+    var coreGeo = new THREE.SphereGeometry(r * 0.72, 8, 8);
+    var coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    group.add(new THREE.Mesh(coreGeo, coreMat));
+
+    var tailGeo = new THREE.ConeGeometry(r * 0.85, r * 4.4, 7);
+    tailGeo.rotateX(-Math.PI / 2);
+    tailGeo.translate(0, 0, -r * 2.0);
+    var tailMat = new THREE.MeshBasicMaterial({
+      color: col,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    group.add(new THREE.Mesh(tailGeo, tailMat));
+
+    group.position.set(cfg.x, 1.05, cfg.z);
+    group.rotation.y = Math.atan2(cfg.vx || 0, cfg.vz || 1);
+    this.scene.add(group);
 
     this.projectiles.push({
       mode: 'linear',
@@ -3172,18 +4396,20 @@
       vz: cfg.vz,
       damage: cfg.damage || 10,
       knockback: cfg.knockback || 1.5,
-      radius: cfg.radius || 0.24,
+      radius: r,
       ttl: cfg.ttl || 0.9,
-      color: cfg.color || 0x6fd8ea,
-      mesh: mesh,
-      geo: geo,
-      mat: mat
+      color: col,
+      secondaryColor: sec,
+      vfxProfile: cfg.vfxProfile || null,
+      mesh: group,
+      geos: [coreGeo, tailGeo],
+      mats: [coreMat, tailMat]
     });
   };
 
   EngineSession.prototype.spawnArcProjectile = function (cfg) {
     var THREE = this.THREE;
-    var geo = new THREE.SphereGeometry(0.26, 10, 10);
+    var geo = new THREE.OctahedronGeometry(0.26, 0);
     var mat = new THREE.MeshBasicMaterial({ color: cfg.color || 0x4de8ff });
     var mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(cfg.sx, 1.2, cfg.sz);
@@ -3203,9 +4429,11 @@
       stunSec: cfg.stunSec || 3.5,
       flareDuration: cfg.flareDuration || 8.0,
       color: cfg.color || 0x4de8ff,
+      vfxProfile: cfg.vfxProfile || null,
+      trailCd: 0,
       mesh: mesh,
-      geo: geo,
-      mat: mat
+      geos: [geo],
+      mats: [mat]
     });
   };
 
@@ -3222,12 +4450,19 @@
         var cz = lerp(pr.sz, pr.tz, t);
         var cy = 1.1 * (1 - t) + Math.sin(t * Math.PI) * 2.6 + 0.2;
         pr.mesh.position.set(cx, cy, cz);
+        pr.mesh.rotation.y += simDt * 9;
+        pr.mesh.rotation.x += simDt * 6;
+        pr.trailCd = (pr.trailCd || 0) - simDt;
+        if (pr.trailCd <= 0) {
+          pr.trailCd = 0.045;
+          this.spawnSparkBurst(cx, cy, cz, pr.color, 3);
+        }
 
         if (t >= 1) {
           if (pr.kind === 'emp') {
-            this.detonateEmp(pr.tx, pr.tz, pr.radius, pr.power, pr.stunSec, pr.color);
+            this.detonateEmp(pr.tx, pr.tz, pr.radius, pr.power, pr.stunSec, pr.color, pr.vfxProfile);
           } else if (pr.kind === 'decoy') {
-            this.spawnDecoyFlare(pr.tx, pr.tz, pr.flareDuration);
+            this.spawnDecoyFlare(pr.tx, pr.tz, pr.flareDuration, pr.color, pr.vfxProfile);
           }
           remove = true;
         }
@@ -3239,12 +4474,14 @@
 
         // Wall hit check
         if (!this.mapApi.isWalkable(Math.floor(pr.x), Math.floor(pr.z))) {
-          this.spawnSparkBurst(pr.x, 1.0, pr.z, pr.color, 6);
+          this.spawnSparkBurst(pr.x, 1.0, pr.z, pr.color, 7);
           remove = true;
-        } else if (ins.alive && dist2D(pr.x, pr.z, ins.x, ins.z) <= ins.radius + pr.radius + 0.2) {
+        } else if (ins.alive && dist2D(pr.x, pr.z, ins.x, ins.z) <= ins.radius + pr.radius + 0.22) {
           var vLen = Math.max(0.01, Math.sqrt(pr.vx * pr.vx + pr.vz * pr.vz));
-          this.damageInspector(pr.damage, (pr.vx / vLen) * pr.knockback, (pr.vz / vLen) * pr.knockback, false);
-          this.spawnSparkBurst(pr.x, 1.1, pr.z, pr.color, 8);
+          this.damageInspector(pr.damage, (pr.vx / vLen) * pr.knockback, (pr.vz / vLen) * pr.knockback, false, {
+            impactColor: pr.color
+          });
+          this.spawnSparkBurst(pr.x, 1.1, pr.z, pr.secondaryColor || pr.color, 10);
           remove = true;
         } else if (pr.ttl <= 0) {
           remove = true;
@@ -3253,50 +4490,21 @@
 
       if (remove) {
         this.scene.remove(pr.mesh);
-        pr.geo.dispose();
-        pr.mat.dispose();
+        if (pr.geos) pr.geos.forEach(function (g) { g.dispose(); });
+        else if (pr.geo) pr.geo.dispose();
+        if (pr.mats) pr.mats.forEach(function (m) { m.dispose(); });
+        else if (pr.mat) pr.mat.dispose();
         this.projectiles.splice(i, 1);
       }
     }
   };
 
-  EngineSession.prototype.detonateEmp = function (x, z, radius, power, stunSec, colorHex) {
-    var THREE = this.THREE;
-    // Expanding translucent electric sphere
-    var sGeo = new THREE.SphereGeometry(1, 18, 14);
-    var sMat = new THREE.MeshBasicMaterial({
-      color: colorHex || 0x4de8ff,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.72,
-      blending: THREE.AdditiveBlending
-    });
-    var sphere = new THREE.Mesh(sGeo, sMat);
-    sphere.position.set(x, 0.9, z);
-    this.scene.add(sphere);
-
-    var self = this;
-    this.vfxList.push({
-      ttl: 0.48,
-      maxTtl: 0.48,
-      update: function (dt) {
-        this.ttl -= dt;
-        var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
-        var sc = 0.4 + p * radius;
-        sphere.scale.set(sc, sc * 0.65, sc);
-        sphere.rotation.y += dt * 5;
-        sMat.opacity = 0.72 * (1 - p);
-      },
-      dispose: function () {
-        self.scene.remove(sphere);
-        sGeo.dispose();
-        sMat.dispose();
-      }
-    });
-
-    this.spawnShockRing(x, z, radius, colorHex || 0x4de8ff, 0.55);
-    this.spawnSparkBurst(x, 1.0, z, 0x4de8ff, 18);
-    this.addCameraShake(0.32, 0.24);
+  EngineSession.prototype.detonateEmp = function (x, z, radius, power, stunSec, colorHex, vfx) {
+    var mainCol = colorHex || 0x4de8ff;
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnEmpBlastVfx === 'function') {
+      INFINITY.VfxStudio.spawnEmpBlastVfx(this, x, z, radius, mainCol, vfx);
+    }
+    this.addCameraShake(0.34, 0.24);
     this.emitSoundRipple(x, z, 70, 'emp');
     this.empBlackoutTimer = 3.5;
     this.empBlackoutPos.x = x;
@@ -3305,7 +4513,7 @@
     this.glitchAmount = Math.max(this.glitchAmount, 0.5);
     playSfxSafe('emp_boom');
 
-    // Stun Inspector if in radius
+    // Stun Inspector if in radius + snap direct lightning arc onto Inspector!
     var ins = this.inspector;
     if (ins.alive && dist2D(x, z, ins.x, ins.z) <= radius + ins.radius) {
       ins.stunTimer = Math.max(ins.stunTimer, stunSec);
@@ -3314,8 +4522,17 @@
       ins.lungeActive = 0;
       ins.teleMesh.visible = false;
       ins.teleFill.visible = false;
-      this.damageInspector(power, 0, 0, true);
-      this.spawnFloatingText(ins.x, 2.8, ins.z, 'EMP瘫痪 ' + stunSec.toFixed(1) + 's!', '#4de8ff');
+      if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
+      this.spawnLightningBolt(x, 1.1, z, ins.x, 1.45, ins.z, 0xffffff, 0.42, 7);
+      this.spawnImpactStar(ins.x, 1.45, ins.z, mainCol, 2.5, 0.30);
+      this.damageInspector(power, 0, 0, true, { impactColor: mainCol });
+      this.spawnFloatingText(ins.x, 2.8, ins.z, 'EMP瘫痪 ' + stunSec.toFixed(1) + 's!', (vfx && vfx.primaryColor) || '#4de8ff');
+      this.recordMissionEvent(
+        'branch',
+        'EMP 电磁瘫痪零号检票员',
+        '成功干扰其胸口对讲机频段，检票员陷入 ' + stunSec.toFixed(1) + ' 秒感知僵直。',
+        { branchId: 'inspector_hunt' }
+      );
     }
 
     // Cancel active fake broadcasts!
@@ -3328,6 +4545,13 @@
         text: '【电磁阻断成功】EMP 脉冲烧毁了正在传播的 43.2Hz 拟态假播报信号！全员理智稳固。'
       });
       this.player.sanity = Math.min(this.player.maxSanity, this.player.sanity + 10);
+      this.setBranchState('fake_broadcast', 'completed', 'EMP 脉冲硬性切断 43.2Hz 拟态假播报（累计拦截 ' + this.stats.fakeBroadcastsCancelled + ' 次）。', 100);
+      this.recordMissionEvent(
+        'branch',
+        '分支反制 · 切断 43.2Hz 假播报',
+        'EMP 脉冲烧毁站台拟态信号，全员理智恢复 +10。',
+        { branchId: 'fake_broadcast' }
+      );
     }
   };
 
@@ -3355,11 +4579,17 @@
         it.ring.rotation.z += simDt * (it.done ? 0.5 : 1.5);
         if (it.done) {
           it.ringMat.color.setHex(0x4af2a1);
+          if (it.beaconMat) it.beaconMat.color.setHex(0x4af2a1);
         }
       } else if (it.type === 'exit') {
         it.ring.rotation.z += simDt * (exitUnlocked ? 2.4 : 0.6);
-        it.ringMat.color.setHex(exitUnlocked ? 0x4af2a1 : (this.trainInStation ? 0xffa838 : 0xe85d4a));
+        var exitCol = exitUnlocked ? 0x4af2a1 : (this.trainInStation ? 0xffa838 : 0xe85d4a);
+        it.ringMat.color.setHex(exitCol);
         it.ringMat.opacity = exitUnlocked ? (0.65 + Math.sin(this.elapsedReal * 6) * 0.25) : 0.45;
+        if (it.mat && it.mat.color) {
+          it.mat.color.setHex(exitCol);
+          it.mat.opacity = exitUnlocked ? (0.58 + Math.sin(this.elapsedReal * 4) * 0.14) : 0.36;
+        }
       }
 
       var d = dist2D(p.x, p.z, it.x, it.z);
@@ -3386,6 +4616,11 @@
 
   EngineSession.prototype.advanceConsole = function (consoleObj, deltaPct, actorTag) {
     if (!consoleObj || consoleObj.done) return;
+    if (actorTag === 'player' && this.player) {
+      this.player.channelTimer = 0.22;
+    } else if (actorTag && this.squadById && this.squadById[actorTag]) {
+      this.squadById[actorTag].channelTimer = 0.25;
+    }
     var prev = consoleObj.progress;
     consoleObj.progress = clamp(consoleObj.progress + deltaPct, 0, 100);
 
@@ -3398,6 +4633,19 @@
       this.emitSoundRipple(consoleObj.x, consoleObj.z, actorTag === 'xutan' ? 42 : 70, 'console');
       this.spawnSparkBurst(consoleObj.x, 1.1, consoleObj.z, 0xf2a944, 8);
       if (actorTag === 'player') playSfxSafe('ui_click');
+    }
+
+    var startFlagKey = 'console_started_' + consoleObj.id;
+    if (prev <= 0 && consoleObj.progress > 0 && !this.missionFlags[startFlagKey]) {
+      this.missionFlags[startFlagKey] = true;
+      var actorName = actorTag === 'xutan' ? '许檀' : (actorTag === 'yanci' ? '严辞' : '受试者');
+      this.setBranchState('track_override', 'active', actorName + '已接入「' + consoleObj.label + '」，正在执行极性改写。', Math.max(this.overridePct, 10));
+      this.recordMissionEvent(
+        'progress',
+        '启动轨控改写 · ' + consoleObj.label,
+        actorName + '开始操作控制台，高分贝继电器声波可能吸引检票员注意。',
+        { branchId: 'track_override', zoneId: consoleObj.zoneId }
+      );
     }
 
     if (consoleObj.progress >= 100 && !consoleObj.done) {
@@ -3418,12 +4666,26 @@
       this.spawnFloatingText(consoleObj.x, 2.3, consoleObj.z, '联锁反转完成! ' + this.overridePct + '%', '#4af2a1');
 
       if (this.overridePct >= 100) {
+        this.setBranchState('track_override', 'completed', '调度室与变电间双端联锁 100% 完成，0 号站台应急撤离闸门已解锁（S级真破局就绪）。', 100);
+        this.recordMissionEvent(
+          'branch',
+          '主线达成 · 逆轨出环 100%',
+          '「' + consoleObj.label + '」完成最终合闸！0 号站台应急闸门解锁，前往 0 号站台按 E 即可完美撤离。',
+          { branchId: 'track_override', zoneId: consoleObj.zoneId }
+        );
         this.emitRadio({
           type: 'system',
           text: '【主轨极性已彻底反转 100%】0号站台应急撤离闸门已解锁！全员立即前往0号站台撤离！'
         });
         this.showSpeechBubble('yanci', '道岔已全部反转！全员向0号站台闸门汇合撤离！');
       } else {
+        this.setBranchState('track_override', 'active', '已完成「' + consoleObj.label + '」（进度 ' + this.overridePct + '%），还需完成另一处轨控终端。', this.overridePct);
+        this.recordMissionEvent(
+          'progress',
+          '轨控节点完成 · ' + consoleObj.label + ' (' + this.overridePct + '%)',
+          '该区域道岔联锁已锁死，请继续推进另一处轨控终端（调度室 / 变电间）。',
+          { branchId: 'track_override', zoneId: consoleObj.zoneId }
+        );
         this.emitRadio({
           type: 'narration',
           text: '【道岔联锁进度 ' + this.overridePct + '%】' + consoleObj.label + '已完成反转，继电器电弧声回荡在隧道中！'
@@ -3455,6 +4717,21 @@
       var title = (meta && meta.title) || it.label;
       var summary = (meta && meta.summary) || '已回收关键考场物证。';
       this.spawnFloatingText(it.x, 2.1, it.z, '发现线索: ' + title, '#6fd8ea');
+      this.recordMissionEvent(
+        'clue',
+        '破译线索 · ' + title + ' (' + this.discoveredClueIds.length + '/6)',
+        summary,
+        { zoneId: it.zoneId, branchId: cid === 'clue_shenyan_ledger' ? 'shenyan_secret' : null }
+      );
+      if (cid === 'clue_shenyan_ledger') {
+        this.setBranchState('shenyan_secret', 'triggered', '在废弃应急通道查获沈砚的失窃票夹：其持有伪造车票，意图诱导陌生考生越线抵扣历史罚分！', 100);
+        this.recordMissionEvent(
+          'branch',
+          '隐藏暗线曝光 · 沈砚伪造车票',
+          '已掌握沈砚背刺动机！切勿听信其关于 0 号站台直接登车的诱导。',
+          { branchId: 'shenyan_secret', zoneId: it.zoneId }
+        );
+      }
       this.emitRadio({
         type: 'narration',
         text: '【发现线索 · ' + title + '】' + summary
@@ -3487,6 +4764,13 @@
           return true;
         }
         this.exitWarnTimer = 3.5;
+        this.setBranchState('ghost_train', 'warning', '未反转道岔时靠近停靠列车触发「强行登车 (B级)」确认分支，再次按 E 将立即撤离。', 80);
+        this.recordMissionEvent(
+          'branch',
+          '分支抉择 · 强行登车警告',
+          '道岔联锁尚未完成！再次按 E 可冒险强行登车（B级次优结局），或返回完成调度室与变电间反转。',
+          { branchId: 'ghost_train', zoneId: 'platform0' }
+        );
         this.showSpeechBubble('player', '道岔尚未反转！再按一次 [E] 强行登车撤离！');
         this.emitRadio({
           type: 'system',
@@ -3528,6 +4812,14 @@
       if (bubbleText) {
         this.showSpeechBubble(npc.id, bubbleText);
       }
+
+      this.setBranchState('squad_tactics', 'active', '最近指令：' + npc.name + ' → ' + npc.orderLabel, 50);
+      this.recordMissionEvent(
+        'squad',
+        '战术调度 · ' + npc.name + ' → ' + npc.orderLabel,
+        '通过加密短波改写队友行动目标：' + npc.orderLabel + '。',
+        { branchId: 'squad_tactics' }
+      );
     }
   };
 
@@ -3702,6 +4994,20 @@
       if (npc.hitFlash > 0) npc.hitFlash = Math.max(0, npc.hitFlash - simDt);
       if (npc.sabotageCd > 0) npc.sabotageCd = Math.max(0, npc.sabotageCd - simDt);
 
+      // Dynamic squad NPC sanity pressure (Inspector dread aura vs safe ward calm)
+      if (typeof npc.sanity === 'number') {
+        var inWardNpc = this.isInsideAnyWard(npc.x, npc.z);
+        var dInsNpc = ins.alive ? dist2D(npc.x, npc.z, ins.x, ins.z) : 99;
+        if (ins.alive && dInsNpc < 8.5) {
+          var drainRate = (dInsNpc < 4.5 ? 4.8 : 2.6) * (inWardNpc ? 0.35 : 1.0);
+          npc.sanity = Math.max(12, npc.sanity - drainRate * simDt);
+        } else {
+          var recCap = npc.id === 'shenyan' ? 76 : (npc.maxSanity || 100);
+          var recRate = inWardNpc ? 4.2 : 1.6;
+          if (npc.sanity < recCap) npc.sanity = Math.min(recCap, npc.sanity + recRate * simDt);
+        }
+      }
+
       var goal = this.getNpcGoal(npc);
       var dGoal = dist2D(npc.x, npc.z, goal.x, goal.z);
 
@@ -3756,59 +5062,75 @@
         if (Math.abs(vx) > 0.25) npc.facingLeft = vx < 0;
       }
 
-      // Role special actions
+      // Role special actions + NPC signature visual VFX!
       if (goal.workConsole && !goal.workConsole.done && dist2D(npc.x, npc.z, goal.workConsole.x, goal.workConsole.z) <= 2.3) {
         var workRate = npc.id === 'xutan' ? 4.8 : 2.6;
         this.advanceConsole(goal.workConsole, workRate * simDt, npc.id);
-        npc.actionTimer = 0.2;
+        npc.channelTimer = 0.24;
+        npc.sigVfxCd = (npc.sigVfxCd || 0) - simDt;
+        if (npc.id === 'xutan' && npc.sigVfxCd <= 0) {
+          npc.sigVfxCd = 1.65;
+          this.spawnNpcSignatureVfx('xutan', npc.x, npc.z, Math.atan2(goal.workConsole.z - npc.z, goal.workConsole.x - npc.x));
+        }
       }
 
-      // Yan Ci flags nearby clue on radio
+      // Yan Ci flags nearby clue on radio + manifests golden law-scale sigil!
       if (npc.id === 'yanci' && goal.inspectClue && !goal.inspectClue.done && dist2D(npc.x, npc.z, goal.inspectClue.x, goal.inspectClue.z) <= 2.4 && npc.shoutCd <= 0) {
         npc.shoutCd = 18;
+        this.spawnNpcSignatureVfx('yanci', npc.x, npc.z, 0);
         var cMsg = '我这边发现一处物证（' + goal.inspectClue.label + '），你过来回收一下。';
         this.showSpeechBubble('yanci', cMsg);
         this.emitRadio({ type: 'dialogue', npcId: 'yanci', speaker: '严辞', text: cMsg });
       }
 
-      // Lu Jin & Yan Ci fire tactical shots/slashes at Inspector!
+      // Lu Jin & Yan Ci fire tactical shots/slashes at Inspector with signature VFX!
       if (ins.alive && (npc.id === 'lujin' || npc.id === 'yanci' || npc.order === 'engage')) {
         var dBoss = dist2D(npc.x, npc.z, ins.x, ins.z);
         if (npc.attackCd <= 0 && dBoss <= 9.5 && this.mapApi.hasLineOfSight(npc.x, npc.z, ins.x, ins.z)) {
           npc.actionTimer = 0.28;
+          this.triggerActorSquash(npc, 1.14, 0.90);
           npc.facingLeft = ins.x < npc.x;
           var bdx = (ins.x - npc.x) / Math.max(0.01, dBoss);
           var bdz = (ins.z - npc.z) / Math.max(0.01, dBoss);
+          var aimAng = Math.atan2(bdz, bdx);
 
           if (npc.id === 'lujin' && dBoss <= 2.7) {
             npc.attackCd = 1.15;
-            this.spawnSlashArc(npc.x, npc.z, Math.atan2(bdz, bdx), 2.6, 0x58e6ff, 0.22, false);
-            this.damageInspector(12, bdx * 2.8, bdz * 2.8, false);
+            this.spawnSlashArc(npc.x, npc.z, aimAng, 2.7, 0xff9c3b, 0.24, false, { primaryColor: '#ff9c3b', secondaryColor: '#58e6ff', coreColor: '#fff5cc' });
+            this.damageInspector(12, bdx * 2.8, bdz * 2.8, false, { impactColor: 0xff9c3b });
             if (npc.shoutCd <= 0) {
               npc.shoutCd = 12;
               this.showSpeechBubble('lujin', '我顶住正面！趁现在拉道岔！');
             }
           } else {
             npc.attackCd = npc.id === 'lujin' ? 1.3 : 1.9;
+            if (npc.id === 'lujin') {
+              this.spawnNpcSignatureVfx('lujin', npc.x + bdx * 0.55, npc.z + bdz * 0.55, aimAng);
+            } else if (npc.id === 'yanci') {
+              this.spawnNpcSignatureVfx('yanci', npc.x, npc.z, aimAng);
+            }
             this.spawnProjectile({
               owner: npc.id,
               x: npc.x + bdx * 0.5,
               z: npc.z + bdz * 0.5,
-              vx: bdx * 16,
-              vz: bdz * 16,
+              vx: bdx * (npc.id === 'lujin' ? 20 : 16),
+              vz: bdz * (npc.id === 'lujin' ? 20 : 16),
               damage: npc.id === 'lujin' ? 8 : 6,
               knockback: 1.0,
-              color: hexToInt(npc.accentColor, 0x6fd8ea),
-              radius: 0.2,
-              ttl: 0.8
+              color: npc.id === 'lujin' ? 0xff9c3b : (npc.id === 'yanci' ? 0xf2c96b : hexToInt(npc.accentColor, 0x6fd8ea)),
+              secondaryColor: npc.id === 'lujin' ? 0xffe49c : 0x7ca7d9,
+              radius: 0.21,
+              ttl: 0.85
             });
           }
         }
       }
 
-      // Shen Yan suspicious sabotage noise spike when alone
+      // Shen Yan suspicious sabotage noise spike + crimson forged-stopwatch pulse when alone
       if (npc.id === 'shenyan' && npc.sabotageCd <= 0 && dist2D(npc.x, npc.z, p.x, p.z) > 10.5) {
         npc.sabotageCd = 24;
+        npc.actionTimer = 0.35;
+        this.spawnNpcSignatureVfx('shenyan', npc.x, npc.z, 0);
         this.emitSoundRipple(npc.x, npc.z, 68, 'shenyan');
         if (Math.random() < 0.55) {
           this.emitRadio({
@@ -3838,15 +5160,60 @@
     var mapApi = this.mapApi;
 
     if (ins.hitFlash > 0) ins.hitFlash = Math.max(0, ins.hitFlash - simDt);
+    if (ins.whiteFlash > 0) ins.whiteFlash = Math.max(0, ins.whiteFlash - simDt);
     if (ins.actionTimer > 0) ins.actionTimer = Math.max(0, ins.actionTimer - simDt);
     if (ins.lungeCd > 0) ins.lungeCd = Math.max(0, ins.lungeCd - simDt);
     if (ins.chainTimer > 0) ins.chainTimer = Math.max(0, ins.chainTimer - simDt);
+
+    // Boss volumetric crimson lantern sway, golden containment seal ring, & phase-2 rage fissures
+    if (ins.lanternCone) {
+      var lDir = ins.facingLeft ? -1 : 1;
+      ins.lanternCone.position.x = -0.55 * lDir;
+      ins.lanternCone.rotation.y = (ins.facingLeft ? -Math.PI * 0.45 : Math.PI * 0.45) + Math.sin(this.elapsedReal * 2.3) * 0.24;
+      ins.lanternConeMat.opacity = ins.state === 'HUNT' ? (0.18 + Math.sin(this.elapsedReal * 10) * 0.04) : 0.11;
+    }
+    if (ins.sealGroup) {
+      var sp = clamp((ins.sealedPct || 0) / 100, 0, 1);
+      if (sp > 0.01 || ins.chainTimer > 0) {
+        ins.sealGroup.visible = true;
+        var sSpin = 0.8 + sp * 3.0;
+        ins.sealDisc.rotation.z += simDt * sSpin;
+        ins.sealBand.rotation.z -= simDt * sSpin * 1.4;
+        ins.sealBand.rotation.x = Math.PI * 0.5 + Math.sin(this.elapsedReal * 2.5) * 0.22;
+        ins.sealDiscMat.opacity = clamp(0.28 + sp * 0.55, 0.28, 0.88);
+        ins.sealBandMat.opacity = clamp(0.32 + sp * 0.62, 0.32, 0.94);
+      } else {
+        ins.sealGroup.visible = false;
+      }
+    }
+    // Phase-2 enraged crimson arcs when HP drops below 55%
+    if (ins.hp / Math.max(1, ins.maxHp) < 0.55) {
+      ins.rageArcAccum = (ins.rageArcAccum || 0) - simDt;
+      if (ins.rageArcAccum <= 0) {
+        ins.rageArcAccum = 0.42;
+        var ra = Math.random() * Math.PI * 2;
+        this.spawnLightningBolt(
+          ins.x, 1.4, ins.z,
+          ins.x + Math.cos(ra) * 1.35, 0.3 + Math.random() * 1.4, ins.z + Math.sin(ra) * 1.35,
+          0xff2942, 0.18, 4
+        );
+      }
+    }
+    // Dark-red trailing mist & boot sparks while hunting
+    if (ins.state === 'HUNT' && ins.stunTimer <= 0) {
+      ins.mistAccum = (ins.mistAccum || 0) - simDt;
+      if (ins.mistAccum <= 0) {
+        ins.mistAccum = 0.24;
+        this.spawnSparkBurst(ins.x, 0.35, ins.z, 0xb81628, 3);
+      }
+    }
 
     // Stunned (from EMP or Perfect Parry!)
     if (ins.stunTimer > 0) {
       ins.stunTimer = Math.max(0, ins.stunTimer - simDt);
       ins.teleMesh.visible = false;
       ins.teleFill.visible = false;
+      if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
       this.updateActorSprite(ins, simDt, false);
       this.enforceWardBlockOnInspector();
       return;
@@ -3862,6 +5229,8 @@
       ins.x = step.x;
       ins.z = step.z;
       this.enforceWardBlockOnInspector();
+      // Crimson phantom wake + boot sparks during execution lunge
+      this.spawnAfterimage(ins.x, ins.z, 'inspector', ins.facingLeft, 0xff2238, 0.24, 'dash');
 
       // Check damage to player or squad during lunge
       if (!ins.lungeHitDone) {
@@ -3885,7 +5254,7 @@
       return;
     }
 
-    // 0.9s Crimson Lunge Telegraph wind-up!
+    // 0.9s Crimson Lunge Telegraph wind-up (with clear gold-white PARRY WINDOW glint!)
     if (ins.lungeTelegraph > 0) {
       ins.lungeTelegraph = Math.max(0, ins.lungeTelegraph - simDt);
       ins.lungeWindup = ins.lungeTelegraph;
@@ -3898,13 +5267,27 @@
       ins.teleFill.scale.set(1, 1, Math.max(0.02, progress));
       ins.actionTimer = 0.2;
 
+      if (ins.teleParryGlint && ins.teleParryGlintMat) {
+        ins.teleParryGlint.visible = true;
+        ins.teleParryGlint.position.x = ins.facingLeft ? -0.68 : 0.68;
+        ins.teleParryGlint.rotation.z = this.elapsedReal * 7.5;
+        var inSweetSpot = progress >= 0.35;
+        var gScale = inSweetSpot ? (0.9 + Math.sin(progress * Math.PI * 3) * 0.45) : (0.45 + progress * 0.5);
+        ins.teleParryGlint.scale.set(gScale, gScale, 1);
+        ins.teleParryGlintMat.color.setHex(inSweetSpot ? 0xffe484 : 0xff3b4f);
+        ins.teleParryGlintMat.opacity = inSweetSpot ? 0.95 : 0.55;
+      }
+
       if (ins.lungeTelegraph <= 0) {
         ins.lungeWindup = 0;
         ins.teleMesh.visible = false;
         ins.teleFill.visible = false;
+        if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
         ins.lungeActive = 0.28;
         ins.lungeHitDone = false;
         ins.lungeCd = 3.2;
+        this.triggerActorSquash(ins, 1.28, 0.78);
+        this.spawnSlashArc(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 3.4, 0xff2238, 0.24, true, { primaryColor: '#ff2238', secondaryColor: '#ff99a4' });
         playSfxSafe('sword_slash');
         this.emitSoundRipple(ins.x, ins.z, 65, 'boss');
       }
@@ -4053,9 +5436,11 @@
     var dmg = Math.max(1, Math.round(amount));
     ins.hp = Math.max(0, ins.hp - dmg);
     ins.hitFlash = 0.16;
+    this.triggerActorSquash(ins, 0.84, 1.18);
     this.stats.damageDealt += dmg;
     playSfxSafe('hit_impact');
 
+    var impactCol = (opts && opts.impactColor) || (isCrit ? 0xffe07d : 0xff3b4f);
     if (opts && opts.playerImpact) {
       ins.whiteFlash = Math.max(ins.whiteFlash || 0, 0.09);
       this.hitStopTimer = Math.max(this.hitStopTimer, opts.hitStop || 0.05);
@@ -4073,13 +5458,41 @@
     }
 
     this.spawnFloatingText(ins.x, 2.5, ins.z, (isCrit ? '★-' : '-') + dmg, isCrit ? '#ffe07d' : '#ff6b78');
-    this.spawnSparkBurst(ins.x, 1.3, ins.z, isCrit ? 0xffe07d : 0xff3b4f, isCrit ? 14 : 8);
+    this.spawnSparkBurst(ins.x, 1.3, ins.z, impactCol, isCrit ? 16 : 9);
+    if (isCrit) {
+      this.spawnImpactStar(ins.x, 1.4, ins.z, impactCol, 2.0, 0.24);
+    }
 
     // Taking damage alerts Inspector toward player if not stunned
     if (ins.stunTimer <= 0 && this.player.stealthTimer <= 0) {
       ins.state = 'HUNT';
       ins.huntTargetId = 'player';
       ins.huntLoseTimer = 7.0;
+    }
+
+    var hpDealtPct = Math.round(((ins.maxHp - ins.hp) / Math.max(1, ins.maxHp)) * 100);
+    var combatPct = Math.max(hpDealtPct, Math.round(ins.sealedPct || 0));
+    if (!this.missionFlags.inspectorEngaged) {
+      this.missionFlags.inspectorEngaged = true;
+      this.setBranchState('inspector_hunt', 'active', '已与零号检票员正面交锋（剩余 HP ' + Math.round(ins.hp) + '/' + Math.round(ins.maxHp) + '）。', combatPct);
+      this.recordMissionEvent(
+        'branch',
+        '分支开启 · 正面交锋检票员',
+        '首次对零号检票员造成有效伤害，解锁正面击杀 / 规则封印破局路径。',
+        { branchId: 'inspector_hunt' }
+      );
+    } else if (ins.hp > 0 && hpDealtPct >= 50 && !this.missionFlags.inspectorHalfHp) {
+      this.missionFlags.inspectorHalfHp = true;
+      this.setBranchState('inspector_hunt', 'active', '零号检票员护壳受损过半（剩余 HP ' + Math.round(ins.hp) + '/' + Math.round(ins.maxHp) + '）。', combatPct);
+      this.recordMissionEvent(
+        'progress',
+        '检票员生命削减过半 (' + hpDealtPct + '%)',
+        '零号检票员已进入重伤态，继续集火或衔接封印锁链即可彻底肃清。',
+        { branchId: 'inspector_hunt' }
+      );
+    } else if (ins.hp > 0) {
+      this.branches.inspector_hunt.progressPct = combatPct;
+      this.branches.inspector_hunt.outcome = '交战中 · 剩余 HP ' + Math.round(ins.hp) + '/' + Math.round(ins.maxHp) + ' · 封印 ' + Math.round(ins.sealedPct || 0) + '%';
     }
 
     if (ins.hp <= 0) {
@@ -4094,15 +5507,34 @@
     ins.hp = 0;
     ins.teleMesh.visible = false;
     ins.teleFill.visible = false;
+    if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
     ins.vis.group.visible = false;
 
     this.stats.inspectorDefeated = true;
     this.stats.inspectorSealed = !!sealed;
-    this.hitStopTimer = 0.12;
-    this.addCameraShake(0.6, 0.45);
-    this.spawnShockRing(ins.x, ins.z, 6.5, sealed ? 0xf0c46c : 0xff3b4f, 0.9);
-    this.spawnSparkBurst(ins.x, 1.4, ins.z, sealed ? 0xf0c46c : 0xff4d60, 28);
+    this.hitStopTimer = 0.14;
+    this.camFovPunch = -4.2;
+    this.addCameraShake(0.65, 0.48);
+    var finCol = sealed ? 0xf0c46c : 0xff3b4f;
+    this.spawnImpactStar(ins.x, 1.55, ins.z, finCol, 4.4, 0.55);
+    this.spawnSigilPulse(ins.x, ins.z, 5.2, sealed ? 'occult_eye' : 'blood_crest', finCol, 1.0);
+    this.spawnShockRing(ins.x, ins.z, 7.2, finCol, 0.95);
+    this.spawnShockRing(ins.x, ins.z, 4.2, 0xffffff, 0.55);
+    this.spawnSparkBurst(ins.x, 1.4, ins.z, finCol, 34);
     playSfxSafe('fusion');
+
+    this.setBranchState(
+      'inspector_hunt',
+      'completed',
+      sealed ? '零号检票员已被 100% 规则封印，0 号站台撤离限制全面解除！' : '零号检票员已被正面击杀，斩断检票钳破局达成！',
+      100
+    );
+    this.recordMissionEvent(
+      'branch',
+      sealed ? '破局达成 · 规则封印检票员' : '破局达成 · 击杀零号检票员',
+      '规则实体已彻底瓦解，即将进入 A+ 级考场终局结算。',
+      { branchId: 'inspector_hunt' }
+    );
 
     this.emitRadio({
       type: 'system',
@@ -4135,19 +5567,31 @@
       dmg = Math.round(dmg * 0.55);
     }
 
-    // Aegis Shield absorption + knockback reflection!
+    // Aegis Shield absorption + ripple reflection + shatter burst on break!
     if (p.shieldHp > 0) {
       var absorbed = Math.min(p.shieldHp, dmg);
+      var shCol = p.shieldColor || 0x66e8ff;
       p.shieldHp -= absorbed;
       dmg -= absorbed;
+      this.triggerActorSquash(p, 1.18, 0.86);
       this.spawnFloatingText(p.x, 2.3, p.z, '护盾吸收 ' + absorbed, '#66e8ff');
-      this.spawnShockRing(p.x, p.z, 2.8, 0x66e8ff, 0.35);
+      this.spawnShockRing(p.x, p.z, 3.2, shCol, 0.38);
+      this.spawnImpactStar(p.x, 1.15, p.z, shCol, 1.8, 0.22);
+      this.spawnSkillParticleFx(
+        { archetype: 'aegis_shield', tier: 'A', color: '#' + (shCol >>> 0).toString(16).padStart(6, '0') },
+        p.x, 1.05, p.z, 0, 1.8,
+        { triggerAnimOverride: 'shield_refract', intensityScale: 0.9 }
+      );
+      if (p.shieldHp <= 0) {
+        this.spawnShieldShatter(p.x, 1.05, p.z, shCol);
+        this.spawnFloatingText(p.x, 2.7, p.z, '护盾碎裂！', '#ff8866');
+      }
       playSfxSafe('ward_place');
       if (this.inspector.alive && dist2D(p.x, p.z, this.inspector.x, this.inspector.z) < 4.5) {
         var rx = this.inspector.x - p.x;
         var rz = this.inspector.z - p.z;
         var rl = Math.max(0.01, Math.sqrt(rx * rx + rz * rz));
-        this.damageInspector(12, (rx / rl) * 6.0, (rz / rl) * 6.0, false);
+        this.damageInspector(12, (rx / rl) * 6.0, (rz / rl) * 6.0, false, { impactColor: shCol });
       }
       if (dmg <= 0) {
         p.invulnTimer = 0.45;
@@ -4157,8 +5601,9 @@
 
     p.hp = Math.max(0, p.hp - dmg);
     p.sanity = Math.max(0, p.sanity - 5);
-    p.hitFlash = 0.25;
+    p.hitFlash = 0.26;
     p.invulnTimer = 0.65;
+    this.triggerActorSquash(p, 0.78, 1.24);
     this.stats.damageTaken += dmg;
     this.glitchAmount = Math.max(this.glitchAmount, 0.65);
     this.addCameraShake(0.45, 0.28);
@@ -4185,10 +5630,20 @@
     var dmg = Math.max(1, Math.round(amount));
     if (this.isInsideAnyWard(ally.x, ally.z)) dmg = Math.round(dmg * 0.55);
     ally.hp = Math.max(0, ally.hp - dmg);
+    if (typeof ally.sanity === 'number') {
+      ally.sanity = Math.max(0, ally.sanity - Math.round(dmg * 0.45));
+    }
     ally.hitFlash = 0.24;
     this.spawnFloatingText(ally.x, 2.2, ally.z, '-' + dmg, '#ff7766');
     if (ally.hp <= 0) {
       ally.alive = false;
+      this.setBranchState('squad_tactics', 'warning', ally.name + '在考场内重伤失联，小队战力受损。', 100);
+      this.recordMissionEvent(
+        'warning',
+        '队友失联 · ' + ally.name,
+        ally.name + '生命体征归零，已退出本场实时协同。',
+        { branchId: 'squad_tactics' }
+      );
       this.emitRadio({
         type: 'system',
         text: '【队友重伤失联】' + ally.name + '已倒下，失去行动能力！'
@@ -4237,6 +5692,15 @@
         this.trainPhase = 'docked';
         this.trainInStation = true;
         this.trainTimer = TRAIN_DWELL_SEC;
+        if (this.branches.ghost_train.status === 'locked') {
+          this.setBranchState('ghost_train', 'active', '零号列车已停靠 0 号站台，车门短暂开启（未反转前强登将触发 B 级次优结局）。', 50);
+        }
+        this.recordMissionEvent(
+          'progress',
+          '零号幽灵列车进站停靠',
+          '车门开启停靠 0 号站台；道岔未反转前切勿盲目越线登车。',
+          { branchId: 'ghost_train', zoneId: 'platform0' }
+        );
         this.emitRadio({
           type: 'narration',
           text: '【零号列车停靠】车门无声滑开，车厢内部漆黑一片；车灯正死死照向 0 号站台黄线。'
@@ -4295,6 +5759,12 @@
     if (sanHit > 0) {
       this.player.sanity = Math.max(0, this.player.sanity - sanHit);
     }
+    for (var fbi = 0; fbi < this.squad.length; fbi++) {
+      var sqUnit = this.squad[fbi];
+      if (sqUnit.alive && typeof sqUnit.sanity === 'number') {
+        sqUnit.sanity = Math.max(8, sqUnit.sanity - 9);
+      }
+    }
 
     this.emitRadio({
       type: 'broadcast',
@@ -4303,6 +5773,15 @@
       fake: true,
       timeGlitch: true
     });
+    if (this.branches.fake_broadcast.status !== 'completed') {
+      this.setBranchState('fake_broadcast', 'triggered', '截获 43.2Hz 伪造系统播报！可用 EMP 打断或等待严辞核对腕表拆穿。', 50);
+    }
+    this.recordMissionEvent(
+      'branch',
+      '触发规则陷阱 · 43.2Hz 拟态假播报',
+      text.slice(0, 68) + (text.length > 68 ? '…' : ''),
+      { branchId: 'fake_broadcast' }
+    );
   };
 
   EngineSession.prototype.updateBroadcasts = function (simDt) {
@@ -4318,6 +5797,15 @@
           var expose = '腕表秒针未震动，尾音滞后0.3秒——这是检票员的假播报，别上当！';
           this.showSpeechBubble('yanci', expose);
           this.emitRadio({ type: 'dialogue', npcId: 'yanci', speaker: '严辞', text: expose });
+          if (this.branches.fake_broadcast.status !== 'completed') {
+            this.setBranchState('fake_broadcast', 'completed', '严辞借腕表秒针相位差拆穿 0.3 秒延迟假播报，全队识破诱捕回路。', 100);
+            this.recordMissionEvent(
+              'branch',
+              '分支破解 · 严辞拆穿假播报',
+              '确认播报源为检票员胸口对讲机，剔除“强制登车”虚假指令。',
+              { branchId: 'fake_broadcast' }
+            );
+          }
         }
       }
     }
@@ -4456,260 +5944,125 @@
   };
 
   // ---------------------------------------------------------------------------
-  // 3D VFX Spawners (Slash Arc, Laser Beam, Chains, Shock Ring, Sparks, Ghosts)
+  // 3D VFX Spawners (Multi-Layer Motif VFX: Slash, Beam, Chains, Bolts, Sigils,
+  // Heal Pillar, Stealth Scan, Recon Radar, Berserk Slam, Shield Shatter, NPCs)
   // ---------------------------------------------------------------------------
-  EngineSession.prototype.spawnSlashArc = function (x, z, angle, radius, colorHex, duration, heavy) {
-    var THREE = this.THREE;
-    var arcLen = heavy ? Math.PI * 0.72 : Math.PI * 0.56;
-    var geo = new THREE.RingGeometry(radius * 0.42, radius, 22, 1, -arcLen * 0.5, arcLen);
-    geo.rotateX(-Math.PI / 2);
-    var mat = new THREE.MeshBasicMaterial({
-      color: colorHex || 0x6fd8ea,
-      transparent: true,
-      opacity: heavy ? 0.92 : 0.78,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-    var mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, 0.95, z);
-    mesh.rotation.y = -angle;
-    this.scene.add(mesh);
-
-    var self = this;
-    this.vfxList.push({
-      ttl: duration,
-      maxTtl: duration,
-      update: function (dt) {
-        this.ttl -= dt;
-        var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
-        mesh.scale.set(0.85 + p * 0.35, 1, 0.85 + p * 0.35);
-        mesh.rotation.y = -angle + (p - 0.5) * 0.55;
-        mat.opacity = (heavy ? 0.92 : 0.78) * (1 - p);
-      },
-      dispose: function () {
-        self.scene.remove(mesh);
-        geo.dispose();
-        mat.dispose();
-      }
-    });
-  };
-
-  EngineSession.prototype.spawnLaserBeam = function (x0, z0, x1, z1, colorHex, duration) {
-    var THREE = this.THREE;
-    var dx = x1 - x0;
-    var dz = z1 - z0;
-    var len = Math.max(0.2, Math.sqrt(dx * dx + dz * dz));
-
-    var coreGeo = new THREE.CylinderGeometry(0.11, 0.11, len, 8);
-    coreGeo.rotateX(Math.PI / 2);
-    var coreMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.98,
-      blending: THREE.AdditiveBlending
-    });
-
-    var glowGeo = new THREE.CylinderGeometry(0.32, 0.32, len, 8);
-    glowGeo.rotateX(Math.PI / 2);
-    var glowMat = new THREE.MeshBasicMaterial({
-      color: colorHex || 0x4de8ff,
-      transparent: true,
-      opacity: 0.6,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-
-    var group = new THREE.Group();
-    group.add(new THREE.Mesh(coreGeo, coreMat));
-    group.add(new THREE.Mesh(glowGeo, glowMat));
-    group.position.set((x0 + x1) * 0.5, 1.05, (z0 + z1) * 0.5);
-    group.rotation.y = Math.atan2(dx, dz);
-    this.scene.add(group);
-
-    this.spawnSparkBurst(x1, 1.0, z1, colorHex || 0x4de8ff, 14);
-
-    var self = this;
-    this.vfxList.push({
-      ttl: duration,
-      maxTtl: duration,
-      update: function (dt) {
-        this.ttl -= dt;
-        var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
-        var w = Math.max(0.05, 1 - p);
-        group.scale.set(w, w, 1);
-        coreMat.opacity = 1 - p;
-        glowMat.opacity = 0.6 * (1 - p);
-      },
-      dispose: function () {
-        self.scene.remove(group);
-        coreGeo.dispose();
-        glowGeo.dispose();
-        coreMat.dispose();
-        glowMat.dispose();
-      }
-    });
-  };
-
-  EngineSession.prototype.spawnSealChainsVfx = function (x0, z0, x1, z1, colorHex) {
-    var THREE = this.THREE;
-    var dx = x1 - x0;
-    var dz = z1 - z0;
-    var len = Math.max(0.5, Math.sqrt(dx * dx + dz * dz));
-
-    var group = new THREE.Group();
-    var geos = [];
-    var mats = [];
-
-    for (var c = -1; c <= 1; c++) {
-      var geo = new THREE.CylinderGeometry(0.06, 0.06, len, 6);
-      geo.rotateX(Math.PI / 2);
-      var mat = new THREE.MeshBasicMaterial({
-        color: c === 0 ? 0xff4658 : (colorHex || 0xf0c46c),
-        transparent: true,
-        opacity: 0.88,
-        blending: THREE.AdditiveBlending
-      });
-      var m = new THREE.Mesh(geo, mat);
-      m.position.set(c * 0.25, c * 0.18, 0);
-      group.add(m);
-      geos.push(geo);
-      mats.push(mat);
+  EngineSession.prototype.spawnSkillParticleFx = function (skillOrId, x, y, z, angle, radius, extraOpts) {
+    if (!this.skillsApi || !this.skillsApi.ParticleVfx || typeof this.skillsApi.ParticleVfx.trigger !== 'function') {
+      return null;
     }
-    group.position.set((x0 + x1) * 0.5, 1.15, (z0 + z1) * 0.5);
-    group.rotation.y = Math.atan2(dx, dz);
-    this.scene.add(group);
-    this.spawnShockRing(x1, z1, 2.2, 0xf0c46c, 0.6);
+    var opts = Object.assign({
+      x: x,
+      y: typeof y === 'number' ? y : 1.0,
+      z: z,
+      angle: angle || 0,
+      radius: radius
+    }, extraOpts || {});
+    var handle = this.skillsApi.ParticleVfx.trigger(this.THREE, this.scene, skillOrId, opts);
+    if (handle) {
+      this.vfxList.push(handle);
+    }
+    return handle;
+  };
 
-    var self = this;
-    this.vfxList.push({
-      ttl: 1.15,
-      maxTtl: 1.15,
-      update: function (dt) {
-        this.ttl -= dt;
-        var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
-        for (var mi = 0; mi < mats.length; mi++) mats[mi].opacity = 0.88 * (1 - p);
-      },
-      dispose: function () {
-        self.scene.remove(group);
-        geos.forEach(function (g) { g.dispose(); });
-        mats.forEach(function (m) { m.dispose(); });
-      }
+  EngineSession.prototype.spawnResonanceGlobalVfx = function (resonance, x, z, angle) {
+    if (!resonance || !this.skillsApi || !this.skillsApi.BloodlineResonance || typeof this.skillsApi.BloodlineResonance.triggerGlobalVfx !== 'function') {
+      return null;
+    }
+    var handle = this.skillsApi.BloodlineResonance.triggerGlobalVfx(this.THREE, this.scene, resonance, {
+      x: x,
+      z: z,
+      angle: angle || 0,
+      spread: 17.5 + (resonance.level || 1) * 2.5
     });
+    if (handle) {
+      this.vfxList.push(handle);
+    }
+    // Brief resonant arena glow & subtle camera impulse
+    this.camFovPunch = Math.min(this.camFovPunch || 0, -1.6);
+    this.addCameraShake(0.18, 0.22);
+    if (this.playerGlow && resonance.colors && resonance.colors.primaryHex != null) {
+      var glowRef = this.playerGlow;
+      var origHex = glowRef.color.getHex();
+      var origInt = glowRef.intensity;
+      var resHex = resonance.colors.primaryHex;
+      glowRef.color.setHex(resHex);
+      glowRef.intensity = Math.max(origInt, 2.4 + (resonance.level || 1) * 0.45);
+      this.vfxList.push({
+        ttl: 0.75,
+        maxTtl: 0.75,
+        update: function (dt) {
+          this.ttl -= dt;
+          var k = clamp(this.ttl / this.maxTtl, 0, 1);
+          glowRef.intensity = origInt + (2.4 - origInt) * k;
+        },
+        dispose: function () {
+          glowRef.color.setHex(origHex);
+          glowRef.intensity = origInt;
+        }
+      });
+    }
+    return handle;
+  };
+
+  EngineSession.prototype.spawnSlashArc = function (x, z, angle, radius, colorHex, duration, heavy, vfx) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnSlashArc === 'function') {
+      INFINITY.VfxStudio.spawnSlashArc(this, x, z, angle, radius, colorHex, vfx);
+    }
+  };
+
+  EngineSession.prototype.spawnLaserBeam = function (x0, z0, x1, z1, colorHex, duration, vfx) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnLaserBeam === 'function') {
+      INFINITY.VfxStudio.spawnLaserBeam(this, x0, z0, x1, z1, colorHex, vfx);
+    }
+  };
+
+  EngineSession.prototype.spawnSealChainsVfx = function (x0, z0, x1, z1, colorHex, vfx) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnSealChainsVfx === 'function') {
+      INFINITY.VfxStudio.spawnSealChainsVfx(this, x0, z0, x1, z1, 2.4, colorHex, vfx);
+    }
   };
 
   EngineSession.prototype.spawnShockRing = function (x, z, maxRadius, colorHex, duration) {
-    var THREE = this.THREE;
-    var geo = new THREE.RingGeometry(0.75, 1.0, 32);
-    geo.rotateX(-Math.PI / 2);
-    var mat = new THREE.MeshBasicMaterial({
-      color: colorHex || 0x6fd8ea,
-      transparent: true,
-      opacity: 0.85,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-    var mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, 0.11, z);
-    mesh.scale.set(0.25, 0.25, 1);
-    this.scene.add(mesh);
-
-    var self = this;
-    this.vfxList.push({
-      ttl: duration,
-      maxTtl: duration,
-      update: function (dt) {
-        this.ttl -= dt;
-        var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
-        var sc = 0.25 + p * maxRadius;
-        mesh.scale.set(sc, sc, 1);
-        mat.opacity = 0.85 * (1 - p);
-      },
-      dispose: function () {
-        self.scene.remove(mesh);
-        geo.dispose();
-        mat.dispose();
-      }
-    });
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnWaveRing === 'function') {
+      INFINITY.VfxStudio.spawnWaveRing(this, x, z, maxRadius, colorHex, duration, 0);
+    }
   };
 
   EngineSession.prototype.spawnSparkBurst = function (x, y, z, colorHex, count) {
-    var THREE = this.THREE;
-    var n = count || 10;
-    var positions = new Float32Array(n * 3);
-    var vels = [];
-    for (var i = 0; i < n; i++) {
-      positions[i * 3] = x;
-      positions[i * 3 + 1] = y;
-      positions[i * 3 + 2] = z;
-      var a = Math.random() * Math.PI * 2;
-      var spd = 2.0 + Math.random() * 5.2;
-      vels.push({ vx: Math.cos(a) * spd, vy: 1.5 + Math.random() * 3.5, vz: Math.sin(a) * spd });
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnSparkBurst === 'function') {
+      INFINITY.VfxStudio.spawnSparkBurst(this, x, y, z, colorHex, count);
     }
-    var geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    var mat = new THREE.PointsMaterial({
-      color: colorHex || 0x6fd8ea,
-      size: 0.24,
-      transparent: true,
-      opacity: 0.95,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-    var pts = new THREE.Points(geo, mat);
-    this.scene.add(pts);
-
-    var self = this;
-    this.vfxList.push({
-      ttl: 0.42,
-      maxTtl: 0.42,
-      update: function (dt) {
-        this.ttl -= dt;
-        var attr = geo.attributes.position;
-        for (var k = 0; k < n; k++) {
-          attr.array[k * 3] += vels[k].vx * dt;
-          attr.array[k * 3 + 1] = Math.max(0.08, attr.array[k * 3 + 1] + vels[k].vy * dt);
-          attr.array[k * 3 + 2] += vels[k].vz * dt;
-          vels[k].vy -= 9.5 * dt;
-        }
-        attr.needsUpdate = true;
-        mat.opacity = clamp(this.ttl / this.maxTtl, 0, 1);
-      },
-      dispose: function () {
-        self.scene.remove(pts);
-        geo.dispose();
-        mat.dispose();
-      }
-    });
   };
 
-  EngineSession.prototype.spawnAfterimage = function (x, z, actorId, facingLeft, colorHex, duration) {
+  EngineSession.prototype.spawnAfterimage = function (x, z, actorId, facingLeft, colorHex, duration, frame) {
     var THREE = this.THREE;
-    var tex = this.getCharTex(actorId, 'action');
-    var geo = new THREE.PlaneGeometry(1.35, 1.85);
+    var isBoss = actorId === 'inspector';
+    var tex = this.getCharTex(actorId, frame || 'action');
+    var geo = new THREE.PlaneGeometry(isBoss ? 2.15 : 1.65, isBoss ? 2.8 : 2.0);
     var mat = new THREE.MeshBasicMaterial({
       map: tex,
       color: colorHex || 0x4df8ff,
       transparent: true,
-      opacity: 0.48,
+      opacity: 0.52,
       depthWrite: false,
       side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending
     });
     var mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, 0.98, z);
-    mesh.rotation.x = -0.34;
+    mesh.position.set(x, isBoss ? 1.4 : 1.04, z);
+    mesh.rotation.x = -0.32;
     mesh.scale.x = facingLeft ? -1 : 1;
     this.scene.add(mesh);
 
     var self = this;
+    var dur = duration || 0.35;
     this.vfxList.push({
-      ttl: duration || 0.35,
-      maxTtl: duration || 0.35,
+      ttl: dur,
+      maxTtl: dur,
       update: function (dt) {
         this.ttl -= dt;
-        mat.opacity = 0.48 * clamp(this.ttl / this.maxTtl, 0, 1);
+        mat.opacity = 0.52 * clamp(this.ttl / this.maxTtl, 0, 1);
       },
       dispose: function () {
         self.scene.remove(mesh);
@@ -4719,64 +6072,229 @@
     });
   };
 
-  EngineSession.prototype.spawnScorchDecal = function (x, z, angle, radius) {
+  EngineSession.prototype.spawnScorchDecal = function (x, z, angle, radius, colorHex) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnScorchDecal === 'function') {
+      INFINITY.VfxStudio.spawnScorchDecal(this, x, z, (radius || 2.8) * 0.55, colorHex, 2.8);
+    }
+  };
+
+  EngineSession.prototype.spawnLightningBolt = function (x0, y0, z0, x1, y1, z1, colorHex, duration, segments) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnLightningBolt === 'function') {
+      INFINITY.VfxStudio.spawnLightningBolt(this, x0, y0, z0, x1, y1, z1, colorHex, duration, segments);
+    }
+  };
+
+  EngineSession.prototype.spawnImpactStar = function (x, y, z, colorHex, scale, duration) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnImpactStar === 'function') {
+      INFINITY.VfxStudio.spawnImpactStar(this, x, y, z, colorHex, scale, duration);
+    }
+  };
+
+  EngineSession.prototype.spawnSigilPulse = function (x, z, size, sigilStyle, colorHex, duration) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnSigilPulse === 'function') {
+      INFINITY.VfxStudio.spawnSigilPulse(this, x, z, (size || 2.4) * 0.55, sigilStyle, colorHex, duration);
+    }
+  };
+
+  EngineSession.prototype.spawnFootstepRipple = function (x, z, colorHex, maxRadius) {
     var THREE = this.THREE;
-    var arcLen = Math.PI * 0.68;
-    var rOuter = Math.max(2.4, radius || 3.8);
-    var rInner = rOuter * 0.54;
-    var decalY = (x >= 41 && x < 50) ? 0.06 : 0.03;
-
-    var group = new THREE.Group();
-    group.position.set(x, decalY, z);
-    group.rotation.y = -angle;
-
-    // Dark charred arc base
-    var charGeo = new THREE.RingGeometry(rInner * 0.92, rOuter * 1.04, 22, 1, -arcLen * 0.5, arcLen);
-    charGeo.rotateX(-Math.PI / 2);
-    var charMat = new THREE.MeshBasicMaterial({
-      color: 0x181008,
+    var maxR = maxRadius || 0.44;
+    var geo = new THREE.RingGeometry(0.74, 1.0, 18);
+    geo.rotateX(-Math.PI / 2);
+    var mat = new THREE.MeshBasicMaterial({
+      color: colorHex || 0x7ec8e8,
       transparent: true,
-      opacity: 0.52,
-      side: THREE.DoubleSide,
-      depthWrite: false
-    });
-    group.add(new THREE.Mesh(charGeo, charMat));
-
-    // Glowing dark-gold scorch streak overlay
-    var glowGeo = new THREE.RingGeometry(rInner * 1.04, rOuter * 0.94, 22, 1, -arcLen * 0.46, arcLen * 0.92);
-    glowGeo.rotateX(-Math.PI / 2);
-    var glowMat = new THREE.MeshBasicMaterial({
-      color: 0xd99636,
-      transparent: true,
-      opacity: 0.72,
+      opacity: 0.34,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending
     });
-    var glowMesh = new THREE.Mesh(glowGeo, glowMat);
-    glowMesh.position.y = 0.005;
-    group.add(glowMesh);
-
-    this.scene.add(group);
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0.045, z);
+    mesh.scale.set(0.12, 1, 0.12);
+    this.scene.add(mesh);
 
     var self = this;
     this.vfxList.push({
-      ttl: 6.0,
-      maxTtl: 6.0,
+      ttl: 0.36,
+      maxTtl: 0.36,
+      update: function (dt) {
+        this.ttl -= dt;
+        var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
+        var sc = 0.12 + p * maxR;
+        mesh.scale.set(sc, 1, sc);
+        mat.opacity = 0.34 * (1 - p);
+      },
+      dispose: function () {
+        self.scene.remove(mesh);
+        geo.dispose();
+        mat.dispose();
+      }
+    });
+  };
+
+  EngineSession.prototype.spawnHealPillarVfx = function (x, z, radius, colorHex, secHex, vfx) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnHealPillarVfx === 'function') {
+      INFINITY.VfxStudio.spawnHealPillarVfx(this, x, z, radius, colorHex, vfx);
+    }
+  };
+
+  EngineSession.prototype.spawnStealthBurstVfx = function (x, z, colorHex, secHex, vfx) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnStealthBurstVfx === 'function') {
+      INFINITY.VfxStudio.spawnStealthBurstVfx(this, x, z, colorHex, vfx);
+    }
+  };
+
+  EngineSession.prototype.spawnReconSweepVfx = function (x, z, maxRadius, colorHex, secHex, vfx) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnReconSweepVfx === 'function') {
+      INFINITY.VfxStudio.spawnReconSweepVfx(this, x, z, maxRadius, colorHex, vfx);
+    }
+  };
+
+  EngineSession.prototype.spawnBerserkSlamVfx = function (x, z, radius, colorHex, secHex, vfx) {
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnBerserkSlamVfx === 'function') {
+      INFINITY.VfxStudio.spawnBerserkSlamVfx(this, x, z, radius, colorHex, vfx);
+    }
+  };
+
+  EngineSession.prototype.spawnShieldShatter = function (x, y, z, colorHex) {
+    var THREE = this.THREE;
+    var col = colorHex || 0x58e6ff;
+    var group = new THREE.Group();
+    var geos = [];
+    var mats = [];
+    var shards = [];
+
+    for (var i = 0; i < 12; i++) {
+      var sGeo = new THREE.CircleGeometry(0.18 + Math.random() * 0.12, 3);
+      var sMat = new THREE.MeshBasicMaterial({
+        color: i % 3 === 0 ? 0xffffff : col,
+        transparent: true,
+        opacity: 0.95,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      var m = new THREE.Mesh(sGeo, sMat);
+      var a = (i / 12) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
+      var rad = 0.45 + Math.random() * 0.25;
+      m.position.set(x + Math.cos(a) * rad, (y || 1.05) + (Math.random() - 0.3) * 0.6, z + Math.sin(a) * rad);
+      m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      group.add(m);
+      geos.push(sGeo);
+      mats.push(sMat);
+      var spd = 2.6 + Math.random() * 3.4;
+      shards.push({
+        mesh: m,
+        mat: sMat,
+        vx: Math.cos(a) * spd,
+        vy: 1.4 + Math.random() * 2.8,
+        vz: Math.sin(a) * spd,
+        rx: (Math.random() - 0.5) * 14,
+        ry: (Math.random() - 0.5) * 14
+      });
+    }
+
+    this.scene.add(group);
+    this.spawnShockRing(x, z, 2.2, col, 0.36);
+
+    var self = this;
+    this.vfxList.push({
+      ttl: 0.56,
+      maxTtl: 0.56,
       update: function (dt) {
         this.ttl -= dt;
         var frac = clamp(this.ttl / this.maxTtl, 0, 1);
-        charMat.opacity = 0.52 * frac;
-        glowMat.opacity = 0.72 * Math.pow(frac, 1.35);
+        for (var k = 0; k < shards.length; k++) {
+          var sh = shards[k];
+          sh.mesh.position.x += sh.vx * dt;
+          sh.mesh.position.y = Math.max(0.08, sh.mesh.position.y + sh.vy * dt);
+          sh.mesh.position.z += sh.vz * dt;
+          sh.vy -= 9.5 * dt;
+          sh.mesh.rotation.x += sh.rx * dt;
+          sh.mesh.rotation.y += sh.ry * dt;
+          sh.mat.opacity = 0.95 * frac;
+        }
       },
       dispose: function () {
         self.scene.remove(group);
-        charGeo.dispose();
-        glowGeo.dispose();
-        charMat.dispose();
-        glowMat.dispose();
+        for (var gi = 0; gi < geos.length; gi++) geos[gi].dispose();
+        for (var mi = 0; mi < mats.length; mi++) mats[mi].dispose();
       }
     });
+  };
+
+  EngineSession.prototype.spawnNpcSignatureVfx = function (npcId, x, z, angle) {
+    var THREE = this.THREE;
+    var ang = angle || 0;
+
+    if (npcId === 'yanci') {
+      // 严辞: Golden law-scale sigil + decree shock ring + golden motes
+      this.spawnSigilPulse(x, z, 2.35, 'arcane_star', 0xf0c46c, 0.65);
+      this.spawnShockRing(x, z, 2.1, 0xf0c46c, 0.45);
+      this.spawnSparkBurst(x, 1.05, z, 0xffe484, 8);
+      return;
+    }
+
+    if (npcId === 'lujin') {
+      // 陆烬: Amber rail muzzle flare + hot brass sparks perpendicular to firing line
+      this.spawnImpactStar(x, 1.08, z, 0xff9c3b, 1.35, 0.18);
+      var perpA = ang + Math.PI * 0.5;
+      this.spawnSparkBurst(x + Math.cos(perpA) * 0.18, 1.02, z + Math.sin(perpA) * 0.18, 0xffd27a, 7);
+      return;
+    }
+
+    if (npcId === 'xutan') {
+      // 许檀: Cyan holographic PKE radar fan sweep + tactical sigil
+      this.spawnSigilPulse(x, z, 2.1, 'tactical_hud', 0x58e6ff, 0.6);
+      var fanGeo = new THREE.RingGeometry(0.35, 3.6, 20, 1, -Math.PI * 0.2, Math.PI * 0.4);
+      fanGeo.rotateX(-Math.PI / 2);
+      var fanMat = new THREE.MeshBasicMaterial({
+        color: 0x58e6ff,
+        transparent: true,
+        opacity: 0.44,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      var fanMesh = new THREE.Mesh(fanGeo, fanMat);
+      fanMesh.position.set(x, 0.12, z);
+      fanMesh.rotation.y = -ang;
+      this.scene.add(fanMesh);
+      var self = this;
+      this.vfxList.push({
+        ttl: 0.52,
+        maxTtl: 0.52,
+        update: function (dt) {
+          this.ttl -= dt;
+          var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
+          var sc = 0.45 + p * 0.85;
+          fanMesh.scale.set(sc, 1, sc);
+          fanMesh.rotation.y = -ang + (p - 0.5) * 0.55;
+          fanMat.opacity = 0.44 * (1 - p);
+        },
+        dispose: function () {
+          self.scene.remove(fanMesh);
+          fanGeo.dispose();
+          fanMat.dispose();
+        }
+      });
+      return;
+    }
+
+    if (npcId === 'shenyan') {
+      // 沈砚: Dark-red forged stopwatch pulse + static lightning crackles
+      this.spawnSigilPulse(x, z, 2.5, 'occult_eye', 0xd64550, 0.7);
+      this.spawnShockRing(x, z, 2.4, 0xd64550, 0.5);
+      for (var bi = 0; bi < 2; bi++) {
+        var ba = Math.random() * Math.PI * 2;
+        this.spawnLightningBolt(
+          x, 1.0, z,
+          x + Math.cos(ba) * 1.45, 0.35 + Math.random() * 0.9, z + Math.sin(ba) * 1.45,
+          0xff4658, 0.22, 5
+        );
+      }
+    }
   };
 
   EngineSession.prototype.spawnWardEmbers = function (x, z, radius) {
@@ -5223,11 +6741,20 @@
 
     var cluesTotal = 0;
     var consolesMini = [];
+    var consolesDetail = [];
     for (var i = 0; i < this.interactables.length; i++) {
       var it = this.interactables[i];
       if (it.type === 'clue') cluesTotal++;
       if (it.type === 'console') {
         consolesMini.push({ x: it.x, z: it.z, done: !!it.done });
+        consolesDetail.push({
+          id: it.id,
+          zoneId: it.zoneId,
+          label: it.label,
+          progress: Math.round(it.progress || 0),
+          done: !!it.done,
+          overrideValue: it.overrideValue || 50
+        });
       }
     }
 
@@ -5243,7 +6770,16 @@
         cooldownMax: sl.cooldownMax,
         energyCost: isRecall ? 0 : sl.energyCost,
         icon: sl.icon,
-        ready: isRecall || (sl.cooldownLeft <= 0 && p.energy >= sl.energyCost)
+        ready: isRecall || (sl.cooldownLeft <= 0 && p.energy >= sl.energyCost),
+        resonance: sl.resonance ? {
+          badgeText: sl.resonance.badgeText,
+          resonanceName: sl.resonance.resonanceName,
+          affinityLabel: sl.resonance.affinityLabel,
+          level: sl.resonance.level,
+          color: sl.resonance.colors.primary,
+          summaryText: sl.resonance.summaryText,
+          bloodlineName: sl.resonance.bloodlineName
+        } : null
       };
     }, this);
 
@@ -5284,6 +6820,7 @@
       zoneId: pZoneId,
       zoneName: pZone.name,
       zoneCode: pZone.code,
+      elapsedSec: Math.floor(this.stats.elapsedSec || 0),
       timeRemainingSec: Math.ceil(this.timeRemainingSec),
       trainCountdownSec: Math.ceil(this.trainCountdownSec),
       trainInStation: this.trainInStation,
@@ -5291,6 +6828,12 @@
       cluesFoundCount: this.discoveredClueIds.length,
       cluesTotal: cluesTotal,
       discoveredClueIds: this.discoveredClueIds.slice(),
+      consoles: consolesDetail,
+      visitedZones: this.visitedZones.slice(),
+      totalZones: 6,
+      missionLogVersion: this.missionLogVersion,
+      missionLog: this.missionLog.slice(),
+      branches: this.getBranchesList(),
       hp: Math.round(p.hp),
       maxHp: Math.round(p.maxHp),
       energy: Math.round(p.energy),
@@ -5310,6 +6853,7 @@
       },
       nearbyInteractable: near,
       slots: slotsSnap,
+      resonanceSummary: (this.loadout && this.loadout.resonanceSummary) || null,
       squad: squadSnap,
       minimap: {
         player: { x: p.x, z: p.z },
@@ -5317,7 +6861,15 @@
         squad: squadMini,
         wards: wardsMini,
         consoles: consolesMini,
-        exitReady: (this.overridePct >= 100 || !ins.alive)
+        exitReady: (this.overridePct >= 100 || !ins.alive),
+        focusWaypoint: this.focusWaypoint ? {
+          x: this.focusWaypoint.x,
+          z: this.focusWaypoint.z,
+          label: this.focusWaypoint.label,
+          color: this.focusWaypoint.color,
+          ttl: Number(this.focusWaypoint.ttl.toFixed(1)),
+          maxTtl: this.focusWaypoint.maxTtl
+        } : null
       }
     };
   };
@@ -5362,7 +6914,8 @@
     this.mounted = false;
 
     if (this.rafId !== null) {
-      global.cancelAnimationFrame(this.rafId);
+      try { global.cancelAnimationFrame(this.rafId); } catch (_) {}
+      try { global.clearTimeout(this.rafId); } catch (_) {}
       this.rafId = null;
     }
 
@@ -5385,9 +6938,18 @@
 
     for (var pi = 0; pi < this.projectiles.length; pi++) {
       try {
-        this.scene.remove(this.projectiles[pi].mesh);
-        this.projectiles[pi].geo.dispose();
-        this.projectiles[pi].mat.dispose();
+        var prj = this.projectiles[pi];
+        this.scene.remove(prj.mesh);
+        if (prj.geos) {
+          prj.geos.forEach(function (g) { g.dispose(); });
+        } else if (prj.geo) {
+          prj.geo.dispose();
+        }
+        if (prj.mats) {
+          prj.mats.forEach(function (m) { m.dispose(); });
+        } else if (prj.mat) {
+          prj.mat.dispose();
+        }
       } catch (_) {}
     }
     this.projectiles = [];
@@ -5430,6 +6992,7 @@
 
     this.removeBlinkBeacon();
     this.clearReconBeacons();
+    this.clearFocusWaypoint();
     this.disposePostFx();
 
     // Silence spatial audio sources and reset bullet-time filter cleanly
@@ -5551,6 +7114,13 @@
       return null;
     },
 
+    focusObjectiveTarget: function (taskKey) {
+      if (activeSession && activeSession.mounted) {
+        return activeSession.focusObjectiveTarget(taskKey);
+      }
+      return null;
+    },
+
     setPostFxEnabled: function (enabled) {
       postFxGlobalEnabled = !!enabled;
       if (activeSession) {
@@ -5564,6 +7134,10 @@
         return !!activeSession.postFxEnabled;
       }
       return postFxGlobalEnabled;
+    },
+
+    _getSession: function () {
+      return activeSession;
     }
   };
 })(window);

@@ -5,22 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>无限·活体考场终端 // 零号回廊</title>
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="sim/sim.css?v=4">
+  <link rel="stylesheet" href="sim/sim.css?v=12">
   <!-- Strict load order per sim/world25d/CONTRACT_25D.md (classic defer scripts, zero ES-module CORS issues) -->
   <script defer src="sim/vendor/three.min.js?v=4"></script>
+  <script defer src="sim/vendor/d3.min.js?v=1"></script>
   <script defer src="sim/data/shop_catalog.js?v=4"></script>
   <script defer src="sim/data/world_cast.js?v=4"></script>
   <script defer src="sim/data/scenario_station_zero.js?v=4"></script>
   <script defer src="sim/engine/rule_engine.js?v=4"></script>
   <script defer src="sim/engine/ai_director.js?v=4"></script>
-  <script defer src="sim/engine/audio_engine.js?v=4"></script>
+  <script defer src="sim/engine/audio_engine.js?v=7"></script>
   <script defer src="sim/data/asset_manifest.js?v=4"></script>
-  <script defer src="sim/world25d/pixel_sprites.js?v=4"></script>
+  <script defer src="sim/world25d/pixel_sprites.js?v=7"></script>
   <script defer src="sim/world25d/station_map.js?v=4"></script>
-  <script defer src="sim/world25d/skill_archetypes.js?v=4"></script>
-  <script defer src="sim/world25d/engine_25d.js?v=4"></script>
+  <script defer src="sim/world25d/skill_archetypes.js?v=7"></script>
+  <script defer src="sim/world25d/scene_architect.js?v=2"></script>
+  <script defer src="sim/world25d/vfx_studio.js?v=2"></script>
+  <script defer src="sim/world25d/engine_25d.js?v=12"></script>
   <script defer src="sim/ui/tactical_canvas.js?v=4"></script>
-  <script defer src="sim/ui/app_ui.js?v=4"></script>
+  <script defer src="sim/ui/app_ui.js?v=13"></script>
 </head>
 <body data-scene="hall">
   <!-- Top Wristwatch Telemetry Bar -->
@@ -148,6 +151,7 @@
               <strong id="hud25d-zone-name" class="hud25d-zone-name">B1 检票大厅</strong>
             </div>
             <div class="hud25d-tl-actions">
+              <button id="btn-toggle-mission-panel" class="hud25d-mini-btn active" type="button" title="展开/收起任务进度与分支日志 (L)">任务面板</button>
               <button id="btn-show-clues" class="hud25d-mini-btn" type="button" title="查看已破译线索簿">线索簿</button>
               <button id="btn-extract-exam" class="hud25d-mini-btn accent" type="button" title="提前撤离并结算">结算</button>
             </div>
@@ -216,6 +220,93 @@
           </div>
         </aside>
 
+        <!-- RIGHT SIDE PANEL: Real-Time Mission Progress, Logic Branches & Historical Log -->
+        <aside id="hud25d-mission-panel" class="hud25d-panel hud25d-mission-panel" aria-label="任务进度与历史日志">
+          <div class="hud25d-mp-head">
+            <div class="hud25d-mp-title-group">
+              <span class="hud25d-mp-dot" aria-hidden="true"></span>
+              <strong class="hud25d-mp-title">任务进度与日志</strong>
+            </div>
+            <div class="hud25d-mp-actions">
+              <button id="btn-mission-expand" class="hud25d-mp-ctl" type="button" title="扩展为全高侧栏" aria-pressed="false">扩展</button>
+              <button id="btn-mission-collapse" class="hud25d-mp-ctl" type="button" title="收起侧边面板 (L)">收起</button>
+            </div>
+          </div>
+
+          <div class="hud25d-mp-overall">
+            <div class="hud25d-mp-overall-row">
+              <span class="hud25d-mp-overall-label">考场总进度</span>
+              <span class="hud25d-mp-overall-stats mono">
+                <span id="hud25d-mission-overall-meta">0/4 阶段</span>
+                <span class="hud25d-mp-sep" aria-hidden="true">·</span>
+                <strong id="hud25d-mission-overall-pct" class="accent-cyan">0%</strong>
+              </span>
+            </div>
+            <div class="hud25d-progress-track hud25d-mp-track">
+              <div id="hud25d-mission-overall-bar" class="hud25d-progress-fill fill-cyan" style="width:0%"></div>
+            </div>
+          </div>
+
+          <nav class="hud25d-mp-tabs" role="tablist" aria-label="任务面板视图切换">
+            <button class="hud25d-mp-tab active" type="button" role="tab" aria-selected="true" data-mission-tab="progress">
+              <span>进度</span>
+            </button>
+            <button class="hud25d-mp-tab" type="button" role="tab" aria-selected="false" data-mission-tab="branches">
+              <span>分支</span>
+              <span id="hud25d-branch-count" class="hud25d-mp-count mono">0/7</span>
+            </button>
+            <button class="hud25d-mp-tab" type="button" role="tab" aria-selected="false" data-mission-tab="log">
+              <span>日志</span>
+              <span id="hud25d-log-count" class="hud25d-mp-count mono">1</span>
+            </button>
+          </nav>
+
+          <div class="hud25d-mp-body">
+            <div id="hud25d-tab-progress" class="hud25d-mp-pane active" role="tabpanel">
+              <div id="hud25d-mission-progress-list" class="hud25d-mp-progress-list"></div>
+              <section class="hud25d-mp-chart-section" aria-label="考场总进度实时波动折线图">
+                <div class="hud25d-mp-chart-head">
+                  <span class="hud25d-mp-chart-title">进度波动趋势</span>
+                  <span id="hud25d-progress-chart-meta" class="hud25d-mp-chart-meta mono">峰值 0% · 0 个里程碑</span>
+                </div>
+                <div class="hud25d-mp-chart-sub">
+                  <span class="hud25d-mp-chart-legend" aria-hidden="true">
+                    <span class="mp-legend-item"><span class="mp-legend-swatch actual"></span>实测</span>
+                    <span class="mp-legend-item"><span class="mp-legend-swatch forecast"></span>预测</span>
+                  </span>
+                  <span id="hud25d-progress-chart-eta" class="hud25d-mp-chart-eta mono">推进后测算剩余时间</span>
+                </div>
+                <div id="hud25d-progress-chart" class="hud25d-mp-chart-canvas">
+                  <div id="hud25d-progress-tooltip" class="hud25d-mp-chart-tooltip hidden" role="tooltip"></div>
+                </div>
+              </section>
+            </div>
+
+            <div id="hud25d-tab-branches" class="hud25d-mp-pane" role="tabpanel">
+              <div id="hud25d-mission-branches-list" class="hud25d-mp-branches-list"></div>
+            </div>
+
+            <div id="hud25d-tab-log" class="hud25d-mp-pane" role="tabpanel">
+              <div class="hud25d-mp-log-filters" role="group" aria-label="日志分类筛选">
+                <button class="hud25d-mp-filter active" type="button" data-mission-filter="all">全部</button>
+                <button class="hud25d-mp-filter" type="button" data-mission-filter="progress">进度</button>
+                <button class="hud25d-mp-filter" type="button" data-mission-filter="branch">分支</button>
+                <button class="hud25d-mp-filter" type="button" data-mission-filter="clue">线索</button>
+                <button class="hud25d-mp-filter" type="button" data-mission-filter="warning">警报</button>
+              </div>
+              <div id="hud25d-mission-log-list" class="hud25d-mp-log-list" aria-live="polite"></div>
+            </div>
+          </div>
+        </aside>
+
+        <button id="hud25d-mission-collapsed-tab" class="hud25d-mission-collapsed hidden" type="button" title="展开任务进度与日志面板 (L)">
+          <span class="hud25d-mp-dot" aria-hidden="true"></span>
+          <span>任务面板</span>
+          <span class="hud25d-mp-sep" aria-hidden="true">·</span>
+          <strong id="hud25d-mission-collapsed-pct" class="mono accent-cyan">0%</strong>
+          <span class="hud25d-keycap">L</span>
+        </button>
+
         <!-- BOTTOM-LEFT: Compact Live Radio Log + [Enter] DeepSeek Radio Bar -->
         <aside class="hud25d-panel hud25d-bottom-left" id="hud25d-radio-panel" aria-label="加密短波与活体小队通讯">
           <div class="hud25d-radio-head">
@@ -279,6 +370,7 @@
             <span><kbd>鼠标</kbd> 瞄准</span>
             <span><kbd>Space</kbd> 子弹时间</span>
             <span><kbd>Enter</kbd> 无线电</span>
+            <span><kbd>L</kbd> 任务面板</span>
           </div>
         </div>
       </div>
