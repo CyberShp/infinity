@@ -462,8 +462,12 @@
       } else {
         inv.innerHTML = owned.map(function (item) {
           var badge = item.discounted ? '<span class="accent-gold">60%折价·含代价</span>' : '<span>' + esc(item.energyType || '通用') + '</span>';
+          var iconHtml = (INFINITY.IconSynth && typeof INFINITY.IconSynth.renderItemIcon === 'function')
+            ? '<span class="inv-chip-icon">' + INFINITY.IconSynth.renderItemIcon(item, { size: 28, showBadge: false }) + '</span>'
+            : '';
           return (
             '<div class="inv-chip">' +
+              iconHtml +
               '<div class="inv-chip-main">' +
                 '<div class="inv-chip-title"><span class="tier-badge tier-' + esc(item.tier || 'D') + '">' + esc(item.tier || 'D') + '</span> ' + esc(item.name) + '</div>' +
                 '<div class="inv-chip-meta"><span class="mono">' + esc(item.id) + '</span>' + badge + '</div>' +
@@ -586,17 +590,25 @@
             return '<span class="tag-chip">' + esc(tg) + '</span>';
           }).join('');
 
+          var itemIconHtml = (INFINITY.IconSynth && typeof INFINITY.IconSynth.renderItemIcon === 'function')
+            ? '<div class="item-card-icon">' + INFINITY.IconSynth.renderItemIcon(item, { size: 42 }) + '</div>'
+            : '';
+          var tierCardCls = ' tier-card-' + esc(item.tier || 'D');
+
           return (
-            '<article class="item-card' + (owned ? ' owned' : '') + '">' +
+            '<article class="item-card' + tierCardCls + (owned ? ' owned' : '') + '">' +
               '<div>' +
                 '<div class="item-card-top">' +
-                  '<div>' +
-                    '<div class="item-name">' + esc(item.name) + '</div>' +
-                    '<div class="item-id-row">' +
-                      '<span class="tier-badge tier-' + esc(item.tier) + '">' + esc(item.tier) + '</span>' +
-                      '<span class="mono muted small">' + esc(item.id) + '</span>' +
-                      (item.canon ? '<span class="canon-badge">原著</span>' : '') +
-                      '<span class="muted small">' + esc(item.energyType || '') + '</span>' +
+                  '<div class="item-card-head-left">' +
+                    itemIconHtml +
+                    '<div>' +
+                      '<div class="item-name">' + esc(item.name) + '</div>' +
+                      '<div class="item-id-row">' +
+                        '<span class="tier-badge tier-' + esc(item.tier) + '">' + esc(item.tier) + '</span>' +
+                        '<span class="mono muted small">' + esc(item.id) + '</span>' +
+                        (item.canon ? '<span class="canon-badge">原著</span>' : '') +
+                        '<span class="muted small">' + esc(item.energyType || '') + '</span>' +
+                      '</div>' +
                     '</div>' +
                   '</div>' +
                   '<div class="item-price">' + item.price + ' <span class="small muted">pts</span></div>' +
@@ -1319,7 +1331,8 @@
     if (!hotbar) return;
 
     var slots = (snapshot && Array.isArray(snapshot.slots)) ? snapshot.slots : [];
-    var basic = { name: '近战/射击', icon: '⚔', color: '#d6b274' };
+    var basic = { name: '近战/射击', icon: '⚔', color: '#d6b274', style: 'sword' };
+    var loadoutSlots = null;
     if (INFINITY.Skills25D && typeof INFINITY.Skills25D.buildCombatLoadout === 'function') {
       try {
         var lo = INFINITY.Skills25D.buildCombatLoadout(getPlayer(state));
@@ -1327,26 +1340,32 @@
           basic = {
             name: lo.basicAttack.name || '基础攻击',
             icon: lo.basicAttack.icon || '⚔',
-            color: lo.basicAttack.color || '#d6b274'
+            color: lo.basicAttack.color || '#d6b274',
+            style: lo.basicAttack.style || 'sword'
           };
         }
+        if (lo && Array.isArray(lo.slots)) loadoutSlots = lo.slots;
       } catch (_) {}
     }
 
-    var sig = basic.name + '|' + slots.map(function (sl) {
-      return (sl.key || sl.index) + ':' + (sl.name || '') + ':' + (sl.resonance ? sl.resonance.badgeText : '');
+    var sig = basic.name + ':' + basic.style + '|' + slots.map(function (sl) {
+      return (sl.key || sl.index) + ':' + (sl.name || '') + ':' + (sl.archetype || '') + ':' + (sl.resonance ? sl.resonance.badgeText : '');
     }).join('|');
     if (uiState.hotbarSig !== sig) {
       uiState.hotbarSig = sig;
+      var basicIconHtml = (INFINITY.IconSynth && typeof INFINITY.IconSynth.renderBasicAttackIcon === 'function')
+        ? INFINITY.IconSynth.renderBasicAttackIcon(basic, { size: 26 })
+        : esc(basic.icon);
       var html =
         '<button class="hotbar-slot lmb-slot" type="button" data-lmb-hint="1" title="鼠标左键瞄准普攻">' +
           '<div class="hotbar-top"><span class="hotbar-key">LMB</span><span class="hotbar-cost">普攻</span></div>' +
-          '<div class="hotbar-mid"><span class="hotbar-icon">' + esc(basic.icon) + '</span><span class="hotbar-name">' + esc(basic.name) + '</span></div>' +
+          '<div class="hotbar-mid"><span class="hotbar-icon">' + basicIconHtml + '</span><span class="hotbar-name">' + esc(basic.name) + '</span></div>' +
           '<div class="hotbar-accent-bar" style="background:' + esc(basic.color) + ';"></div>' +
         '</button>';
 
       for (var i = 0; i < 4; i++) {
         var sl = slots[i] || { index: i, key: String(i + 1), name: '空槽位', icon: '◇', color: '#6fd8ea', energyCost: 0 };
+        var loSl = (loadoutSlots && loadoutSlots[i]) ? loadoutSlots[i] : null;
         var res = sl.resonance || null;
         var resClass = res ? ' has-resonance' : '';
         var resTitle = res
@@ -1356,6 +1375,16 @@
         var resBadgeHtml = res
           ? '<span class="hotbar-res-tag" style="color:' + esc(res.color || '#7be8ff') + ';">✦' + esc(res.badgeText || '共鸣') + '</span>'
           : '';
+        var slotIconHtml = (INFINITY.IconSynth && typeof INFINITY.IconSynth.renderSkillIcon === 'function' && (sl.archetype || (loSl && loSl.archetype)))
+          ? INFINITY.IconSynth.renderSkillIcon({
+              itemId: sl.itemId || (loSl && loSl.itemId),
+              category: sl.category || (loSl && loSl.category) || 'tech',
+              tier: sl.tier || (loSl && loSl.tier) || 'B',
+              archetype: sl.archetype || (loSl && loSl.archetype),
+              color: sl.color || (loSl && loSl.color),
+              vfxProfile: sl.vfxProfile || (loSl && loSl.vfxProfile)
+            }, { size: 26, showBadge: false })
+          : esc(sl.icon || '✦');
         html +=
           '<button class="hotbar-slot' + resClass + '" type="button" data-cast-slot="' + i + '" id="hotbar-slot-' + i + '"' + resStyle + ' title="' + esc(resTitle) + '">' +
             '<div class="hotbar-top">' +
@@ -1363,7 +1392,7 @@
               '<span class="hotbar-cost">' + (sl.energyCost ? ('EN ' + Math.round(sl.energyCost)) : '免费') + '</span>' +
             '</div>' +
             '<div class="hotbar-mid">' +
-              '<span class="hotbar-icon">' + esc(sl.icon || '✦') + '</span>' +
+              '<span class="hotbar-icon">' + slotIconHtml + '</span>' +
               '<span class="hotbar-name">' + esc(sl.name || '技能') + '</span>' +
             '</div>' +
             resBadgeHtml +
@@ -1629,6 +1658,57 @@
     el.scrollTop = el.scrollHeight;
   }
 
+  function updateOffscreenThreatIndicator(snapshot, inspDone) {
+    var host = $('scene-exam');
+    if (!host) return;
+    var el = $('hud25d-threat-indicator');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'hud25d-threat-indicator';
+      el.className = 'hud25d-threat-indicator hidden';
+      el.innerHTML = '<span class="threat-arrow-chevron"></span><span class="threat-arrow-dist mono"></span>';
+      host.appendChild(el);
+    }
+    var insp = snapshot && snapshot.inspector;
+    var dist = insp && isFinite(Number(insp.distToPlayer)) ? Number(insp.distToPlayer) : 999;
+    var isOffscreen = (insp && typeof insp.offscreen === 'boolean') ? insp.offscreen : (dist >= 5.5);
+    // Show off-screen edge indicator only when Inspector is alive, off-screen, and within 28m
+    if (inspDone || !insp || !isOffscreen || dist > 28) {
+      el.classList.add('hidden');
+      return;
+    }
+    var angle = null;
+    if (typeof insp.screenBearingRad === 'number' && isFinite(insp.screenBearingRad)) {
+      angle = insp.screenBearingRad;
+    } else if (typeof insp.bearingRad === 'number' && isFinite(insp.bearingRad)) {
+      angle = insp.bearingRad;
+    } else if (snapshot.minimap && snapshot.minimap.player && snapshot.minimap.inspector) {
+      var dx = snapshot.minimap.inspector.x - snapshot.minimap.player.x;
+      var dz = snapshot.minimap.inspector.z - snapshot.minimap.player.z;
+      if (dx * dx + dz * dz > 0.01) angle = Math.atan2(dz, dx);
+    }
+    if (angle === null) {
+      el.classList.add('hidden');
+      return;
+    }
+    // Project direction onto elliptical screen-edge ring (inset safely inside HUD margins)
+    var rx = 41;
+    var ry = 36;
+    var cx = 50 + Math.cos(angle) * rx;
+    var cy = 50 + Math.sin(angle) * ry;
+    var deg = (angle * 180) / Math.PI + 90;
+    var urgency = clamp(1 - (dist - 5.5) / 22.5, 0.2, 1.0);
+    el.classList.remove('hidden');
+    el.classList.toggle('urgent', dist <= 13 || insp.state === 'chase');
+    el.style.left = cx.toFixed(1) + '%';
+    el.style.top = cy.toFixed(1) + '%';
+    el.style.opacity = (0.45 + urgency * 0.55).toFixed(2);
+    var chev = el.querySelector('.threat-arrow-chevron');
+    if (chev) chev.style.transform = 'rotate(' + deg.toFixed(1) + 'deg)';
+    var distEl = el.querySelector('.threat-arrow-dist');
+    if (distEl) distEl.textContent = Math.round(dist) + 'm';
+  }
+
   function handleWorld25DHudTick(snapshot) {
     if (!snapshot || uiState.currentScene !== 'exam') return;
     uiState.lastSnapshot = snapshot;
@@ -1711,6 +1791,8 @@
       inspStatusEl.classList.toggle('danger', !inspDone && (insp.state === 'chase' || Number(insp.distToPlayer) <= 10));
       inspStatusEl.classList.toggle('neutralized', inspDone);
     }
+
+    updateOffscreenThreatIndicator(snapshot, inspDone);
 
     // 3. Top-Right Exit badge + 2D Minimap + Squad strip
     var exitReady = Boolean((snapshot.minimap && snapshot.minimap.exitReady) || ovPct >= 100);

@@ -44,10 +44,12 @@ const sandbox = loadClassicScripts([
   'sim/world25d/pixel_sprites.js',
   'sim/world25d/skill_archetypes.js',
   'sim/world25d/scene_architect.js',
-  'sim/world25d/vfx_studio.js'
+  'sim/world25d/vfx_studio.js',
+  'sim/world25d/combat_feel.js',
+  'sim/ui/icon_synth.js'
 ]);
 
-const { ArtTokens, ASSETS, SHOP_CATALOG, StationMap, PixelSprites, Skills25D, SceneArchitect, VfxStudio } = sandbox.INFINITY;
+const { ArtTokens, ASSETS, SHOP_CATALOG, StationMap, PixelSprites, Skills25D, SceneArchitect, VfxStudio, CombatFeel, IconSynth } = sandbox.INFINITY;
 
 test('VfxStudio defines distinct visual signatures for all 14 skill archetypes', () => {
   const expectedArchetypes = [
@@ -264,4 +266,59 @@ test('PostFX shader includes linearToSRGB output encoding guard', () => {
   const engSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/world25d/engine_25d.js'), 'utf8');
   assert.ok(/linearToSRGB/.test(engSrc), 'engine_25d.js PostFX shader must encode linear RT output to sRGB');
   assert.ok(/disposeOwned/.test(engSrc), 'engine_25d.js must protect shared VFX resources via disposeOwned');
+});
+
+test('P1 CombatFeel covers all 14 archetypes with instant-parry split and clamped shake budget', () => {
+  assert.ok(CombatFeel && CombatFeel.ARCHETYPE_FEEL, 'CombatFeel.ARCHETYPE_FEEL must be defined');
+  const instantIds = ['sword_arc', 'blink_mark', 'aegis_shield', 'overclock', 'heal_pulse', 'stealth_veil'];
+  const aimIds = ['ward_circle', 'emp_blast', 'rail_shot', 'seal_chain', 'recon_pulse', 'turret_drone', 'decoy_flare', 'berserk_strike'];
+  for (const id of instantIds) {
+    const cfg = CombatFeel.ARCHETYPE_FEEL[id];
+    assert.ok(cfg, `Missing CombatFeel entry for ${id}`);
+    assert.equal(cfg.previewMode, 'instant', `${id} must stay instant to preserve parry/escape responsiveness`);
+  }
+  for (const id of aimIds) {
+    const cfg = CombatFeel.ARCHETYPE_FEEL[id];
+    assert.ok(cfg, `Missing CombatFeel entry for ${id}`);
+    assert.ok(cfg.previewMode === 'aim_circle' || cfg.previewMode === 'aim_line', `${id} should use aim_circle or aim_line`);
+  }
+  const budget = CombatFeel.createShakeBudget();
+  for (let i = 0; i < 20; i++) budget.add(0.4, 24);
+  const sample = budget.step(0.016);
+  const mag = Math.hypot(sample.x || 0, sample.y || 0);
+  assert.ok(mag <= 0.6, `Shake budget failed to clamp stacked impulses (got ${mag.toFixed(3)})`);
+});
+
+test('P1 VfxStudio motif secondary geometry, 6 zone landmarks, IconSynth, and VFX gallery exist', () => {
+  assert.equal(typeof VfxStudio.spawnMotifSecondaryBurst, 'function');
+  assert.equal(typeof VfxStudio.spawnResonanceRimPulse, 'function');
+  for (const motif of Object.keys(ArtTokens.MOTIFS)) {
+    assert.ok(VfxStudio.MOTIF_SECONDARY_SHAPES && VfxStudio.MOTIF_SECONDARY_SHAPES[motif], `Missing secondary shape for motif ${motif}`);
+  }
+
+  const specs = SceneArchitect.getZonePropSpecs();
+  assert.ok(Array.isArray(specs.landmarks) && specs.landmarks.length === 6, 'Expected 6 distinct zone landmarks');
+  const landmarkZones = new Set(specs.landmarks.map(l => l.zoneId || l.zone || StationMap.getZoneAt(l.x, l.z)));
+  assert.equal(landmarkZones.size, 6, 'Each of the 6 station zones must have its own landmark');
+
+  // IconSynth generates crisp SVG for every catalog item without falling back to raw emoji
+  for (let i = 0; i < SHOP_CATALOG.length; i += 25) {
+    const html = IconSynth.renderItemIcon(SHOP_CATALOG[i]);
+    assert.ok(html.startsWith('<svg ') && html.endsWith('</svg>'), `IconSynth failed for ${SHOP_CATALOG[i].id}`);
+  }
+  assert.ok(fs.existsSync(path.resolve(process.cwd(), 'sim/world25d/vfx_gallery.html')), 'vfx_gallery.html sandbox must exist');
+  assert.equal(CombatFeel.ARCHETYPE_FEEL.seal_chain.previewMode, 'aim_circle', 'seal_chain preview must match its radial lock-on range');
+  assert.equal(CombatFeel.ARCHETYPE_FEEL.seal_chain.previewSelfOrigin, true, 'seal_chain preview must stay centered on player');
+  const c046 = SHOP_CATALOG.find(it => it.id === 'C046');
+  const c046Skill = c046 ? Skills25D.mapItemToSkill(c046) : { radius: 8.0 };
+  const effectiveRange = Math.max(CombatFeel.ARCHETYPE_FEEL.seal_chain.previewMinRadius || 10.5, Number(c046Skill.radius) || 0);
+  assert.ok(effectiveRange < 12.0, `12m target must lie outside seal_chain effective range (${effectiveRange}m)`);
+});
+
+test('P1 input guard: pausing input cancels aim preview and keyup checks isTypingInDom before casting', () => {
+  const engSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/world25d/engine_25d.js'), 'utf8');
+  const pauseBlock = engSrc.match(/EngineSession\.prototype\.setInputPaused[\s\S]*?\n  \};/);
+  assert.ok(pauseBlock && /cancelAimPreview\(\)/.test(pauseBlock[0]), 'setInputPaused(true) must call cancelAimPreview()');
+  const keyupBlock = engSrc.match(/this\.addListener\(global,\s*'keyup'[\s\S]*?\n    \}\);/);
+  assert.ok(keyupBlock && /isTypingInDom\(\)/.test(keyupBlock[0]), 'keyup aim release must check isTypingInDom() before castSlot()');
 });

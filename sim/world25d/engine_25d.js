@@ -254,6 +254,12 @@
     this.mapApi = getMapApi();
     this.spritesApi = INFINITY.PixelSprites || null;
     this.skillsApi = INFINITY.Skills25D || null;
+    this.combatFeelApi = INFINITY.CombatFeel || null;
+    this.shakeBudget = (this.combatFeelApi && typeof this.combatFeelApi.createShakeBudget === 'function')
+      ? this.combatFeelApi.createShakeBudget()
+      : null;
+    this.previewSlotIdx = -1;
+    this.aimPreview = null;
 
     // Resource tracking for leak-free disposal (only engine-owned resources)
     this.ownedGeometries = [];
@@ -2233,6 +2239,65 @@
     group.position.set(12, 0.09, 10);
     this.scene.add(group);
     this.reticle = { group: group, outer: outer, mat: outerMat };
+
+    // Aim-preview meshes for hold-1..4 targeting (circle area or directional line)
+    var prevGroup = new THREE.Group();
+    prevGroup.visible = false;
+
+    var prevRingGeo = this.trackGeo(new THREE.RingGeometry(0.92, 1.0, 36));
+    prevRingGeo.rotateX(-Math.PI / 2);
+    var prevRingMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0x5ce8ff,
+      transparent: true,
+      opacity: 0.78,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var prevRing = new THREE.Mesh(prevRingGeo, prevRingMat);
+    prevRing.position.y = 0.095;
+
+    var prevFillGeo = this.trackGeo(new THREE.CircleGeometry(0.92, 32));
+    prevFillGeo.rotateX(-Math.PI / 2);
+    var prevFillMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0x5ce8ff,
+      transparent: true,
+      opacity: 0.14,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var prevFill = new THREE.Mesh(prevFillGeo, prevFillMat);
+    prevFill.position.y = 0.09;
+
+    var prevCircleGrp = new THREE.Group();
+    prevCircleGrp.add(prevRing, prevFill);
+    prevGroup.add(prevCircleGrp);
+
+    var prevLineGeo = this.trackGeo(new THREE.PlaneGeometry(1.0, 1.0));
+    prevLineGeo.rotateX(-Math.PI / 2);
+    var prevLineMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0x5ce8ff,
+      transparent: true,
+      opacity: 0.34,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var prevLine = new THREE.Mesh(prevLineGeo, prevLineMat);
+    prevLine.position.y = 0.094;
+    prevGroup.add(prevLine);
+
+    this.scene.add(prevGroup);
+    this.aimPreview = {
+      group: prevGroup,
+      circleGroup: prevCircleGrp,
+      ring: prevRing,
+      ringMat: prevRingMat,
+      fillMat: prevFillMat,
+      line: prevLine,
+      lineMat: prevLineMat
+    };
   };
 
   EngineSession.prototype.buildAtmosphericDust = function () {
@@ -2772,11 +2837,24 @@
       self.keys[code] = true;
 
       if (!e.repeat) {
-        if (key === '1' || code === 'Digit1') self.castSlot(0);
-        else if (key === '2' || code === 'Digit2') self.castSlot(1);
-        else if (key === '3' || code === 'Digit3') self.castSlot(2);
-        else if (key === '4' || code === 'Digit4') self.castSlot(3);
-        else if (key === 'e' || code === 'KeyE') self.triggerInteract();
+        if (code === 'Escape' || key === 'escape') {
+          if (self.previewSlotIdx >= 0) {
+            e.preventDefault();
+            self.cancelAimPreview();
+          }
+          return;
+        }
+        var slotPressed = -1;
+        if (key === '1' || code === 'Digit1') slotPressed = 0;
+        else if (key === '2' || code === 'Digit2') slotPressed = 1;
+        else if (key === '3' || code === 'Digit3') slotPressed = 2;
+        else if (key === '4' || code === 'Digit4') slotPressed = 3;
+
+        if (slotPressed >= 0) {
+          self.handleSlotKeyDown(slotPressed);
+        } else if (key === 'e' || code === 'KeyE') {
+          self.triggerInteract();
+        }
       }
     });
 
@@ -2785,11 +2863,25 @@
       var key = (e.key || '').toLowerCase();
       self.keys[key] = false;
       self.keys[code] = false;
+
+      var slotReleased = -1;
+      if (key === '1' || code === 'Digit1') slotReleased = 0;
+      else if (key === '2' || code === 'Digit2') slotReleased = 1;
+      else if (key === '3' || code === 'Digit3') slotReleased = 2;
+      else if (key === '4' || code === 'Digit4') slotReleased = 3;
+
+      if (slotReleased >= 0 && self.previewSlotIdx === slotReleased) {
+        self.cancelAimPreview();
+        if (self.mounted && !self.ended && !self.isTypingInDom()) {
+          self.castSlot(slotReleased);
+        }
+      }
     });
 
     this.addListener(global, 'blur', function () {
       self.keys = Object.create(null);
       self.mouseDownLmb = false;
+      self.cancelAimPreview();
     });
 
     this.addListener(canvas, 'mousemove', function (e) {
@@ -2804,6 +2896,10 @@
       if (!self.mounted || self.ended || self.isTypingInDom()) return;
       if (INFINITY.Audio && typeof INFINITY.Audio.unlock === 'function') {
         try { INFINITY.Audio.unlock(); } catch (_) {}
+      }
+      if (e.button === 2 && self.previewSlotIdx >= 0) {
+        self.cancelAimPreview();
+        return;
       }
       if (e.button === 0) {
         var rect = canvas.getBoundingClientRect();
@@ -2940,11 +3036,114 @@
       var reticleColor = this.slowMo ? 0xf0c46c : (this.player.overclockTimer > 0 ? 0x4df8ff : 0x6fd8ea);
       this.reticle.mat.color.setHex(reticleColor);
     }
+    this.updateAimPreview();
   };
 
-  EngineSession.prototype.addCameraShake = function (amount, duration) {
-    this.shakeIntensity = Math.max(this.shakeIntensity, amount);
-    this.shakeTimer = Math.max(this.shakeTimer, duration || 0.22);
+  EngineSession.prototype.handleSlotKeyDown = function (slotIdx) {
+    if (!this.mounted || this.ended) return false;
+    var sl = this.loadout && this.loadout.slots ? this.loadout.slots[slotIdx] : null;
+    if (!sl) return false;
+    var feelApi = this.combatFeelApi || INFINITY.CombatFeel;
+    var supports = feelApi && typeof feelApi.supportsAimPreview === 'function' && feelApi.supportsAimPreview(sl.archetype);
+    if (!supports || sl.cooldownLeft > 0 || (this.player && this.player.energy < sl.energyCost)) {
+      this.cancelAimPreview();
+      return this.castSlot(slotIdx);
+    }
+    this.previewSlotIdx = slotIdx;
+    this.updateAimPreview();
+    return true;
+  };
+
+  EngineSession.prototype.cancelAimPreview = function () {
+    this.previewSlotIdx = -1;
+    if (this.aimPreview && this.aimPreview.group) {
+      this.aimPreview.group.visible = false;
+    }
+  };
+
+  EngineSession.prototype.updateAimPreview = function () {
+    var ap = this.aimPreview;
+    if (!ap || !ap.group) return;
+    if (this.previewSlotIdx < 0 || !this.player || this.ended) {
+      ap.group.visible = false;
+      return;
+    }
+    var sl = this.loadout && this.loadout.slots ? this.loadout.slots[this.previewSlotIdx] : null;
+    if (!sl) {
+      ap.group.visible = false;
+      return;
+    }
+    var feelApi = this.combatFeelApi || INFINITY.CombatFeel;
+    var feel = feelApi && typeof feelApi.getArchetypeFeel === 'function'
+      ? feelApi.getArchetypeFeel(sl.archetype)
+      : { previewMode: 'instant' };
+    if (feel.previewMode !== 'aim_circle' && feel.previewMode !== 'aim_line') {
+      ap.group.visible = false;
+      return;
+    }
+
+    var p = this.player;
+    var dir = this.getAimDir();
+    var colorHex = hexToInt((sl.vfxProfile && sl.vfxProfile.primaryColor) || sl.color, 0x5ce8ff);
+    var pulse = 0.72 + Math.sin(this.elapsedReal * 9.0) * 0.22;
+    ap.group.visible = true;
+
+    if (feel.previewMode === 'aim_circle') {
+      ap.circleGroup.visible = true;
+      ap.line.visible = false;
+      var cx = p.x;
+      var cz = p.z;
+      if (!feel.previewSelfOrigin) {
+        if (feel.previewOffsetForward) {
+          cx = p.x + dir.x * feel.previewOffsetForward;
+          cz = p.z + dir.z * feel.previewOffsetForward;
+        } else {
+          var maxR = feel.previewMaxRange || 11.0;
+          var dx = this.aimWorld.x - p.x;
+          var dz = this.aimWorld.z - p.z;
+          var dist = Math.sqrt(dx * dx + dz * dz);
+          if (dist > maxR && dist > 0.001) {
+            cx = p.x + (dx / dist) * maxR;
+            cz = p.z + (dz / dist) * maxR;
+          } else {
+            cx = this.aimWorld.x;
+            cz = this.aimWorld.z;
+          }
+        }
+      }
+      var minRad = Number(feel.previewMinRadius) || 0;
+      var rad = clamp(Math.max(minRad, Number(sl.radius) || 3.6), 1.4, 16.0);
+      ap.circleGroup.position.set(cx, 0, cz);
+      ap.circleGroup.scale.set(rad, 1, rad);
+      ap.ring.rotation.z = this.elapsedReal * 1.4;
+      ap.ringMat.color.setHex(colorHex);
+      ap.ringMat.opacity = 0.72 * pulse;
+      ap.fillMat.color.setHex(colorHex);
+      ap.fillMat.opacity = 0.12 * pulse;
+    } else {
+      ap.circleGroup.visible = false;
+      ap.line.visible = true;
+      var maxLen = feel.previewLength || 12.0;
+      var endPt = this.raycastWall(p.x, p.z, dir.x, dir.z, maxLen);
+      var ldx = endPt.x - p.x;
+      var ldz = endPt.z - p.z;
+      var len = Math.max(0.8, Math.sqrt(ldx * ldx + ldz * ldz));
+      var w = feel.previewWidth || 0.6;
+      ap.line.position.set((p.x + endPt.x) * 0.5, 0.094, (p.z + endPt.z) * 0.5);
+      ap.line.rotation.y = -Math.atan2(ldz, ldx);
+      ap.line.scale.set(len, 1, w);
+      ap.lineMat.color.setHex(colorHex);
+      ap.lineMat.opacity = 0.36 * pulse;
+    }
+  };
+
+  EngineSession.prototype.addCameraShake = function (amount, duration, freq) {
+    if (this.shakeBudget) {
+      this.shakeBudget.add(amount, duration || 0.22, freq);
+      return;
+    }
+    this.shakeIntensity = Math.min(0.52, Math.max(this.shakeIntensity, amount));
+    this.shakeTimer = Math.min(0.45, Math.max(this.shakeTimer, duration || 0.22));
   };
 
   EngineSession.prototype.addCameraKick = function (kx, kz) {
@@ -2971,7 +3170,11 @@
 
     var sx = 0;
     var sy = 0;
-    if (this.shakeTimer > 0) {
+    if (this.shakeBudget) {
+      var sh = this.shakeBudget.step(realDt);
+      sx = sh.x;
+      sy = sh.y;
+    } else if (this.shakeTimer > 0) {
       this.shakeTimer = Math.max(0, this.shakeTimer - realDt);
       var mag = this.shakeIntensity * (this.shakeTimer > 0 ? 1 : 0);
       sx = (Math.random() * 2 - 1) * mag;
@@ -3524,7 +3727,7 @@
         p.z,
         '✦ ' + activeResonance.resonanceName + ' · ' + activeResonance.summaryText,
         activeResonance.colors.primary,
-        true
+        'resonance'
       );
       var nowSec = this.stats.elapsedSec || 0;
       if (nowSec - (sl.lastResonanceRadioAt || -99) >= 12) {
@@ -3537,15 +3740,30 @@
       }
     }
 
-    // Trigger predefined 500-skill Three.js Particle VFX choreography (arc_shock, shield_refract, etc.)
-    this.spawnSkillParticleFx(sl, p.x, 1.02, p.z, dir.angle, radius, activeResonance ? { intensityScale: 1.25 } : null);
-
-    // Signature Tier-S / Fused / Gamble flourish at caster origin (covers all 500 items' prestige tiers!)
-    if (vfx.isHighTier || vfx.isFused || activeResonance) {
-      this.spawnSigilPulse(p.x, p.z, 2.2 * (vfx.tierIntensity || 1.1) * (activeResonance ? 1.18 : 1.0), vfx.sigilStyle, activeResonance ? activeResonance.colors.primaryHex : colorHex, 0.52);
+    // Apply per-archetype CombatFeel baseline (subtle cast impulse + brief channel windup pose)
+    var feelApi = this.combatFeelApi || INFINITY.CombatFeel;
+    var castFeel = (feelApi && typeof feelApi.getArchetypeFeel === 'function')
+      ? feelApi.getArchetypeFeel(sl.archetype)
+      : null;
+    if (castFeel) {
+      if (castFeel.windupSec > 0) p.channelTimer = Math.max(p.channelTimer || 0, castFeel.windupSec);
+      if (castFeel.shakeAmp > 0) this.addCameraShake(castFeel.shakeAmp * 0.45, 0.16, castFeel.shakeFreq);
+      if (castFeel.fovPunch) this.camFovPunch = clamp((this.camFovPunch || 0) + castFeel.fovPunch * 0.45, -4.0, 3.6);
     }
-    if (vfx.isGamble) {
-      this.spawnSparkBurst(p.x, 1.15, p.z, 0xff3858, 12);
+
+    // Strict <= 3 visual layers per cast (ArtTokens.BUDGETS.maxLayersPerCast = 3):
+    //   Layer 1: Archetype primary 3D VFX (switch below)
+    //   Layer 2: Motif-specific 3D secondary geometry burst (flame embers / ice prisms / glitch cubes / etc.)
+    //   Layer 3: Either Resonance rim pulse (already spawned above) OR Skill particle/sigil accent
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnMotifSecondaryBurst === 'function') {
+      INFINITY.VfxStudio.spawnMotifSecondaryBurst(this, p.x, 0.85, p.z, colorHex, vfx, radius);
+    }
+    if (!activeResonance) {
+      if (vfx.isHighTier || vfx.isFused) {
+        this.spawnSigilPulse(p.x, p.z, 2.2 * (vfx.tierIntensity || 1.1), vfx.sigilStyle, colorHex, 0.52);
+      } else {
+        this.spawnSkillParticleFx(sl, p.x, 1.02, p.z, dir.angle, radius, null);
+      }
     }
 
     switch (sl.archetype) {
@@ -3588,7 +3806,7 @@
           this.spawnShockRing(ins.x, ins.z, 2.8, 0xffffff, 0.28);
           this.spawnSparkBurst(ins.x, 1.35, ins.z, 0xffe07d, 26);
           playSfxSafe('parry_clang');
-          this.spawnFloatingText(ins.x, 3.0, ins.z, '✦ 完美弹反! ' + (sl.name || '宵练断势'), '#ffe484', true);
+          this.spawnFloatingText(ins.x, 3.0, ins.z, '✦ 完美弹反! ' + (sl.name || '宵练断势'), '#ffd86b', 'parry');
           this.emitRadio({
             type: 'spark',
             speaker: '系统校验',
@@ -3775,7 +3993,10 @@
       }
 
       case 'seal_chain': {
-        var chainRange = Math.max(10.5, radius);
+        var feelMin = (INFINITY.CombatFeel && INFINITY.CombatFeel.ARCHETYPE_FEEL && INFINITY.CombatFeel.ARCHETYPE_FEEL.seal_chain)
+          ? (Number(INFINITY.CombatFeel.ARCHETYPE_FEEL.seal_chain.previewMinRadius) || 10.5)
+          : 10.5;
+        var chainRange = Math.max(feelMin, radius);
         var dToBoss = dist2D(p.x, p.z, ins.x, ins.z);
         if (ins.alive && dToBoss <= chainRange) {
           var sealAdd = 28 + (activeResonance && activeResonance.bonuses ? (activeResonance.bonuses.sealBonusPct || 0) : 0);
@@ -4659,31 +4880,60 @@
     var bestDist = INTERACT_RANGE;
     var exitUnlocked = (this.overridePct >= 100 || !this.inspector.alive);
 
+    var COL_PENDING  = semanticInt('interactInt', 0x5ce8c8);  // #5ce8c8 cyan
+    var COL_ACTIVE   = semanticInt('parryGoldInt', 0xffd86b); // #ffd86b gold (in-progress)
+    var COL_DONE     = semanticInt('healInt', 0x3fe69b);      // #3fe69b emerald (completed)
+    var COL_WARNING  = semanticInt('warningInt', 0xffaa3b);   // #ffaa3b amber (exit locked)
+    var COL_EXIT_RDY = 0xf3f6ff;                              // #f3f6ff platinum (exit ready)
+
     for (var i = 0; i < this.interactables.length; i++) {
       var it = this.interactables[i];
       it.bobPhase += simDt * 2.8;
+      var statusHex = COL_PENDING;
+      var pulseSpeed = 1.6;
+      var pulseBaseScale = it.type === 'exit' ? 1.85 : 1.0;
 
       if (it.type === 'clue') {
         it.sprite.position.y = 0.78 + Math.sin(it.bobPhase) * 0.12;
         it.ring.rotation.z += simDt * 1.4;
+        statusHex = it.done ? COL_DONE : COL_PENDING;
+        it.ringMat.color.setHex(statusHex);
         if (it.done) {
           it.mat.opacity = 0.22;
-          it.ringMat.opacity = 0.12;
+          it.ringMat.opacity = 0.14;
+        } else {
+          it.ringMat.opacity = 0.56 + Math.sin(this.elapsedReal * 4.2 + i) * 0.14;
         }
       } else if (it.type === 'console') {
         it.ring.rotation.z += simDt * (it.done ? 0.5 : 1.5);
-        if (it.done) {
-          it.ringMat.color.setHex(0x4af2a1);
-          if (it.beaconMat) it.beaconMat.color.setHex(0x4af2a1);
-        }
+        var inProg = !it.done && ((it.progress || 0) > 0 || this.activeChannelConsole === it);
+        statusHex = it.done ? COL_DONE : (inProg ? COL_ACTIVE : COL_PENDING);
+        pulseSpeed = inProg ? 3.2 : 1.8;
+        it.ringMat.color.setHex(statusHex);
+        it.ringMat.opacity = it.done ? 0.36 : (inProg ? 0.85 : 0.64);
+        if (it.beaconMat) it.beaconMat.color.setHex(statusHex);
       } else if (it.type === 'exit') {
-        it.ring.rotation.z += simDt * (exitUnlocked ? 2.4 : 0.6);
-        var exitCol = exitUnlocked ? 0x4af2a1 : (this.trainInStation ? 0xffa838 : 0xe85d4a);
-        it.ringMat.color.setHex(exitCol);
-        it.ringMat.opacity = exitUnlocked ? (0.65 + Math.sin(this.elapsedReal * 6) * 0.25) : 0.45;
+        it.ring.rotation.z += simDt * (exitUnlocked ? 2.4 : 0.7);
+        statusHex = exitUnlocked ? COL_EXIT_RDY : (this.trainInStation ? COL_ACTIVE : COL_WARNING);
+        pulseSpeed = exitUnlocked ? 2.8 : 1.2;
+        it.ringMat.color.setHex(statusHex);
+        it.ringMat.opacity = exitUnlocked ? (0.72 + Math.sin(this.elapsedReal * 6) * 0.22) : 0.48;
         if (it.mat && it.mat.color) {
-          it.mat.color.setHex(exitCol);
-          it.mat.opacity = exitUnlocked ? (0.58 + Math.sin(this.elapsedReal * 4) * 0.14) : 0.36;
+          it.mat.color.setHex(statusHex);
+          it.mat.opacity = exitUnlocked ? (0.62 + Math.sin(this.elapsedReal * 4) * 0.14) : 0.34;
+        }
+      }
+
+      if (it.pulseRing && it.pulseMat) {
+        if (it.done && it.type !== 'exit') {
+          it.pulseRing.visible = false;
+        } else {
+          it.pulseRing.visible = true;
+          var ph = (this.elapsedReal * pulseSpeed * 0.45 + i * 0.27) % 1.0;
+          var pSc = pulseBaseScale * (1.0 + ph * 0.72);
+          it.pulseRing.scale.set(pSc, 1, pSc);
+          it.pulseMat.color.setHex(statusHex);
+          it.pulseMat.opacity = (1.0 - ph) * (exitUnlocked && it.type === 'exit' ? 0.58 : 0.42);
         }
       }
 
@@ -5552,7 +5802,7 @@
       this.enforceWardBlockOnInspector();
     }
 
-    this.spawnFloatingText(ins.x, 2.5, ins.z, (isCrit ? '★-' : '-') + dmg, isCrit ? '#ffe07d' : '#ff6b78');
+    this.spawnFloatingText(ins.x, 2.5, ins.z, (isCrit ? '★-' : '-') + dmg, isCrit ? '#ffd86b' : '#edf3fa', isCrit ? 'crit' : 'normal');
     this.spawnSparkBurst(ins.x, 1.3, ins.z, impactCol, isCrit ? 16 : 9);
     if (isCrit) {
       this.spawnImpactStar(ins.x, 1.4, ins.z, impactCol, 2.0, 0.24);
@@ -6062,35 +6312,31 @@
   };
 
   EngineSession.prototype.spawnResonanceGlobalVfx = function (resonance, x, z, angle) {
-    if (!resonance || !this.skillsApi || !this.skillsApi.BloodlineResonance || typeof this.skillsApi.BloodlineResonance.triggerGlobalVfx !== 'function') {
-      return null;
+    if (!resonance) return null;
+    var pHex = (resonance.colors && resonance.colors.primaryHex != null) ? resonance.colors.primaryHex : 0xc89eff;
+    var sHex = (resonance.colors && resonance.colors.secondaryHex != null) ? resonance.colors.secondaryHex : 0x52e5ff;
+    // Downgraded from arena-wide screen clutter to a crisp caster rim pulse (keeps <= 3 layers per cast)
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnResonanceRimPulse === 'function') {
+      INFINITY.VfxStudio.spawnResonanceRimPulse(this, x, z, pHex, sHex, resonance.level || 1);
+    } else {
+      this.spawnShockRing(x, z, 3.2 + (resonance.level || 1) * 0.6, pHex, 0.42);
     }
-    var handle = this.skillsApi.BloodlineResonance.triggerGlobalVfx(this.THREE, this.scene, resonance, {
-      x: x,
-      z: z,
-      angle: angle || 0,
-      spread: 17.5 + (resonance.level || 1) * 2.5
-    });
-    if (handle) {
-      this.vfxList.push(handle);
-    }
-    // Brief resonant arena glow & subtle camera impulse
-    this.camFovPunch = Math.min(this.camFovPunch || 0, -1.6);
-    this.addCameraShake(0.18, 0.22);
-    if (this.playerGlow && resonance.colors && resonance.colors.primaryHex != null) {
+    this.camFovPunch = Math.min(this.camFovPunch || 0, -1.2);
+    this.addCameraShake(0.14, 0.18, 28);
+    if (this.playerGlow) {
       var glowRef = this.playerGlow;
       var origHex = glowRef.color.getHex();
       var origInt = glowRef.intensity;
-      var resHex = resonance.colors.primaryHex;
-      glowRef.color.setHex(resHex);
-      glowRef.intensity = Math.max(origInt, 2.4 + (resonance.level || 1) * 0.45);
+      var peakInt = Math.max(origInt, 2.1 + (resonance.level || 1) * 0.3);
+      glowRef.color.setHex(pHex);
+      glowRef.intensity = peakInt;
       this.vfxList.push({
-        ttl: 0.75,
-        maxTtl: 0.75,
+        ttl: 0.55,
+        maxTtl: 0.55,
         update: function (dt) {
           this.ttl -= dt;
           var k = clamp(this.ttl / this.maxTtl, 0, 1);
-          glowRef.intensity = origInt + (2.4 - origInt) * k;
+          glowRef.intensity = origInt + (peakInt - origInt) * k;
         },
         dispose: function () {
           glowRef.color.setHex(origHex);
@@ -6098,7 +6344,7 @@
         }
       });
     }
-    return handle;
+    return true;
   };
 
   EngineSession.prototype.spawnSlashArc = function (x, z, angle, radius, colorHex, duration, heavy, vfx) {
@@ -6755,27 +7001,39 @@
     };
   };
 
-  EngineSession.prototype.spawnFloatingText = function (x, y, z, text, color, isBoldCallout) {
+  EngineSession.prototype.spawnFloatingText = function (x, y, z, text, color, tierOrBold) {
     if (!this.floatersLayer) return;
+    var tier = typeof tierOrBold === 'string' ? tierOrBold : (tierOrBold ? 'parry' : 'normal');
+    var feelApi = this.combatFeelApi || INFINITY.CombatFeel;
+    var st = (feelApi && typeof feelApi.getFloatingTextStyle === 'function')
+      ? feelApi.getFloatingTextStyle(tier, color)
+      : {
+          fontSize: tier === 'normal' ? '12px' : '15px',
+          fontWeight: '900',
+          color: color || '#ffffff',
+          letterSpacing: tier === 'normal' ? '0.4px' : '1.0px',
+          textShadow: tier === 'normal'
+            ? '0 1px 4px #000,0 0 8px rgba(0,0,0,0.95)'
+            : '0 0 12px rgba(255,224,125,0.85),0 2px 6px #000,0 0 18px rgba(255,196,70,0.65)',
+          ttl: tier === 'normal' ? 1.15 : 1.55,
+          vy: tier === 'normal' ? 1.35 : 1.05
+        };
+
     var el = document.createElement('div');
     el.textContent = text;
-    var fontSize = isBoldCallout ? '15px' : '12px';
-    var shadow = isBoldCallout
-      ? '0 0 12px rgba(255,224,125,0.85),0 2px 6px #000,0 0 18px rgba(255,196,70,0.65)'
-      : '0 1px 4px #000,0 0 8px rgba(0,0,0,0.95)';
     el.style.cssText =
-      'position:absolute;transform:translate(-50%,-50%);font-size:' + fontSize + ';font-weight:900;' +
-      'color:' + (color || '#ffffff') + ';text-shadow:' + shadow + ';' +
-      'white-space:nowrap;pointer-events:none;letter-spacing:' + (isBoldCallout ? '1.0px' : '0.4px') + ';';
+      'position:absolute;transform:translate(-50%,-50%);font-size:' + st.fontSize + ';font-weight:' + st.fontWeight + ';' +
+      'color:' + st.color + ';text-shadow:' + st.textShadow + ';' +
+      'white-space:nowrap;pointer-events:none;letter-spacing:' + st.letterSpacing + ';';
     this.floatersLayer.appendChild(el);
 
-    var ttl = isBoldCallout ? 1.55 : 1.15;
+    var ttl = st.ttl || 1.15;
     this.floatingTexts.push({
       el: el,
-      x: x + (isBoldCallout ? 0 : (Math.random() - 0.5) * 0.4),
+      x: x + (tier === 'normal' ? (Math.random() - 0.5) * 0.4 : 0),
       y: y,
       z: z,
-      vy: isBoldCallout ? 1.05 : 1.35,
+      vy: st.vy || 1.25,
       ttl: ttl,
       maxTtl: ttl
     });
@@ -6992,6 +7250,24 @@
       progress: Math.round(this.nearbyInteractable.progress)
     } : null;
 
+    var insOffscreen = dBoss > 7.5;
+    var insScreenBearing = Math.atan2(ins.z - p.z, ins.x - p.x);
+    if (this.camera && this.renderer && this.containerEl) {
+      var vw = this.renderer.domElement.clientWidth || this.containerEl.clientWidth || 960;
+      var vh = this.renderer.domElement.clientHeight || this.containerEl.clientHeight || 560;
+      var proj = this.projectToScreen(ins.x, 1.0, ins.z);
+      if (!proj) {
+        insOffscreen = true;
+      } else {
+        insOffscreen = (proj.x < 24 || proj.x > vw - 24 || proj.y < 24 || proj.y > vh - 24);
+        var sdx = proj.x - vw * 0.5;
+        var sdy = proj.y - vh * 0.5;
+        if (sdx * sdx + sdy * sdy > 1) {
+          insScreenBearing = Math.atan2(sdy, sdx);
+        }
+      }
+    }
+
     return {
       zoneId: pZoneId,
       zoneName: pZone.name,
@@ -7025,7 +7301,12 @@
         sealedPct: Math.round(ins.sealedPct),
         state: ins.alive ? ins.state : 'DEFEATED',
         zoneId: insZoneId,
-        distToPlayer: Number(dBoss.toFixed(1))
+        dx: Number((ins.x - p.x).toFixed(2)),
+        dz: Number((ins.z - p.z).toFixed(2)),
+        distToPlayer: Number(dBoss.toFixed(1)),
+        bearingRad: Number(Math.atan2(ins.z - p.z, ins.x - p.x).toFixed(4)),
+        offscreen: insOffscreen,
+        screenBearingRad: Number(insScreenBearing.toFixed(4))
       },
       nearbyInteractable: near,
       slots: slotsSnap,
@@ -7079,6 +7360,7 @@
     if (this.inputPaused) {
       this.keys = Object.create(null);
       this.mouseDownLmb = false;
+      this.cancelAimPreview();
     }
     this.emitHudSnapshot();
   };

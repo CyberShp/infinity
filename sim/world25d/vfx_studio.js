@@ -1766,6 +1766,163 @@
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Motif-Driven Secondary 3D Geometry Burst (Shared Geometry Cache, Zero GC Churn)
+  // Differentiates motifs by silhouette & kinematics, not just tint:
+  //   flame_solar     -> rising incandescent embers (cone/diamond)
+  //   frost_cryo      -> orbiting octahedral ice prisms
+  //   thunder_emp     -> snapping high-voltage arc rods
+  //   cyber_tactical  -> floating digital voxel chips
+  //   occult_meme / void_space -> jittering glitch cubes
+  //   holy_tao / sword_qi -> sweeping talisman/blade shards
+  //   blood_sanguine  -> swirling crimson-magenta petals
+  //   bio_venom       -> ascending buoyant spores
+  //   shadow_ninja    -> expanding dark refraction diamonds
+  //   gravity_kinetic -> tumbling angular rock slabs
+  // ---------------------------------------------------------------------------
+  var MOTIF_SECONDARY_SHAPES = {
+    sword_qi:        { kind: 'blade_shard',   count: 6, rise: 1.4, spread: 2.1, spin: 5.2, ttl: 0.48 },
+    flame_solar:     { kind: 'ember_rise',    count: 8, rise: 3.4, spread: 1.8, spin: 3.0, ttl: 0.62 },
+    thunder_emp:     { kind: 'arc_rod',       count: 6, rise: 1.2, spread: 2.3, spin: 8.5, ttl: 0.42 },
+    frost_cryo:      { kind: 'ice_prism',     count: 7, rise: 1.6, spread: 2.0, spin: 3.4, ttl: 0.58 },
+    blood_sanguine:  { kind: 'petal_swirl',   count: 7, rise: 2.0, spread: 2.1, spin: 4.8, ttl: 0.56 },
+    void_space:      { kind: 'glitch_cube',   count: 7, rise: 1.8, spread: 2.2, spin: 6.2, ttl: 0.54 },
+    holy_tao:        { kind: 'talisman_slip', count: 6, rise: 2.4, spread: 1.9, spin: 3.2, ttl: 0.60 },
+    occult_meme:     { kind: 'glitch_cube',   count: 8, rise: 1.7, spread: 2.2, spin: 7.4, ttl: 0.55 },
+    bio_venom:       { kind: 'spore_orb',     count: 8, rise: 2.6, spread: 1.9, spin: 2.0, ttl: 0.62 },
+    cyber_tactical:  { kind: 'voxel_chip',    count: 7, rise: 1.5, spread: 2.0, spin: 4.5, ttl: 0.46 },
+    shadow_ninja:    { kind: 'blade_shard',   count: 6, rise: 1.3, spread: 2.4, spin: 6.8, ttl: 0.48 },
+    gravity_kinetic: { kind: 'rock_slab',     count: 6, rise: 2.2, spread: 2.3, spin: 4.0, ttl: 0.58 }
+  };
+
+  function getMotifSecondaryGeo(session, kind) {
+    return getSharedGeo(session, 'motif_sec_' + kind, function (THREE) {
+      if (kind === 'ice_prism') return new THREE.OctahedronGeometry(0.18, 0);
+      if (kind === 'ember_rise') return new THREE.ConeGeometry(0.09, 0.28, 4);
+      if (kind === 'arc_rod') return new THREE.BoxGeometry(0.05, 0.48, 0.05);
+      if (kind === 'glitch_cube') return new THREE.BoxGeometry(0.18, 0.18, 0.18);
+      if (kind === 'voxel_chip') return new THREE.BoxGeometry(0.22, 0.06, 0.14);
+      if (kind === 'talisman_slip') return new THREE.PlaneGeometry(0.16, 0.36);
+      if (kind === 'spore_orb') return new THREE.DodecahedronGeometry(0.11, 0);
+      if (kind === 'rock_slab') return new THREE.DodecahedronGeometry(0.17, 0);
+      if (kind === 'petal_swirl') return new THREE.PlaneGeometry(0.20, 0.12);
+      // blade_shard default
+      return new THREE.ConeGeometry(0.07, 0.42, 3);
+    });
+  }
+
+  function spawnMotifSecondaryBurst(session, x, y, z, colorHex, vfx, radius) {
+    if (!session || !session.THREE || !session.scene) return;
+    var THREE = session.THREE;
+    var c = resolveVfxColors(colorHex, vfx);
+    var spec = MOTIF_SECONDARY_SHAPES[c.motif] || MOTIF_SECONDARY_SHAPES.cyber_tactical;
+    var geo = getMotifSecondaryGeo(session, spec.kind);
+    var mat = new THREE.MeshBasicMaterial({
+      color: c.primary,
+      transparent: true,
+      opacity: 0.92,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    var group = new THREE.Group();
+    group.position.set(x, typeof y === 'number' ? y : 0.72, z);
+    var spread = Math.max(1.0, (radius ? Math.min(radius * 0.55, 3.2) : spec.spread));
+    var count = Math.min(10, Math.max(4, Math.round(spec.count * (0.85 + (c.intensity - 0.85) * 0.35))));
+    var items = [];
+
+    for (var i = 0; i < count; i++) {
+      var a = (i / count) * Math.PI * 2 + (i % 2) * 0.25;
+      var mesh = new THREE.Mesh(geo, mat);
+      var r0 = 0.28 + (i % 3) * 0.14;
+      mesh.position.set(Math.cos(a) * r0, (i % 3) * 0.14, Math.sin(a) * r0);
+      var sc = 0.75 + (i % 3) * 0.22;
+      mesh.scale.setScalar(sc);
+      group.add(mesh);
+      items.push({
+        mesh: mesh,
+        angle: a,
+        speed: spread * (0.7 + (i % 3) * 0.25),
+        rise: spec.rise * (0.75 + (i % 4) * 0.16),
+        spin: spec.spin * (i % 2 === 0 ? 1 : -1),
+        baseScale: sc
+      });
+    }
+
+    session.scene.add(group);
+    var maxTtl = spec.ttl;
+    var isGlitch = spec.kind === 'glitch_cube' || spec.kind === 'arc_rod';
+    var isSwirl = spec.kind === 'petal_swirl' || spec.kind === 'talisman_slip' || spec.kind === 'ice_prism';
+    var isHeavy = spec.kind === 'rock_slab';
+
+    session.vfxList.push({
+      ttl: maxTtl,
+      maxTtl: maxTtl,
+      update: function (dt) {
+        this.ttl -= dt;
+        var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
+        for (var j = 0; j < items.length; j++) {
+          var it = items[j];
+          var ang = it.angle + (isSwirl ? p * 2.4 : 0);
+          var dist = 0.28 + it.speed * Math.pow(p, 0.72);
+          var jitter = isGlitch ? (Math.sin((p * 38 + j * 5.7)) * 0.14) : 0;
+          var vy = isHeavy
+            ? (it.rise * p - 3.6 * p * p)
+            : (it.rise * Math.pow(p, 0.85));
+          it.mesh.position.set(
+            Math.cos(ang) * dist + jitter,
+            Math.max(-0.55, vy),
+            Math.sin(ang) * dist - jitter
+          );
+          it.mesh.rotation.x += dt * it.spin;
+          it.mesh.rotation.y += dt * it.spin * 0.8;
+          var scNow = it.baseScale * (1.0 - p * 0.65);
+          it.mesh.scale.setScalar(Math.max(0.05, scNow));
+        }
+        mat.opacity = 0.92 * (1 - Math.pow(p, 1.5));
+      },
+      dispose: function () {
+        session.scene.remove(group);
+        disposeIfOwned(geo);
+        disposeIfOwned(mat);
+      }
+    });
+  }
+
+  // Clean character rim/ring pulse (replaces full-screen resonance clutter to keep casts <= 3 layers)
+  function spawnResonanceRimPulse(session, x, z, primaryHex, secondaryHex, level) {
+    if (!session || !session.THREE || !session.scene) return;
+    var THREE = session.THREE;
+    var pHex = hexToInt(primaryHex, 0xc89eff);
+    var sHex = hexToInt(secondaryHex, 0x52e5ff);
+    var lv = clamp(Number(level) || 1, 1, 3);
+    var geo = getUnitFloorPlane(session);
+    var mat = createWaveRingShaderMaterial(THREE, pHex, sHex, 0.0);
+    var ring = new THREE.Mesh(geo, mat);
+    ring.position.set(x, 0.095, z);
+    var maxSize = 3.0 + lv * 0.75;
+    ring.scale.set(maxSize, 1, maxSize);
+    session.scene.add(ring);
+
+    var maxTtl = 0.42;
+    session.vfxList.push({
+      ttl: maxTtl,
+      maxTtl: maxTtl,
+      update: function (dt) {
+        this.ttl -= dt;
+        var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
+        mat.uniforms.uProgress.value = p;
+        mat.uniforms.uOpacity.value = (0.72 + lv * 0.08) * (1 - p);
+      },
+      dispose: function () {
+        session.scene.remove(ring);
+        disposeIfOwned(geo);
+        disposeIfOwned(mat);
+      }
+    });
+  }
+
   // Pure archetype visual descriptor registry for deterministic testing & introspection
   var ARCHETYPE_VFX_SIGNATURE = {
     sword_arc:      { shader: 'slash_crescent',    silhouette: 'tilted_double_crescent', ground: 'branching_fissure' },
@@ -1806,6 +1963,9 @@
     spawnLightningBolt: spawnLightningBolt,
     spawnSparkBurst: spawnSparkBurst,
     spawnImpactStar: spawnImpactStar,
-    spawnSigilPulse: spawnSigilPulse
+    spawnSigilPulse: spawnSigilPulse,
+    MOTIF_SECONDARY_SHAPES: MOTIF_SECONDARY_SHAPES,
+    spawnMotifSecondaryBurst: spawnMotifSecondaryBurst,
+    spawnResonanceRimPulse: spawnResonanceRimPulse
   };
 })(typeof window !== 'undefined' ? window : globalThis);

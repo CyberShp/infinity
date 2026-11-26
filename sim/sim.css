@@ -964,6 +964,45 @@ button {
   gap: 8px;
 }
 
+.item-card-head-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.item-card-icon {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.synth-icon-svg,
+.synth-icon-img {
+  display: block;
+  flex-shrink: 0;
+}
+
+.item-card.tier-card-C { border-color: rgba(212, 148, 90, 0.28); }
+.item-card.tier-card-B { border-color: rgba(120, 184, 240, 0.32); }
+.item-card.tier-card-A { border-color: rgba(242, 201, 107, 0.38); }
+.item-card.tier-card-S {
+  border-color: rgba(226, 240, 255, 0.52);
+  box-shadow: inset 0 0 18px rgba(154, 230, 255, 0.08);
+}
+
+.inv-chip-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .item-name {
   font-family: var(--font-serif);
   font-size: 15px;
@@ -3684,9 +3723,59 @@ body[data-scene="exam"] {
 }
 
 .hotbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   font-size: 14px;
   line-height: 1;
   flex-shrink: 0;
+}
+
+.hud25d-threat-indicator {
+  position: absolute;
+  z-index: 26;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: opacity 0.14s linear;
+}
+
+.hud25d-threat-indicator.hidden {
+  display: none;
+}
+
+.threat-arrow-chevron {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid #ff1e36;
+  filter: drop-shadow(0 0 6px rgba(255, 30, 54, 0.85));
+}
+
+.threat-arrow-dist {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ff8a96;
+  background: rgba(10, 8, 14, 0.84);
+  border: 1px solid rgba(255, 30, 54, 0.55);
+  border-radius: 4px;
+  padding: 1px 5px;
+  line-height: 1.2;
+}
+
+.hud25d-threat-indicator.urgent .threat-arrow-chevron {
+  animation: threatPulse 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes threatPulse {
+  from { filter: drop-shadow(0 0 4px rgba(255, 30, 54, 0.6)); }
+  to   { filter: drop-shadow(0 0 12px rgba(255, 30, 54, 1.0)); }
 }
 
 .hotbar-name {

@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>INFINITY // 2.5D VFX Gallery Sandbox (Dev)</title>
+  <style>
+    :root {
+      --bg: #080b12;
+      --panel: #101521;
+      --border: rgba(110, 200, 222, 0.24);
+      --text: #e8eef7;
+      --muted: #8b9bb4;
+      --accent: #4ee4ff;
+      --gold: #f2c96b;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", monospace;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 310px 1fr;
+      width: 100vw;
+      height: 100vh;
+    }
+    .sidebar {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+    h1 {
+      margin: 0;
+      font-size: 14px;
+      letter-spacing: 0.8px;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    .sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: -6px;
+    }
+    .group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px;
+      background: rgba(8, 11, 18, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+    }
+    label {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    select, button {
+      background: #171f30;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    select:focus, button:focus { outline: 1px solid var(--accent); }
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .btn-primary {
+      background: rgba(78, 228, 255, 0.16);
+      border-color: var(--accent);
+      color: #dffaff;
+      font-weight: 700;
+    }
+    .btn-active {
+      background: rgba(242, 201, 107, 0.2);
+      border-color: var(--gold);
+      color: #ffe8a8;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+    }
+    .metric-box {
+      padding: 6px 8px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+    }
+    .metric-box strong {
+      display: block;
+      font-size: 14px;
+      color: var(--accent);
+      margin-top: 2px;
+    }
+    .swatch-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+    .feel-meta {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #b7c8e0;
+      white-space: pre-wrap;
+    }
+    .stage-wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #06090f;
+    }
+    #stage {
+      width: 100%;
+      height: 100%;
+    }
+    .hud-overlay {
+      position: absolute;
+      left: 14px;
+      bottom: 14px;
+      padding: 6px 10px;
+      background: rgba(8, 11, 18, 0.78);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>VFX Gallery Sandbox</h1>
+      <div class="sub">14 Archetypes × 12 Motifs × 5 Tiers (Dev-only)</div>
+
+      <div class="group">
+        <label for="sel-archetype">技能原型 (14)</label>
+        <select id="sel-archetype"></select>
+
+        <label for="sel-motif">视觉主题 Motif (12)</label>
+        <select id="sel-motif"></select>
+
+        <label for="sel-tier">稀有度等级 (5)</label>
+        <select id="sel-tier">
+          <option value="D">D 级 · 灰哑 (0.82x)</option>
+          <option value="C">C 级 · 古铜 (0.96x)</option>
+          <option value="B" selected>B 级 · 银蓝 (1.14x)</option>
+          <option value="A">A 级 · 流金 (1.36x)</option>
+          <option value="S">S 级 · 白金流光 (1.62x)</option>
+        </select>
+
+        <div class="swatch-row">
+          <span>色板:</span>
+          <span class="swatch" id="sw-primary" title="Primary"></span>
+          <span class="swatch" id="sw-secondary" title="Secondary"></span>
+          <span class="swatch" id="sw-core" title="Core"></span>
+          <span id="sw-label" style="margin-left:auto"></span>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="btn-row">
+          <button id="btn-fire" class="btn-primary" type="button">单次触发 [Space]</button>
+          <button id="btn-loop" type="button">循环触发: 关</button>
+        </div>
+        <div class="btn-row">
+          <button id="btn-postfx" class="btn-active" type="button">PostFX: 开</button>
+          <button id="btn-clear" type="button">清空特效</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="metrics">
+          <div class="metric-box">活跃 vfxList<strong id="m-vfx">0</strong></div>
+          <div class="metric-box">帧时 (ms)<strong id="m-frame">0.0</strong></div>
+          <div class="metric-box">共享 Geo 缓存<strong id="m-geo">0</strong></div>
+          <div class="metric-box">Draw Calls<strong id="m-draws">0</strong></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <label>CombatFeel 参数</label>
+        <div class="feel-meta" id="feel-meta">—</div>
+      </div>
+    </aside>
+
+    <main class="stage-wrap">
+      <div id="stage"></div>
+      <div class="hud-overlay">快捷键：Space 单次触发 · L 循环开关 · P 切换 PostFX · 左右方向键切换原型</div>
+    </main>
+  </div>
+
+  <script defer src="../vendor/three.min.js"></script>
+  <script defer src="../data/art_tokens.js"></script>
+  <script defer src="pixel_sprites.js"></script>
+  <script defer src="skill_archetypes.js"></script>
+  <script defer src="vfx_studio.js"></script>
+  <script defer src="combat_feel.js"></script>
+  <script defer>
+    window.addEventListener('DOMContentLoaded', function () {
+      var THREE = window.THREE;
+      var INFINITY = window.INFINITY || {};
+      var Tokens = INFINITY.ArtTokens;
+      var Sprites = INFINITY.PixelSprites;
+      var Skills = INFINITY.Skills25D;
+      var Vfx = INFINITY.VfxStudio;
+      var Feel = INFINITY.CombatFeel;
+
+      var stageEl = document.getElementById('stage');
+      var selArch = document.getElementById('sel-archetype');
+      var selMotif = document.getElementById('sel-motif');
+      var selTier = document.getElementById('sel-tier');
+      var btnFire = document.getElementById('btn-fire');
+      var btnLoop = document.getElementById('btn-loop');
+      var btnPostFx = document.getElementById('btn-postfx');
+      var btnClear = document.getElementById('btn-clear');
+      var mVfx = document.getElementById('m-vfx');
+      var mFrame = document.getElementById('m-frame');
+      var mGeo = document.getElementById('m-geo');
+      var mDraws = document.getElementById('m-draws');
+      var feelMeta = document.getElementById('feel-meta');
+      var swP = document.getElementById('sw-primary');
+      var swS = document.getElementById('sw-secondary');
+      var swC = document.getElementById('sw-core');
+      var swLabel = document.getElementById('sw-label');
+
+      var ARCHETYPES = (Skills && Skills.ARCHETYPES) || {};
+      var archKeys = Object.keys(ARCHETYPES);
+      if (archKeys.length === 0 && Vfx && Vfx.ARCHETYPE_VFX_SIGNATURE) {
+        archKeys = Object.keys(Vfx.ARCHETYPE_VFX_SIGNATURE);
+      }
+      archKeys.forEach(function (id) {
+        var opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = id + (ARCHETYPES[id] ? (' · ' + ARCHETYPES[id].name) : '');
+        selArch.appendChild(opt);
+      });
+
+      var motifKeys = Tokens && Tokens.MOTIFS ? Object.keys(Tokens.MOTIFS) : ['sword_qi', 'flame_solar', 'thunder_emp', 'frost_cryo', 'blood_sanguine', 'void_space', 'holy_tao', 'occult_meme', 'bio_venom', 'cyber_tactical', 'shadow_ninja', 'gravity_kinetic'];
+      motifKeys.forEach(function (id) {
+        var opt = document.createElement('option');
+        opt.value = id;
+        var g = Tokens && Tokens.MOTIFS && Tokens.MOTIFS[id] ? (' [' + Tokens.MOTIFS[id].glyph + ']') : '';
+        opt.textContent = id + g;
+        selMotif.appendChild(opt);
+      });
+
+      // Setup Three.js scene matching dark-horror sRGB pipeline
+      var width = Math.max(stageEl.clientWidth, 480);
+      var height = Math.max(stageEl.clientHeight, 360);
+      var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(width, height, false);
+      renderer.setClearColor(0x070a10, 1);
+      if (THREE.sRGBEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding;
+      if (THREE.ACESFilmicToneMapping !== undefined) {
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.15;
+      }
+      renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;';
+      stageEl.appendChild(renderer.domElement);
+
+      var scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x070a10, 0.028);
+
+      var camera = new THREE.PerspectiveCamera(38, width / height, 0.5, 100);
+      camera.position.set(0, 11.5, 10.5);
+      camera.lookAt(0, 0.6, 0);
+
+      scene.add(new THREE.AmbientLight(0x3a4d6b, 0.28));
+      scene.add(new THREE.HemisphereLight(0x6e92bd, 0x161d2b, 0.34));
+      var keyLight = new THREE.DirectionalLight(0xd8f0ff, 0.42);
+      keyLight.position.set(8, 14, 10);
+      scene.add(keyLight);
+      var spot = new THREE.SpotLight(0xdcf5ff, 2.8, 26, Math.PI / 3.5, 0.6, 1.3);
+      spot.position.set(-4, 6, 4);
+      scene.add(spot);
+
+      // Tiled floor & reference dummy actors
+      var floorTex = Sprites ? Sprites.getTileTexture('floor_slate') : null;
+      if (floorTex) floorTex.repeat.set(16, 16);
+      var floorMat = new THREE.MeshStandardMaterial({
+        map: floorTex,
+        color: floorTex ? 0xffffff : 0x1a2230,
+        roughness: 0.72,
+        metalness: 0.14
+      });
+      var floor = new THREE.Mesh(new THREE.PlaneGeometry(24, 24), floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      scene.add(floor);
+
+      var gridHelper = new THREE.GridHelper(24, 24, 0x26384e, 0x141d2b);
+      gridHelper.position.y = 0.01;
+      scene.add(gridHelper);
+
+      var casterGroup = new THREE.Group();
+      var casterSprite = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.68, 2.02),
+        new THREE.MeshStandardMaterial({
+          map: Sprites ? Sprites.getCharTexture('player', 'idle', 'sword') : null,
+          emissiveMap: Sprites ? Sprites.getCharEmissiveTexture('player', 'idle', 'sword') : null,
+          emissive: 0xffffff,
+          emissiveIntensity: 0.30,
+          transparent: true,
+          alphaTest: 0.14,
+          side: THREE.DoubleSide
+        })
+      );
+      casterSprite.position.y = 1.04;
+      casterGroup.add(casterSprite);
+      scene.add(casterGroup);
+
+      var targetSprite = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.1, 2.6),
+        new THREE.MeshStandardMaterial({
+          map: Sprites ? Sprites.getCharTexture('inspector', 'idle') : null,
+          emissiveMap: Sprites ? Sprites.getCharEmissiveTexture('inspector', 'idle') : null,
+          emissive: 0xffffff,
+          emissiveIntensity: 0.52,
+          transparent: true,
+          alphaTest: 0.14,
+          side: THREE.DoubleSide
+        })
+      );
+      targetSprite.position.set(4.5, 1.32, 0);
+      scene.add(targetSprite);
+
+      // Lightweight PostFX (matching engine_25d linearToSRGB + bright-pass bloom)
+      var rt = new THREE.WebGLRenderTarget(width, height, {
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat
+      });
+      var postMat = new THREE.ShaderMaterial({
+        uniforms: {
+          tDiffuse: { value: rt.texture },
+          uResolution: { value: new THREE.Vector2(width, height) }
+        },
+        vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+        fragmentShader: [
+          'precision mediump float;',
+          'uniform sampler2D tDiffuse;',
+          'uniform vec2 uResolution;',
+          'varying vec2 vUv;',
+          'vec3 linearToSRGB(vec3 c){ c=max(c,vec3(0.0)); return mix(c*12.92, 1.055*pow(c,vec3(1.0/2.4))-0.055, step(vec3(0.0031308),c)); }',
+          'vec3 bp(vec3 c){ float l=dot(c,vec3(0.299,0.587,0.114)); return c*smoothstep(0.76,0.98,l); }',
+          'void main(){',
+          '  vec2 tx = 1.0 / max(uResolution, vec2(1.0));',
+          '  vec3 col = texture2D(tDiffuse, vUv).rgb;',
+          '  vec3 b = bp(col)*0.22 + (bp(texture2D(tDiffuse,vUv+vec2(tx.x*2.0,0.0)).rgb)+bp(texture2D(tDiffuse,vUv-vec2(tx.x*2.0,0.0)).rgb)+bp(texture2D(tDiffuse,vUv+vec2(0.0,tx.y*2.0)).rgb)+bp(texture2D(tDiffuse,vUv-vec2(0.0,tx.y*2.0)).rgb))*0.13;',
+          '  col = linearToSRGB(col + b * 0.42);',
+          '  gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);',
+          '}'
+        ].join('\n'),
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false
+      });
+      var postScene = new THREE.Scene();
+      var postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat));
+
+      var fogDisplay = scene.fog.color.clone();
+      var fogLinear = fogDisplay.clone().convertSRGBToLinear();
+      var clearDisplay = new THREE.Color(0x070a10);
+      var clearLinear = clearDisplay.clone().convertSRGBToLinear();
+
+      // Session adapter compatible with VfxStudio
+      var session = {
+        THREE: THREE,
+        scene: scene,
+        vfxList: [],
+        ownedGeometries: [],
+        ownedMaterials: [],
+        trackGeo: function (g) { this.ownedGeometries.push(g); return g; },
+        trackMat: function (m) { this.ownedMaterials.push(m); return m; },
+        getPropTex: function (name) { return Sprites ? Sprites.getPropTexture(name) : null; }
+      };
+
+      var postFxEnabled = true;
+      var loopEnabled = false;
+      var loopAccum = 0;
+      var shakeBudget = Feel ? Feel.createShakeBudget() : null;
+      var aegisHandle = null;
+
+      var TIER_INTENSITY = { D: 0.82, C: 0.96, B: 1.14, A: 1.36, S: 1.62 };
+
+      function currentVfxProfile() {
+        var motifId = selMotif.value;
+        var tier = selTier.value;
+        var tk = (Tokens && Tokens.MOTIFS && Tokens.MOTIFS[motifId]) || { primary: '#4ee4ff', secondary: '#f2c96b', core: '#ffffff', sigilStyle: 'bagua' };
+        return {
+          motif: motifId,
+          primaryColor: tk.primary,
+          secondaryColor: tk.secondary,
+          coreColor: tk.core,
+          sigilStyle: tk.sigilStyle || 'bagua',
+          tier: tier,
+          tierIntensity: TIER_INTENSITY[tier] || 1.0,
+          isHighTier: tier === 'A' || tier === 'S',
+          isFused: tier === 'S'
+        };
+      }
+
+      function refreshInspectorUi() {
+        var vp = currentVfxProfile();
+        swP.style.background = vp.primaryColor;
+        swS.style.background = vp.secondaryColor;
+        swC.style.background = vp.coreColor;
+        swLabel.textContent = vp.motif + ' / ' + vp.tier;
+
+        var f = Feel ? Feel.getArchetypeFeel(selArch.value) : null;
+        feelMeta.textContent = f
+          ? 'previewMode: ' + f.previewMode + '\nwindupSec:   ' + f.windupSec + 's\nhitStopMs:   ' + f.hitStopMs + 'ms\nshakeAmp:    ' + f.shakeAmp + ' @ ' + f.shakeFreq + 'Hz\nfovPunch:    ' + f.fovPunch
+          : 'CombatFeel unavailable';
+      }
+
+      function clearVfx() {
+        for (var i = session.vfxList.length - 1; i >= 0; i--) {
+          try { session.vfxList[i].dispose(); } catch (_) {}
+        }
+        session.vfxList = [];
+        if (aegisHandle && aegisHandle.shieldMesh) {
+          aegisHandle.shieldMesh.visible = false;
+        }
+      }
+
+      function registerTransientObj(built, ttl) {
+        if (!built || !built.group) return;
+        session.vfxList.push({
+          ttl: ttl,
+          maxTtl: ttl,
+          update: function (dt) {
+            this.ttl -= dt;
+            if (built.group) built.group.rotation.y += dt * 0.5;
+          },
+          dispose: function () {
+            scene.remove(built.group);
+            (built.geos || []).forEach(function (g) { if (!g.userData || !g.userData.shared) g.dispose(); });
+            (built.mats || []).forEach(function (m) { if (!m.userData || !m.userData.shared) m.dispose(); });
+          }
+        });
+      }
+
+      function triggerCurrent() {
+        if (!Vfx) return;
+        var arch = selArch.value;
+        var vp = currentVfxProfile();
+        var col = Tokens ? Tokens.hexToInt(vp.primaryColor, 0x4ee4ff) : 0x4ee4ff;
+        var sec = Tokens ? Tokens.hexToInt(vp.secondaryColor, 0xf2c96b) : 0xf2c96b;
+        var radius = 3.4 * (0.88 + (vp.tierIntensity - 0.82) * 0.38);
+
+        if (Feel && shakeBudget) {
+          var f = Feel.getArchetypeFeel(arch);
+          shakeBudget.add(f.shakeAmp * 0.65, 0.22, f.shakeFreq);
+        }
+
+        // Layer 2: Motif-specific secondary 3D burst
+        if (typeof Vfx.spawnMotifSecondaryBurst === 'function') {
+          Vfx.spawnMotifSecondaryBurst(session, 0, 0.85, 0, col, vp, radius);
+        }
+
+        // Layer 1: Primary archetype 3D VFX
+        switch (arch) {
+          case 'sword_arc':
+            Vfx.spawnSlashArc(session, 0, 0, 0, radius, col, vp);
+            break;
+          case 'ward_circle':
+            registerTransientObj(Vfx.buildWardCircle(session, 0, 0, radius, 2.6, col, vp), 2.6);
+            break;
+          case 'emp_blast':
+            Vfx.spawnEmpBlastVfx(session, 2.2, 0, radius, col, vp);
+            break;
+          case 'rail_shot':
+            Vfx.spawnLaserBeam(session, 0, 0, 7.5, 0, col, vp);
+            break;
+          case 'blink_mark':
+            registerTransientObj(Vfx.buildBlinkBeacon(session, 2.6, 0, col, vp), 2.4);
+            break;
+          case 'aegis_shield':
+            if (!aegisHandle) {
+              aegisHandle = Vfx.buildAegisShield(session, casterGroup, col, sec);
+            }
+            if (aegisHandle && aegisHandle.shieldMesh) {
+              aegisHandle.shieldMesh.visible = true;
+              if (aegisHandle.shieldMat && aegisHandle.shieldMat.uniforms) {
+                aegisHandle.shieldMat.uniforms.uColorA.value.setHex(col).convertSRGBToLinear();
+                aegisHandle.shieldMat.uniforms.uColorB.value.setHex(sec).convertSRGBToLinear();
+              }
+            }
+            Vfx.spawnWaveRing(session, 0, 0, 2.6, col, 0.45, 0);
+            break;
+          case 'overclock':
+            Vfx.spawnOverclockBurstVfx(session, 0, 0, col, vp);
+            break;
+          case 'heal_pulse':
+            Vfx.spawnHealPillarVfx(session, 0, 0, radius, col, vp);
+            break;
+          case 'stealth_veil':
+            Vfx.spawnStealthBurstVfx(session, 0, 0, col, vp);
+            break;
+          case 'seal_chain':
+            Vfx.spawnSealChainsVfx(session, 0, 0, 4.5, 0, 1.8, col, vp);
+            break;
+          case 'recon_pulse':
+            Vfx.spawnReconSweepVfx(session, 0, 0, radius * 2.2, col, vp);
+            break;
+          case 'turret_drone':
+            registerTransientObj(Vfx.buildTurretDrone(session, 1.6, 1.0, 2.6, col, vp), 2.6);
+            break;
+          case 'decoy_flare':
+            registerTransientObj(Vfx.buildDecoyFlare(session, 2.8, -0.8, 2.6, col, vp), 2.6);
+            break;
+          case 'berserk_strike':
+            Vfx.spawnBerserkSlamVfx(session, 2.8, 0, radius, col, vp);
+            break;
+        }
+      }
+
+      selArch.addEventListener('change', function () { refreshInspectorUi(); triggerCurrent(); });
+      selMotif.addEventListener('change', function () { refreshInspectorUi(); triggerCurrent(); });
+      selTier.addEventListener('change', function () { refreshInspectorUi(); triggerCurrent(); });
+      btnFire.addEventListener('click', triggerCurrent);
+      btnClear.addEventListener('click', clearVfx);
+      btnLoop.addEventListener('click', function () {
+        loopEnabled = !loopEnabled;
+        btnLoop.textContent = '循环触发: ' + (loopEnabled ? '开' : '关');
+        btnLoop.classList.toggle('btn-active', loopEnabled);
+      });
+      btnPostFx.addEventListener('click', function () {
+        postFxEnabled = !postFxEnabled;
+        btnPostFx.textContent = 'PostFX: ' + (postFxEnabled ? '开' : '关');
+        btnPostFx.classList.toggle('btn-active', postFxEnabled);
+      });
+
+      window.addEventListener('keydown', function (e) {
+        if (e.code === 'Space') { e.preventDefault(); triggerCurrent(); }
+        else if (e.key === 'l' || e.key === 'L') { btnLoop.click(); }
+        else if (e.key === 'p' || e.key === 'P') { btnPostFx.click(); }
+        else if (e.code === 'ArrowRight') {
+          selArch.selectedIndex = (selArch.selectedIndex + 1) % selArch.options.length;
+          refreshInspectorUi(); triggerCurrent();
+        } else if (e.code === 'ArrowLeft') {
+          selArch.selectedIndex = (selArch.selectedIndex - 1 + selArch.options.length) % selArch.options.length;
+          refreshInspectorUi(); triggerCurrent();
+        }
+      });
+
+      window.addEventListener('resize', function () {
+        var w = Math.max(stageEl.clientWidth, 320);
+        var h = Math.max(stageEl.clientHeight, 240);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h, false);
+        rt.setSize(w, h);
+        postMat.uniforms.uResolution.value.set(w, h);
+      });
+
+      refreshInspectorUi();
+      triggerCurrent();
+
+      var lastTs = performance.now();
+      var emaMs = 16.6;
+      function animate(now) {
+        requestAnimationFrame(animate);
+        var rawMs = Math.max(0.1, now - lastTs);
+        lastTs = now;
+        var dt = Math.min(0.05, rawMs / 1000);
+        emaMs = emaMs * 0.9 + rawMs * 0.1;
+
+        if (loopEnabled) {
+          loopAccum += dt;
+          if (loopAccum >= 1.25) {
+            loopAccum = 0;
+            triggerCurrent();
+          }
+        }
+
+        // Enforce VFX budget cap matching engine_25d
+        var maxVfx = (Tokens && Tokens.BUDGETS && Tokens.BUDGETS.maxActiveVfx) || 48;
+        while (session.vfxList.length > maxVfx) {
+          var oldest = session.vfxList.shift();
+          try { oldest.dispose(); } catch (_) {}
+        }
+
+        for (var i = session.vfxList.length - 1; i >= 0; i--) {
+          var v = session.vfxList[i];
+          v.update(dt, dt);
+          if (v.ttl <= 0) {
+            try { v.dispose(); } catch (_) {}
+            session.vfxList.splice(i, 1);
+          }
+        }
+
+        var sh = shakeBudget ? shakeBudget.step(dt) : { x: 0, y: 0 };
+        camera.position.set(1.2 + sh.x, 11.2 + sh.y, 10.6);
+        camera.lookAt(1.2, 0.7, 0);
+
+        var sceneDraws = 0;
+        if (postFxEnabled) {
+          scene.fog.color.copy(fogLinear);
+          renderer.setClearColor(clearLinear, 1);
+          renderer.setRenderTarget(rt);
+          renderer.render(scene, camera);
+          sceneDraws = renderer.info && renderer.info.render ? renderer.info.render.calls : 0;
+          scene.fog.color.copy(fogDisplay);
+          renderer.setClearColor(clearDisplay, 1);
+          renderer.setRenderTarget(null);
+          renderer.render(postScene, postCam);
+        } else {
+          renderer.setRenderTarget(null);
+          renderer.render(scene, camera);
+          sceneDraws = renderer.info && renderer.info.render ? renderer.info.render.calls : 0;
+        }
+
+        mVfx.textContent = String(session.vfxList.length);
+        mFrame.textContent = emaMs.toFixed(1);
+        mGeo.textContent = String(session._vfxGeoCache ? Object.keys(session._vfxGeoCache).length : 0);
+        mDraws.textContent = String(sceneDraws);
+      }
+      requestAnimationFrame(animate);
+    });
+  </script>
+</body>
+</html>

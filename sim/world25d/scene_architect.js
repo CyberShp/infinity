@@ -278,6 +278,15 @@
         // Substation south-west breaker corner
         { x: 2.65, z: 35.1, rotY: 0.05 }
       ],
+      // 6 Zone-Signature 3D Landmarks (1 per zone, >=2m from spawn, >=1.35m from interactables)
+      landmarks: [
+        { zone: 'concourse',  kind: 'clock_totem',   label: '停摆倒计时时钟塔', x: 18.5, z: 4.5,  color: '#68c8de' },
+        { zone: 'corridor',   kind: 'transit_arch',  label: '换乘霓虹门拱',     x: 23.0, z: 14.2, color: '#d6b274' },
+        { zone: 'dispatch',   kind: 'radar_tower',   label: '调度信号塔',       x: 23.5, z: 8.2,  color: '#52c4a2' },
+        { zone: 'substation', kind: 'tesla_coil',    label: '高压共振线圈',     x: 16.5, z: 23.5, color: '#6e9eff' },
+        { zone: 'tunnel',     kind: 'vent_turbine',  label: '废弃通风涡轮',     x: 24.0, z: 34.2, color: '#a884e0' },
+        { zone: 'platform0',  kind: 'signal_mast',   label: '0号站台铁路信号灯柱', x: 43.2, z: 32.5, color: '#e69c3c' }
+      ],
       puddles: [
         { x: 8.6, z: 12.2, sx: 2.4, sz: 1.7, rot: 0.3 },
         { x: 13.8, z: 9.4, sx: 1.9, sz: 1.4, rot: -0.4 },
@@ -934,6 +943,116 @@
     strip2.rotation.x = -Math.PI / 2;
     strip2.position.set(33.2, 0.022, 18.5);
     session.scene.add(strip1, strip2);
+
+    // 8. 6 Zone-Signature 3D Landmarks (distinct silhouettes for instant zone orientation)
+    var landmarks = specs.landmarks || [];
+    var darkSteel = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x1b222e, roughness: 0.48, metalness: 0.70 }));
+    for (var lmi = 0; lmi < landmarks.length; lmi++) {
+      var lm = landmarks[lmi];
+      var zCol = (INFINITY.ArtTokens && typeof INFINITY.ArtTokens.getZoneColor === 'function')
+        ? hexToInt(INFINITY.ArtTokens.getZoneColor(lm.zone, lm.color), 0x68c8de)
+        : hexToInt(lm.color, 0x68c8de);
+      var lmGlowMat = session.trackMat(new THREE.MeshBasicMaterial({ color: zCol }));
+      var lmHaloMat = session.trackMat(new THREE.MeshBasicMaterial({
+        color: zCol,
+        transparent: true,
+        opacity: 0.22,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      }));
+      var g = new THREE.Group();
+      g.position.set(lm.x, 0, lm.z);
+
+      var basePad = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.62, 0.72, 0.14, 8)), darkSteel);
+      basePad.position.y = 0.07;
+      g.add(basePad);
+
+      var floorHalo = new THREE.Mesh(session.trackGeo(new THREE.RingGeometry(0.70, 0.92, 24)), lmHaloMat);
+      floorHalo.rotation.x = -Math.PI / 2;
+      floorHalo.position.y = 0.04;
+      g.add(floorHalo);
+
+      if (lm.kind === 'clock_totem') {
+        var pillar = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.42, 2.35, 0.42)), steelMat);
+        pillar.position.y = 1.24;
+        var dialFrame = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.56, 0.56, 0.18, 16)), darkSteel);
+        dialFrame.rotation.x = Math.PI / 2;
+        dialFrame.position.set(0, 2.35, 0.16);
+        var dialRing = new THREE.Mesh(session.trackGeo(new THREE.TorusGeometry(0.46, 0.04, 8, 24)), lmGlowMat);
+        dialRing.position.set(0, 2.35, 0.26);
+        var handA = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.05, 0.34, 0.04)), lmGlowMat);
+        handA.position.set(0, 2.48, 0.27);
+        var handB = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.24, 0.05, 0.04)), lmGlowMat);
+        handB.position.set(0.10, 2.35, 0.27);
+        g.add(pillar, dialFrame, dialRing, handA, handB);
+      } else if (lm.kind === 'transit_arch') {
+        var postL = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.22, 2.6, 0.24)), steelMat);
+        postL.position.set(-0.62, 1.3, 0);
+        var postR = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.22, 2.6, 0.24)), steelMat);
+        postR.position.set(0.62, 1.3, 0);
+        var lintel = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(1.56, 0.28, 0.30)), darkSteel);
+        lintel.position.set(0, 2.55, 0);
+        var neonBar = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(1.36, 0.08, 0.34)), lmGlowMat);
+        neonBar.position.set(0, 2.42, 0);
+        g.add(postL, postR, lintel, neonBar);
+      } else if (lm.kind === 'radar_tower') {
+        var mast = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.12, 0.26, 2.2, 6)), steelMat);
+        mast.position.y = 1.15;
+        var dish = new THREE.Mesh(session.trackGeo(new THREE.ConeGeometry(0.55, 0.35, 12, 1, true)), darkSteel);
+        dish.position.set(0, 2.32, 0);
+        dish.rotation.x = 0.55;
+        var tip = new THREE.Mesh(session.trackGeo(new THREE.OctahedronGeometry(0.18, 0)), lmGlowMat);
+        tip.position.set(0, 2.55, 0.12);
+        var ring1 = new THREE.Mesh(session.trackGeo(new THREE.TorusGeometry(0.42, 0.03, 6, 20)), lmGlowMat);
+        ring1.rotation.x = Math.PI / 2;
+        ring1.position.y = 1.75;
+        g.add(mast, dish, tip, ring1);
+      } else if (lm.kind === 'tesla_coil') {
+        var core = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.18, 0.24, 2.35, 10)), copperMat);
+        core.position.y = 1.24;
+        for (var ci = 0; ci < 3; ci++) {
+          var coilRing = new THREE.Mesh(session.trackGeo(new THREE.TorusGeometry(0.44 - ci * 0.05, 0.055, 8, 20)), steelMat);
+          coilRing.rotation.x = Math.PI / 2;
+          coilRing.position.y = 1.15 + ci * 0.45;
+          g.add(coilRing);
+        }
+        var crown = new THREE.Mesh(session.trackGeo(new THREE.TorusGeometry(0.36, 0.08, 8, 20)), lmGlowMat);
+        crown.rotation.x = Math.PI / 2;
+        crown.position.y = 2.45;
+        g.add(core, crown);
+      } else if (lm.kind === 'vent_turbine') {
+        var shroud = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.68, 0.68, 0.42, 16, 1, true)), darkSteel);
+        shroud.rotation.x = Math.PI / 2;
+        shroud.position.set(0, 1.35, 0);
+        var stand = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.85, 0.72, 0.45)), steelMat);
+        stand.position.y = 0.42;
+        var bladeGeo = session.trackGeo(new THREE.BoxGeometry(1.12, 0.14, 0.05));
+        var bladeA = new THREE.Mesh(bladeGeo, steelMat);
+        bladeA.position.set(0, 1.35, 0);
+        var bladeB = new THREE.Mesh(bladeGeo, steelMat);
+        bladeB.position.set(0, 1.35, 0);
+        bladeB.rotation.z = Math.PI / 2;
+        var hub = new THREE.Mesh(session.trackGeo(new THREE.SphereGeometry(0.16, 10, 10)), lmGlowMat);
+        hub.position.set(0, 1.35, 0.06);
+        var rim = new THREE.Mesh(session.trackGeo(new THREE.TorusGeometry(0.66, 0.035, 6, 24)), lmGlowMat);
+        rim.position.set(0, 1.35, 0.21);
+        g.add(shroud, stand, bladeA, bladeB, hub, rim);
+      } else if (lm.kind === 'signal_mast') {
+        var pole = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.10, 0.14, 2.75, 8)), steelMat);
+        pole.position.y = 1.42;
+        var box = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.36, 0.96, 0.28)), darkSteel);
+        box.position.set(0, 2.35, 0.06);
+        var lampTop = new THREE.Mesh(session.trackGeo(new THREE.SphereGeometry(0.10, 10, 10)), lmGlowMat);
+        lampTop.position.set(0, 2.62, 0.20);
+        var lampMid = new THREE.Mesh(session.trackGeo(new THREE.SphereGeometry(0.10, 10, 10)), lmGlowMat);
+        lampMid.position.set(0, 2.35, 0.20);
+        var arm = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.82, 0.09, 0.09)), lmGlowMat);
+        arm.position.set(0.35, 1.78, 0);
+        g.add(pole, box, lampTop, lampMid, arm);
+      }
+      session.scene.add(g);
+    }
   }
 
   /* --------------------------------------------------------------------------
@@ -1185,11 +1304,13 @@
       var group = new THREE.Group();
       group.position.set(d.x, 0, d.z);
 
-      var ringColor = type === 'console' ? 0xf2a944 : (type === 'exit' ? 0xe85d4a : 0x6fd8ea);
+      var interactHex = (INFINITY.ArtTokens && INFINITY.ArtTokens.SEMANTIC && INFINITY.ArtTokens.SEMANTIC.interactInt) || 0x5ce8c8;
+      var warningHex = (INFINITY.ArtTokens && INFINITY.ArtTokens.SEMANTIC && INFINITY.ArtTokens.SEMANTIC.warningInt) || 0xffaa3b;
+      var ringColor = type === 'exit' ? warningHex : interactHex;
       var rMat = session.trackMat(new THREE.MeshBasicMaterial({
         color: ringColor,
         transparent: true,
-        opacity: 0.62,
+        opacity: 0.66,
         side: THREE.DoubleSide,
         depthWrite: false,
         blending: THREE.AdditiveBlending
@@ -1198,6 +1319,19 @@
       ring.position.y = 0.08;
       if (type === 'exit') ring.scale.set(1.85, 1.85, 1);
       group.add(ring);
+
+      // Unified outer pulse ring for high-readability ground affordance
+      var pulseMat = session.trackMat(new THREE.MeshBasicMaterial({
+        color: ringColor,
+        transparent: true,
+        opacity: 0.34,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      }));
+      var pulseRing = new THREE.Mesh(ringGeo, pulseMat);
+      pulseRing.position.y = 0.075;
+      group.add(pulseRing);
 
       var spriteMesh = null;
       var mainMat = null;
@@ -1259,7 +1393,7 @@
         var runeTex = session.getPropTex('vfx_hex_pattern', '#6fd8ea');
         mainMat = session.trackMat(new THREE.MeshBasicMaterial({
           map: runeTex,
-          color: 0xe85d4a,
+          color: warningHex,
           transparent: true,
           opacity: 0.42,
           side: THREE.DoubleSide,
@@ -1329,6 +1463,8 @@
         beaconMat: auxBeaconMat,
         ring: ring,
         ringMat: rMat,
+        pulseRing: pulseRing,
+        pulseMat: pulseMat,
         bobPhase: i * 1.3
       };
 
