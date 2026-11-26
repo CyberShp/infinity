@@ -959,11 +959,13 @@
     var tubeMesh = new THREE.InstancedMesh(tubeGeo, tubeMat, count);
 
     // 3. Soft translucent volumetric downward light cone (subtle pools of atmosphere!)
+    // Additive blending happens in the linear PostFX target, where low alpha is lifted
+    // strongly by the final sRGB encode; keep opacity low to stay a faint haze.
     var coneGeo = session.trackGeo(new THREE.ConeGeometry(2.35, 3.1, 16, 1, true));
     var coneMat = session.trackMat(new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.055,
+      opacity: 0.016,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending
@@ -1011,6 +1013,30 @@
     if (coneMesh.instanceColor) coneMesh.instanceColor.needsUpdate = true;
 
     session.scene.add(beamMesh, housingMesh, tubeMesh, coneMesh);
+
+    // Per-fixture bulb control: each fixture owns its instance color, so flicker and
+    // EMP blackout can be applied locally instead of through one shared material.
+    var baseHex = [];
+    for (var bi = 0; bi < count; bi++) {
+      baseHex.push(hexToInt(lightDefs[bi].color, 0xdff6ff));
+    }
+    var levelCol = new THREE.Color();
+    session.stationBulbControl = {
+      count: count,
+      positions: lightDefs.map(function (d) { return { x: Number(d.x) || 0, z: Number(d.z) || 0 }; }),
+      setLevel: function (idx, level, overrideHex) {
+        if (idx < 0 || idx >= count) return;
+        var lv = Math.max(0, Math.min(1.5, Number(level)));
+        if (isNaN(lv)) lv = 1;
+        levelCol.setHex(typeof overrideHex === 'number' ? overrideHex : baseHex[idx]).multiplyScalar(lv);
+        if (typeof tubeMesh.setColorAt === 'function') tubeMesh.setColorAt(idx, levelCol);
+        if (typeof coneMesh.setColorAt === 'function') coneMesh.setColorAt(idx, levelCol);
+      },
+      commit: function () {
+        if (tubeMesh.instanceColor) tubeMesh.instanceColor.needsUpdate = true;
+        if (coneMesh.instanceColor) coneMesh.instanceColor.needsUpdate = true;
+      }
+    };
     return tubeMat;
   }
 

@@ -24,8 +24,10 @@ All 2.5D scripts load via classic `<script defer>` after `sim/vendor/three.min.j
 ### 1. `window.INFINITY.PixelSprites` (`sim/world25d/pixel_sprites.js`)
 ```js
 window.INFINITY.PixelSprites = {
-  getTileTexture(name),      // 'floor_slate' | 'floor_platform' | 'floor_hazard' | 'floor_rail' | 'wall_concrete' | 'wall_neon' | 'train_hull' -> THREE.CanvasTexture (NearestFilter)
-  getCharTexture(id, frame), // id: 'player'|'yanci'|'lujin'|'xutan'|'shenyan'|'inspector', frame: 'idle'|'walk1'|'walk2'|'action' -> THREE.CanvasTexture (NearestFilter)
+  getTileTexture(name),      // 'floor_slate' | 'floor_platform' | 'floor_hazard' | 'floor_rail' | 'wall_concrete' | 'wall_neon' | 'train_hull' -> THREE.CanvasTexture (Nearest mag, NearestMipmapLinear min)
+  getCharTexture(id, frame, weaponStyle?), // id: 'player'|'yanci'|'lujin'|'xutan'|'shenyan'|'inspector', frame: 'idle'|'idle2'|'walk1'|'walk2'|'action'|'dash'|'channel'|'hurt'
+                             // weaponStyle (optional): 'sword'|'cyber'|'occult'|'tactical' -> held weapon variant (WEAPON_BY_STYLE); NearestFilter
+                             // getCharNormalTexture / getCharEmissiveTexture accept the same optional 3rd argument
   getPropTexture(name)       // 'console_off'|'console_on'|'clue_glow'|'exit_gate'|'ward_sigil'|'kunai'|'drone' -> THREE.CanvasTexture
 };
 ```

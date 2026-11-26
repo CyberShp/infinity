@@ -171,7 +171,7 @@
       shortName: '封禁',
       role: 'control',
       icon: '⛓',
-      defaultColor: '#e05882',
+      defaultColor: '#e052b4',
       desc: '射出规则锁链或镇压媒介，锁死敌方移动速度并持续叠加异常收容封印进度。',
       basePower: 24,
       baseRadius: 6.2,
@@ -231,7 +231,7 @@
       shortName: '重击',
       role: 'offense',
       icon: '☄',
-      defaultColor: '#ff7b47',
+      defaultColor: '#ff8a3d',
       desc: '短距爆发突进并发动势大力沉的震地重砸，造成极高伤害、强硬直与剧烈震屏。',
       basePower: 46,
       baseRadius: 3.2,
@@ -296,46 +296,46 @@
         ward_circle: '#48d1ff',
         sword_arc: '#4ef0ff',
         seal_chain: '#5e9eff',
-        berserk_strike: '#ff8a5c'
+        berserk_strike: '#ff9450'
       }
     },
     '灵异': {
-      primary: '#e05882',
+      primary: '#e052b4',
       secondary: '#c75cf5',
-      high: '#ff6699',
+      high: '#ff70d0',
       byArchetype: {
-        seal_chain: '#e05882',
+        seal_chain: '#e052b4',
         ward_circle: '#d45ea8',
         stealth_veil: '#b66dff',
-        recon_pulse: '#e872a8',
+        recon_pulse: '#e872d0',
         decoy_flare: '#df6ce0',
-        aegis_shield: '#e6637c',
+        aegis_shield: '#e663c0',
         heal_pulse: '#d978c4',
         blink_mark: '#c75cf5',
-        rail_shot: '#f05688',
+        rail_shot: '#f056c8',
         emp_blast: '#d65cf0',
         turret_drone: '#c95c9e',
-        sword_arc: '#eb577a',
+        sword_arc: '#eb57b8',
         overclock: '#d468f2',
-        berserk_strike: '#f04a6c'
+        berserk_strike: '#f04ab4'
       }
     },
     '体魄': {
-      primary: '#ff7b47',
+      primary: '#ff8a3d',
       secondary: '#ff9f43',
       high: '#ff965a',
       byArchetype: {
-        berserk_strike: '#ff7b47',
+        berserk_strike: '#ff8a3d',
         aegis_shield: '#ff9f43',
         overclock: '#ff884d',
         sword_arc: '#ff9457',
-        rail_shot: '#ff6b47',
+        rail_shot: '#ff8f47',
         blink_mark: '#ffaa5c',
         heal_pulse: '#f7b267',
         ward_circle: '#eb8c4c',
         emp_blast: '#ff7f3f',
-        stealth_veil: '#e38768',
-        seal_chain: '#e66b4c',
+        stealth_veil: '#e39468',
+        seal_chain: '#e6874c',
         recon_pulse: '#ffb067',
         turret_drone: '#f28d52',
         decoy_flare: '#ffbe55'
@@ -917,12 +917,17 @@
   // ---------------------------------------------------------------------------
   // 7B. 12-Motif Parametric VFX DNA Compiler (100% Coverage of 500+ Items)
   // ---------------------------------------------------------------------------
+  // Palette (primary/secondary/core) and sigilStyle come from
+  // INFINITY.ArtTokens.MOTIFS (sim/data/art_tokens.js) at load time. The inline
+  // values below are a fallback for environments without art_tokens.js and must
+  // stay identical to the ArtTokens values. label/orbiterType/particleStyle/
+  // ringLayers are owned by this module.
   var VFX_MOTIFS = {
     sword_qi: {
       id: 'sword_qi',
       label: '剑意锋芒',
-      primary: '#5ce1c6',
-      secondary: '#d2fff6',
+      primary: '#5ce8ff',
+      secondary: '#f6d57a',
       core: '#ffffff',
       sigilStyle: 'bagua',
       orbiterType: 'sword',
@@ -932,10 +937,10 @@
     flame_solar: {
       id: 'flame_solar',
       label: '炽阳雷火',
-      primary: '#ff7838',
-      secondary: '#ffd25a',
-      core: '#fff7d1',
-      sigilStyle: 'bagua',
+      primary: '#ff8424',
+      secondary: '#ffe066',
+      core: '#fff8dc',
+      sigilStyle: 'arcane_star',
       orbiterType: 'talisman',
       particleStyle: 'ember',
       ringLayers: 2
@@ -943,9 +948,9 @@
     thunder_emp: {
       id: 'thunder_emp',
       label: '高压雷暴',
-      primary: '#48d1ff',
-      secondary: '#9d7bff',
-      core: '#e8fcff',
+      primary: '#48c6ff',
+      secondary: '#9aa4ff',
+      core: '#f0ffff',
       sigilStyle: 'hex_grid',
       orbiterType: 'drone_bit',
       particleStyle: 'arc_bolt',
@@ -954,8 +959,8 @@
     frost_cryo: {
       id: 'frost_cryo',
       label: '极寒凝霜',
-      primary: '#7ce8ff',
-      secondary: '#c8f6ff',
+      primary: '#8cf2ff',
+      secondary: '#d8fbff',
       core: '#ffffff',
       sigilStyle: 'arcane_star',
       orbiterType: 'void_prism',
@@ -965,9 +970,9 @@
     blood_sanguine: {
       id: 'blood_sanguine',
       label: '血煞狂潮',
-      primary: '#ff3b5c',
-      secondary: '#b81d3d',
-      core: '#ffd1d9',
+      primary: '#c838a8',
+      secondary: '#ff94d2',
+      core: '#ffe8f7',
       sigilStyle: 'blood_crest',
       orbiterType: 'blood_shard',
       particleStyle: 'crimson_mist',
@@ -976,10 +981,10 @@
     void_space: {
       id: 'void_space',
       label: '裂隙折跃',
-      primary: '#8f7cff',
-      secondary: '#52d6ff',
-      core: '#eef4ff',
-      sigilStyle: 'arcane_star',
+      primary: '#8f5cff',
+      secondary: '#52e0ff',
+      core: '#f4e8ff',
+      sigilStyle: 'occult_eye',
       orbiterType: 'void_prism',
       particleStyle: 'rift_shard',
       ringLayers: 2
@@ -987,9 +992,9 @@
     holy_tao: {
       id: 'holy_tao',
       label: '玄门金印',
-      primary: '#f2c766',
-      secondary: '#76e8d4',
-      core: '#fff8db',
+      primary: '#f5cf64',
+      secondary: '#fff0b2',
+      core: '#ffffff',
       sigilStyle: 'bagua',
       orbiterType: 'talisman',
       particleStyle: 'rune_gold',
@@ -998,9 +1003,9 @@
     occult_meme: {
       id: 'occult_meme',
       label: '诡异收容',
-      primary: '#e84a7f',
-      secondary: '#c25bff',
-      core: '#ffd6e8',
+      primary: '#c852ff',
+      secondary: '#7a5cff',
+      core: '#f6e8ff',
       sigilStyle: 'occult_eye',
       orbiterType: 'rune_orb',
       particleStyle: 'glitch_static',
@@ -1009,10 +1014,10 @@
     bio_venom: {
       id: 'bio_venom',
       label: '生机净蚀',
-      primary: '#58e89a',
-      secondary: '#b2ff6e',
-      core: '#e9fff0',
-      sigilStyle: 'hex_grid',
+      primary: '#46e88a',
+      secondary: '#b4ff6e',
+      core: '#eafff2',
+      sigilStyle: 'tactical_hud',
       orbiterType: 'bio_helix',
       particleStyle: 'bio_cross',
       ringLayers: 2
@@ -1020,9 +1025,9 @@
     cyber_tactical: {
       id: 'cyber_tactical',
       label: '赛博矩阵',
-      primary: '#3ee8ff',
-      secondary: '#ffb347',
-      core: '#e8ffff',
+      primary: '#38d6d6',
+      secondary: '#f2b852',
+      core: '#ffffff',
       sigilStyle: 'tactical_hud',
       orbiterType: 'drone_bit',
       particleStyle: 'holo_grid',
@@ -1031,9 +1036,9 @@
     shadow_ninja: {
       id: 'shadow_ninja',
       label: '影遁忍法',
-      primary: '#9e82ff',
-      secondary: '#5865a8',
-      core: '#e0d6ff',
+      primary: '#6878ff',
+      secondary: '#4ac8e8',
+      core: '#e2dcff',
       sigilStyle: 'occult_eye',
       orbiterType: 'void_prism',
       particleStyle: 'shadow_wisp',
@@ -1042,21 +1047,37 @@
     gravity_kinetic: {
       id: 'gravity_kinetic',
       label: '震岳重劲',
-      primary: '#ff8a47',
-      secondary: '#f2c464',
-      core: '#fff0d4',
-      sigilStyle: 'blood_crest',
+      primary: '#d4b84e',
+      secondary: '#8ca8d8',
+      core: '#fff7d6',
+      sigilStyle: 'hex_grid',
       orbiterType: 'kinetic_plate',
       particleStyle: 'shock_debris',
       ringLayers: 2
     }
   };
 
+  (function applyArtTokenMotifs() {
+    var tokens = INFINITY.ArtTokens && INFINITY.ArtTokens.MOTIFS;
+    if (!tokens) return;
+    var keys = ['primary', 'secondary', 'core', 'sigilStyle'];
+    for (var motifId in VFX_MOTIFS) {
+      if (!Object.prototype.hasOwnProperty.call(VFX_MOTIFS, motifId)) continue;
+      var tk = tokens[motifId];
+      if (!tk) continue;
+      for (var k = 0; k < keys.length; k++) {
+        if (typeof tk[keys[k]] === 'string' && tk[keys[k]]) {
+          VFX_MOTIFS[motifId][keys[k]] = tk[keys[k]];
+        }
+      }
+    }
+  })();
+
   var VFX_MOTIF_RULES = [
     { id: 'sword_qi', nameRe: /剑|刀|刃|锋|斩|宵练|承影|干将|莫邪|太阿|诛仙|青锋|居合|飞剑/, descRe: /剑气|剑意|刀光|御剑|斩击|拔刀/, tag: '剑修' },
     { id: 'flame_solar', nameRe: /火|炎|焰|阳|金乌|焚|炽|爆|燃|熔|业火|朱雀|凤凰|三昧|云爆|烈日/, descRe: /灼烧|火焰|纯阳|爆炸|高温|炽烈/, tag: '火焰雷法' },
     { id: 'thunder_emp', nameRe: /雷|电|EMP|磁|电弧|闪电|雷法|五雷|掌心雷|脉冲|高压|静默塔|轨道|高斯|离子|黑客|破解/, descRe: /电磁|高压|瘫痪|雷击|电弧|骇客|短路/, tag: '电磁' },
-    { id: 'frost_cryo', nameRe: /冰|霜|寒|雪|冻|液氮|极寒|玄冰|凛/, descRe: /冻结|冰霜|低温|减速|寒气/, tag: null },
+    { id: 'frost_cryo', nameRe: /冰|霜|寒|雪|冻|液氮|极寒|玄冰|凛|低温|零度|冰点|玄武灵|避水|水下|深潜抗压/, descRe: /冻结|冻住|冰霜|冰点|低温|降温|水寒|减速|寒气|水下/, tag: null },
     { id: 'blood_sanguine', nameRe: /血|暴君|狂暴|狼人|吸血|血族|将臣|修罗|嗜血|肉体|鬼神|黑光|屠|煞|猩红|恶魔/, descRe: /嗜血|吸血|狂暴|肉体畸变|血煞|撕裂/, tag: '赌命' },
     { id: 'void_space', nameRe: /空|跃|闪|折跃|飞雷神|缩地|时空|微尘|穿墙|维度|虚空|星|曲率|相位|黑洞|传送|时间/, descRe: /空间|折跃|瞬移|裂隙|维度|时间|相位/, tag: '空间' },
     { id: 'holy_tao', nameRe: /道|符|阵|佛|金钵|圣|律|天平|八卦|太极|注连绳|镇魂|桃木|法印|灵宝|昊天|昆仑|两仪|守心|净/, descRe: /结界|道门|符箓|佛光|镇煞|律令|阵法|神圣/, tag: '阵法' },
@@ -1092,9 +1113,14 @@
     for (var i = 0; i < VFX_MOTIF_RULES.length; i++) {
       var rule = VFX_MOTIF_RULES[i];
       var sc = 0;
-      if (rule.nameRe && rule.nameRe.test(name)) sc += 12;
+      var nameHit = Boolean(rule.nameRe && rule.nameRe.test(name));
+      if (nameHit) sc += 12;
       if (rule.descRe && rule.descRe.test(desc)) sc += 5.5;
       if (rule.tag && tagSet[rule.tag]) sc += 4.5;
+
+      // Frost/cryo vocabulary is sparse and usually co-occurs with generic body
+      // or hardware tokens (体, 枪); an explicit cryo/water name hit wins ties.
+      if (rule.id === 'frost_cryo' && nameHit) sc += 2.5;
 
       // Energy & category synergy nudges
       if (rule.id === 'holy_tao' && energyType === '真元') sc += 2.2;
@@ -1153,7 +1179,7 @@
     var primary = motif.primary || resolvedColor || '#6fd8ea';
     var secondary = motif.secondary || resolvedColor || '#ffffff';
     if (energyType === '灵异' && motifId !== 'blood_sanguine' && motifId !== 'occult_meme') {
-      secondary = '#e05882';
+      secondary = '#e052b4';
     } else if (energyType === '真元' && motifId === 'cyber_tactical') {
       secondary = '#f0c975';
     } else if (energyType === '魔力' && motifId === 'sword_qi') {
@@ -1399,7 +1425,7 @@
         archetype: 'seal_chain',
         name: '灵能贯矛',
         icon: '✦',
-        color: '#e05882',
+        color: '#e052b4',
         damage: Math.round(15 + Math.max(0, (wil + obs - 20) * 0.65) + tierBonus),
         range: 6.8,
         arcDeg: 24,
@@ -1417,7 +1443,7 @@
       archetype: 'berserk_strike',
       name: '战术警棍连击',
       icon: '☄',
-      color: '#ff7b47',
+      color: '#ff8a3d',
       damage: Math.round(15 + Math.max(0, (phy - 10) * 1.0) + tierBonus),
       range: 2.5,
       arcDeg: 95,
@@ -1907,6 +1933,22 @@
     return '#' + (hexInt >>> 0).toString(16).padStart(6, '0');
   }
 
+  // Threat red (#ff1e36, hue 353.6deg) is reserved for the Inspector and lethal
+  // hazards. Derived particle colors must keep >= 24deg hue distance from it.
+  var THREAT_HUE_DEG = 353.6;
+  var THREAT_HUE_MARGIN_DEG = 25;
+
+  function avoidThreatHue01(h) {
+    var deg = h * 360;
+    var diff = deg - THREAT_HUE_DEG;
+    while (diff > 180) diff -= 360;
+    while (diff <= -180) diff += 360;
+    if (Math.abs(diff) >= THREAT_HUE_MARGIN_DEG) return h;
+    var target = THREAT_HUE_DEG + (diff >= 0 ? THREAT_HUE_MARGIN_DEG : -THREAT_HUE_MARGIN_DEG);
+    target = ((target % 360) + 360) % 360;
+    return target / 360;
+  }
+
   function shiftHexColor(hexStr, hueDeg, satDelta, lightDelta) {
     var rgb = parseHexToRgb01(hexStr);
     var r = rgb[0], g = rgb[1], b = rgb[2];
@@ -1923,6 +1965,7 @@
     }
     h = (h + (hueDeg || 0) / 360) % 1;
     if (h < 0) h += 1;
+    h = avoidThreatHue01(h);
     s = clamp(s + (satDelta || 0), 0.25, 1.0);
     l = clamp(l + (lightDelta || 0), 0.34, 0.86);
 
@@ -2609,7 +2652,7 @@
       globalFxStyle: 'pyro_tempest',
       primaryColor: '#ff7338',
       secondaryColor: '#ffe066',
-      accentColor: '#ff385c',
+      accentColor: '#ff9a2e',
       keywords: /火|炎|焰|焚|炽|灼|金乌|不死鸟|雷|电|霆|霹雳|阳炎|等离子|熔岩|烈阳|天雷|火球|爆炎/,
       curatedIds: { B080: 3.2, B090: 3.0 },
       tags: ['火焰雷法', '爆发'],
@@ -2723,7 +2766,7 @@
       resonanceTitle: '镇煞血统共鸣',
       desc: '灵异守心体质与收容封印术式共振，全域铺开朱砂符箓星尘，额外推进封印并稳固理智。',
       globalFxStyle: 'occult_eclipse',
-      primaryColor: '#f06292',
+      primaryColor: '#e052b4',
       secondaryColor: '#ffd166',
       accentColor: '#c75cf5',
       keywords: /灵异|鬼|煞|咒|封印|收容|规则|模因|道门|守心|阴阳|镇压|法海|棺材|冥|亡灵|结界|阵法|画地|注连|纸|鬼道/,
@@ -2812,7 +2855,7 @@
       globalFxStyle: 'titan_quake',
       primaryColor: '#ff8c42',
       secondaryColor: '#ffd166',
-      accentColor: '#ff4757',
+      accentColor: '#ffaa3b',
       keywords: /体魄|巨力|泰坦|暴君|狂|龙|虎|霸体|金刚|铁布衫|古武|肌肉|冲锋|重击|破甲|山魈|白眼|战体/,
       curatedIds: { B022: 3.4, B032: 3.0, B073: 3.2 },
       tags: ['爆发', '破甲', '赌命'],

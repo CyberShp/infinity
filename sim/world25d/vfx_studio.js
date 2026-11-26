@@ -39,21 +39,140 @@
     return fallback !== undefined ? fallback : 0x6fd8ea;
   }
 
-  // Distinct thematic motif palettes & visual signatures
-  var MOTIF_STYLES = {
+  // Thematic motif palettes & visual signatures.
+  // Source of truth: INFINITY.ArtTokens.MOTIFS (sim/data/art_tokens.js).
+  // The inline table is a fallback used only when art_tokens.js is not loaded,
+  // and must stay byte-identical to the ArtTokens values.
+  var MOTIF_STYLES_FALLBACK = {
     sword_qi:        { primary: 0x5ce8ff, secondary: 0xf6d57a, core: 0xffffff, pattern: 'vfx_rune_strip',  sigil: 'sigil_bagua' },
-    flame_solar:     { primary: 0xff6a24, secondary: 0xffe066, core: 0xfff8dc, pattern: 'vfx_rune_strip',  sigil: 'sigil_arcane_star' },
-    thunder_emp:     { primary: 0x4de8ff, secondary: 0x9aa4ff, core: 0xf0ffff, pattern: 'vfx_hex_pattern', sigil: 'sigil_hex_grid' },
-    frost_cryo:      { primary: 0x74ecff, secondary: 0xd0f8ff, core: 0xffffff, pattern: 'vfx_hex_pattern', sigil: 'sigil_arcane_star' },
-    blood_sanguine:  { primary: 0xff2846, secondary: 0xff8060, core: 0xffe6ea, pattern: 'vfx_rune_strip',  sigil: 'sigil_blood_crest' },
-    void_space:      { primary: 0xb266ff, secondary: 0x52e0ff, core: 0xf4e8ff, pattern: 'vfx_hex_pattern', sigil: 'sigil_occult_eye' },
-    holy_tao:        { primary: 0xf7cf68, secondary: 0xfff0b2, core: 0xffffff, pattern: 'vfx_rune_strip',  sigil: 'sigil_bagua' },
-    occult_meme:     { primary: 0xd452ff, secondary: 0xff3b6e, core: 0xffe8ff, pattern: 'vfx_rune_strip',  sigil: 'sigil_occult_eye' },
-    bio_venom:       { primary: 0x4ef29c, secondary: 0xb4ff6e, core: 0xeafff2, pattern: 'vfx_hex_pattern', sigil: 'sigil_tactical_hud' },
-    cyber_tactical:  { primary: 0x4ce2ff, secondary: 0xf2b852, core: 0xffffff, pattern: 'vfx_hex_pattern', sigil: 'sigil_tactical_hud' },
-    shadow_ninja:    { primary: 0x8668ff, secondary: 0x4ac8e8, core: 0xe2dcff, pattern: 'vfx_rune_strip',  sigil: 'sigil_occult_eye' },
-    gravity_kinetic: { primary: 0xff9a38, secondary: 0xf05848, core: 0xfff0d4, pattern: 'vfx_hex_pattern', sigil: 'sigil_hex_grid' }
+    flame_solar:     { primary: 0xff8424, secondary: 0xffe066, core: 0xfff8dc, pattern: 'vfx_rune_strip',  sigil: 'sigil_arcane_star' },
+    thunder_emp:     { primary: 0x48c6ff, secondary: 0x9aa4ff, core: 0xf0ffff, pattern: 'vfx_hex_pattern', sigil: 'sigil_hex_grid' },
+    frost_cryo:      { primary: 0x8cf2ff, secondary: 0xd8fbff, core: 0xffffff, pattern: 'vfx_hex_pattern', sigil: 'sigil_arcane_star' },
+    blood_sanguine:  { primary: 0xc838a8, secondary: 0xff94d2, core: 0xffe8f7, pattern: 'vfx_rune_strip',  sigil: 'sigil_blood_crest' },
+    void_space:      { primary: 0x8f5cff, secondary: 0x52e0ff, core: 0xf4e8ff, pattern: 'vfx_hex_pattern', sigil: 'sigil_occult_eye' },
+    holy_tao:        { primary: 0xf5cf64, secondary: 0xfff0b2, core: 0xffffff, pattern: 'vfx_rune_strip',  sigil: 'sigil_bagua' },
+    occult_meme:     { primary: 0xc852ff, secondary: 0x7a5cff, core: 0xf6e8ff, pattern: 'vfx_rune_strip',  sigil: 'sigil_occult_eye' },
+    bio_venom:       { primary: 0x46e88a, secondary: 0xb4ff6e, core: 0xeafff2, pattern: 'vfx_hex_pattern', sigil: 'sigil_tactical_hud' },
+    cyber_tactical:  { primary: 0x38d6d6, secondary: 0xf2b852, core: 0xffffff, pattern: 'vfx_hex_pattern', sigil: 'sigil_tactical_hud' },
+    shadow_ninja:    { primary: 0x6878ff, secondary: 0x4ac8e8, core: 0xe2dcff, pattern: 'vfx_rune_strip',  sigil: 'sigil_occult_eye' },
+    gravity_kinetic: { primary: 0xd4b84e, secondary: 0x8ca8d8, core: 0xfff7d6, pattern: 'vfx_hex_pattern', sigil: 'sigil_hex_grid' }
   };
+
+  function buildMotifStyles() {
+    var tokens = INFINITY.ArtTokens && INFINITY.ArtTokens.MOTIFS;
+    var out = {};
+    for (var id in MOTIF_STYLES_FALLBACK) {
+      if (!Object.prototype.hasOwnProperty.call(MOTIF_STYLES_FALLBACK, id)) continue;
+      var fb = MOTIF_STYLES_FALLBACK[id];
+      var tk = tokens && tokens[id];
+      if (!tk) {
+        out[id] = fb;
+        continue;
+      }
+      out[id] = {
+        primary: hexToInt(tk.primaryInt !== undefined ? tk.primaryInt : tk.primary, fb.primary),
+        secondary: hexToInt(tk.secondaryInt !== undefined ? tk.secondaryInt : tk.secondary, fb.secondary),
+        core: hexToInt(tk.coreInt !== undefined ? tk.coreInt : tk.core, fb.core),
+        pattern: tk.pattern || fb.pattern,
+        sigil: tk.sigil || fb.sigil
+      };
+    }
+    return out;
+  }
+
+  var MOTIF_STYLES = buildMotifStyles();
+
+  /* --------------------------------------------------------------------------
+   * Per-session shared geometry cache.
+   * Cached geometries live on session._vfxGeoCache (never module-global), are
+   * flagged userData.shared = true, and are registered through
+   * session.trackGeo so the engine disposes them on unmount. Per-cast handles
+   * must release resources through disposeIfOwned(), which skips shared ones.
+   * -------------------------------------------------------------------------- */
+  function getSharedGeo(session, key, factory) {
+    var cache = session._vfxGeoCache;
+    if (!cache) {
+      cache = Object.create(null);
+      session._vfxGeoCache = cache;
+    }
+    var geo = cache[key];
+    if (!geo) {
+      geo = factory(session.THREE);
+      geo.userData = geo.userData || {};
+      geo.userData.shared = true;
+      if (typeof session.trackGeo === 'function') session.trackGeo(geo);
+      cache[key] = geo;
+    }
+    return geo;
+  }
+
+  function disposeIfOwned(obj) {
+    if (!obj || typeof obj.dispose !== 'function') return;
+    if (obj.userData && obj.userData.shared) return;
+    obj.dispose();
+  }
+
+  // Unit plane lying on the XZ ground plane (1 x 1); size via mesh.scale.x/z.
+  function getUnitFloorPlane(session) {
+    return getSharedGeo(session, 'floor_plane_1', function (THREE) {
+      var g = new THREE.PlaneGeometry(1, 1);
+      g.rotateX(-Math.PI / 2);
+      return g;
+    });
+  }
+
+  // Unit camera-facing style plane in XY (1 x 1); size via mesh.scale.x/y.
+  function getUnitPlane(session) {
+    return getSharedGeo(session, 'plane_1', function (THREE) {
+      return new THREE.PlaneGeometry(1, 1);
+    });
+  }
+
+  // Unit-radius partial dome; radius via mesh.scale.
+  function getUnitDome(session, widthSeg, heightSeg, thetaFrac) {
+    var key = 'dome_1_' + widthSeg + '_' + heightSeg + '_' + thetaFrac;
+    return getSharedGeo(session, key, function (THREE) {
+      return new THREE.SphereGeometry(1.0, widthSeg, heightSeg, 0, Math.PI * 2, 0, Math.PI * thetaFrac);
+    });
+  }
+
+  // Open cylinder of height 1 along +Y; segment length via mesh.scale.y.
+  function getUnitOpenCylinder(session, radius, radialSeg) {
+    var key = 'cyl_open_h1_' + radius + '_' + radialSeg;
+    return getSharedGeo(session, key, function (THREE) {
+      return new THREE.CylinderGeometry(radius, radius, 1, radialSeg, 1, true);
+    });
+  }
+
+  var SPARK_MAX = 34;
+  var SPARK_VARIANTS = 3;
+
+  // Spark burst geometry: each vertex stores its launch velocity (vx, vy, vz).
+  // With Points.scale = t and Points.position.y = y0 - 0.5 * g * t^2 the
+  // vertices follow p(t) = origin + v * t + 0.5 * g * t^2 without any
+  // per-frame attribute upload, so one geometry is reusable across casts.
+  function getSparkGeo(session, count, variant) {
+    var key = 'spark_' + count + '_' + variant;
+    return getSharedGeo(session, key, function (THREE) {
+      var positions = new Float32Array(count * 3);
+      var seed = (count * 7919 + variant * 104729 + 17) >>> 0;
+      function rnd() {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed / 4294967296;
+      }
+      for (var i = 0; i < count; i++) {
+        var a = rnd() * Math.PI * 2;
+        var spd = 2.0 + rnd() * 4.4;
+        positions[i * 3] = Math.cos(a) * spd;
+        positions[i * 3 + 1] = 1.2 + rnd() * 3.4;
+        positions[i * 3 + 2] = Math.sin(a) * spd;
+      }
+      var g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      g.computeBoundingSphere();
+      return g;
+    });
+  }
 
   function resolveVfxColors(colorHex, vfx) {
     var motif = (vfx && vfx.motif) || 'cyber_tactical';
@@ -79,6 +198,16 @@
     return null;
   }
 
+  // Shader uniforms take linear-space colors: the scene renders linear into the
+  // PostFX render target and is sRGB-encoded once on output. Every custom
+  // fragment shader ends with linearToOutputTexel() (injected by three r147 for
+  // non-raw ShaderMaterial) so FX-on and FX-off paths match the authored colors.
+  function linearColor(THREE, hex) {
+    var c = new THREE.Color(hex);
+    if (typeof c.convertSRGBToLinear === 'function') c.convertSRGBToLinear();
+    return c;
+  }
+
   /* --------------------------------------------------------------------------
    * Custom GLSL 1.0 ShaderMaterial Builders (Three.js r147 compatible)
    * -------------------------------------------------------------------------- */
@@ -88,9 +217,9 @@
     return new THREE.ShaderMaterial({
       uniforms: {
         uMap: { value: slashTex },
-        uColorA: { value: new THREE.Color(primaryHex) },
-        uColorB: { value: new THREE.Color(secondaryHex) },
-        uCore: { value: new THREE.Color(coreHex) },
+        uColorA: { value: linearColor(THREE, primaryHex) },
+        uColorB: { value: linearColor(THREE, secondaryHex) },
+        uCore: { value: linearColor(THREE, coreHex) },
         uProgress: { value: 0.0 },
         uOpacity: { value: 1.0 }
       },
@@ -126,6 +255,7 @@
         '  float hotEdge = smoothstep(0.68, 0.96, tex.a) * smoothstep(0.62, 0.92, r);',
         '  col = mix(col, uCore, clamp(hotEdge * 1.15 + (1.0 - uProgress) * 0.25, 0.0, 1.0));',
         '  gl_FragColor = vec4(col * 1.25, mask * uOpacity);',
+        '  gl_FragColor = linearToOutputTexel(gl_FragColor);',
         '}'
       ].join('\n'),
       transparent: true,
@@ -141,8 +271,8 @@
     return new THREE.ShaderMaterial({
       uniforms: {
         uPattern: { value: patternTex },
-        uColorA: { value: new THREE.Color(primaryHex) },
-        uColorB: { value: new THREE.Color(secondaryHex) },
+        uColorA: { value: linearColor(THREE, primaryHex) },
+        uColorB: { value: linearColor(THREE, secondaryHex) },
         uTime: { value: 0.0 },
         uOpacity: { value: cfg.opacity !== undefined ? cfg.opacity : 0.72 },
         uRepeat: { value: new THREE.Vector2(cfg.repeatX || 4.0, cfg.repeatY || 2.0) },
@@ -188,6 +318,7 @@
         '  vec3 col = mix(uColorA, uColorB, clamp(fresnel * 0.65 + pat * 0.5, 0.0, 1.0));',
         '  col += vec3(1.0) * pat * fresnel * 0.55;',
         '  gl_FragColor = vec4(col * 1.15, clamp(alpha, 0.0, 1.0));',
+        '  gl_FragColor = linearToOutputTexel(gl_FragColor);',
         '}'
       ].join('\n'),
       transparent: true,
@@ -201,8 +332,8 @@
   function createBeamShaderMaterial(THREE, primaryHex, coreHex) {
     return new THREE.ShaderMaterial({
       uniforms: {
-        uColorA: { value: new THREE.Color(primaryHex) },
-        uCore: { value: new THREE.Color(coreHex) },
+        uColorA: { value: linearColor(THREE, primaryHex) },
+        uCore: { value: linearColor(THREE, coreHex) },
         uTime: { value: 0.0 },
         uOpacity: { value: 1.0 }
       },
@@ -231,6 +362,7 @@
         '  if (alpha < 0.02) discard;',
         '  vec3 col = mix(uColorA, uCore, clamp(core * 1.25, 0.0, 1.0));',
         '  gl_FragColor = vec4(col * 1.35, alpha);',
+        '  gl_FragColor = linearToOutputTexel(gl_FragColor);',
         '}'
       ].join('\n'),
       transparent: true,
@@ -244,8 +376,8 @@
   function createWaveRingShaderMaterial(THREE, primaryHex, secondaryHex, mode) {
     return new THREE.ShaderMaterial({
       uniforms: {
-        uColorA: { value: new THREE.Color(primaryHex) },
-        uColorB: { value: new THREE.Color(secondaryHex) },
+        uColorA: { value: linearColor(THREE, primaryHex) },
+        uColorB: { value: linearColor(THREE, secondaryHex) },
         uProgress: { value: 0.0 },
         uOpacity: { value: 0.92 },
         uMode: { value: mode || 0.0 } // 0=shockwave, 1=sonar_radar, 2=stealth_ripple
@@ -283,6 +415,7 @@
         '    if (a < 0.015) discard;',
         '    vec3 col = mix(uColorA, uColorB, ring1 * 0.65 + gridTick * 0.5);',
         '    gl_FragColor = vec4(col * 0.95, clamp(a, 0.0, 0.92));',
+        '    gl_FragColor = linearToOutputTexel(gl_FragColor);',
         '    return;',
         '  }',
         '  float ripple = sin(r * 26.0 - uProgress * 18.0) * 0.5 + 0.5;',
@@ -292,6 +425,7 @@
         '  if (alpha < 0.015) discard;',
         '  vec3 col2 = mix(uColorA, uColorB, ring1 * 0.72);',
         '  gl_FragColor = vec4(col2 * 0.96, clamp(alpha, 0.0, 0.92));',
+        '  gl_FragColor = linearToOutputTexel(gl_FragColor);',
         '}'
       ].join('\n'),
       transparent: true,
@@ -316,11 +450,12 @@
     group.position.set(x, 0.96, z);
     group.rotation.y = -angle;
 
-    var planeGeo = new THREE.PlaneGeometry(r * 2.15, r * 2.15);
-    planeGeo.rotateX(-Math.PI / 2);
+    var planeGeo = getUnitFloorPlane(session);
+    var slashSize = r * 2.15;
 
     var matMain = createSlashShaderMaterial(THREE, c.primary, c.secondary, c.core, slashTex);
     var meshMain = new THREE.Mesh(planeGeo, matMain);
+    meshMain.scale.set(slashSize, 1, slashSize);
     meshMain.rotation.z = 0.22; // Dynamic angled sword cleave
     group.add(meshMain);
 
@@ -329,14 +464,14 @@
     var meshEcho = new THREE.Mesh(planeGeo, matEcho);
     meshEcho.position.y = 0.24;
     meshEcho.rotation.z = -0.28;
-    meshEcho.scale.set(0.86, 1, 0.86);
+    meshEcho.scale.set(slashSize * 0.86, 1, slashSize * 0.86);
     group.add(meshEcho);
 
     // Bright ground cutting wave
-    var waveGeo = new THREE.PlaneGeometry(r * 2.0, r * 2.0);
-    waveGeo.rotateX(-Math.PI / 2);
+    var waveGeo = planeGeo;
     var waveMat = createWaveRingShaderMaterial(THREE, c.primary, c.core, 0.0);
     var waveMesh = new THREE.Mesh(waveGeo, waveMat);
+    waveMesh.scale.set(r * 2.0, 1, r * 2.0);
     waveMesh.position.y = -0.82;
     group.add(waveMesh);
 
@@ -368,11 +503,11 @@
       },
       dispose: function () {
         session.scene.remove(group);
-        planeGeo.dispose();
-        waveGeo.dispose();
-        matMain.dispose();
-        matEcho.dispose();
-        waveMat.dispose();
+        disposeIfOwned(planeGeo);
+        disposeIfOwned(waveGeo);
+        disposeIfOwned(matMain);
+        disposeIfOwned(matEcho);
+        disposeIfOwned(waveMat);
       }
     });
   }
@@ -382,8 +517,7 @@
     var THREE = session.THREE;
     var r = Math.max(0.75, radius || 1.3);
     var fissureTex = getTex(session, 'vfx_fissure_crack');
-    var geo = new THREE.PlaneGeometry(r * 2.1, r * 2.1);
-    geo.rotateX(-Math.PI / 2);
+    var geo = getUnitFloorPlane(session);
     var mat = new THREE.MeshBasicMaterial({
       map: fissureTex,
       color: hexToInt(colorHex, 0xff7838),
@@ -393,6 +527,7 @@
       blending: THREE.AdditiveBlending
     });
     var mesh = new THREE.Mesh(geo, mat);
+    mesh.scale.set(r * 2.1, 1, r * 2.1);
     mesh.position.set(x, 0.055, z);
     mesh.rotation.y = Math.random() * Math.PI * 2;
     session.scene.add(mesh);
@@ -408,8 +543,8 @@
       },
       dispose: function () {
         session.scene.remove(mesh);
-        geo.dispose();
-        mat.dispose();
+        disposeIfOwned(geo);
+        disposeIfOwned(mat);
       }
     });
   }
@@ -542,7 +677,7 @@
     var r = Math.max(3.2, radius || 4.8);
 
     // Expanding Hex Fresnel EMP Plasma Dome (crisp translucent hex grid + glowing rim)
-    var domeGeo = new THREE.SphereGeometry(1.0, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.52);
+    var domeGeo = getUnitDome(session, 24, 16, 0.52);
     var domeMat = createBarrierShaderMaterial(THREE, c.primary, c.secondary, getTex(session, 'vfx_hex_pattern'), {
       opacity: 0.62,
       repeatX: 5.0,
@@ -591,8 +726,8 @@
       },
       dispose: function () {
         session.scene.remove(dome);
-        domeGeo.dispose();
-        domeMat.dispose();
+        disposeIfOwned(domeGeo);
+        disposeIfOwned(domeMat);
       }
     });
   }
@@ -676,8 +811,8 @@
       },
       dispose: function () {
         session.scene.remove(group);
-        for (var g = 0; g < geos.length; g++) geos[g].dispose();
-        for (var m = 0; m < mats.length; m++) mats[m].dispose();
+        for (var g = 0; g < geos.length; g++) disposeIfOwned(geos[g]);
+        for (var m = 0; m < mats.length; m++) disposeIfOwned(mats[m]);
       }
     });
   }
@@ -862,8 +997,8 @@
       },
       dispose: function () {
         session.scene.remove(group);
-        for (var g = 0; g < geos.length; g++) geos[g].dispose();
-        for (var m = 0; m < mats.length; m++) mats[m].dispose();
+        for (var g = 0; g < geos.length; g++) disposeIfOwned(geos[g]);
+        for (var m = 0; m < mats.length; m++) disposeIfOwned(mats[m]);
       }
     });
   }
@@ -957,8 +1092,8 @@
       },
       dispose: function () {
         session.scene.remove(group);
-        for (var g = 0; g < geos.length; g++) geos[g].dispose();
-        for (var m = 0; m < mats.length; m++) mats[m].dispose();
+        for (var g = 0; g < geos.length; g++) disposeIfOwned(geos[g]);
+        for (var m = 0; m < mats.length; m++) disposeIfOwned(mats[m]);
       }
     });
   }
@@ -1036,8 +1171,8 @@
       },
       dispose: function () {
         session.scene.remove(group);
-        for (var g = 0; g < geos.length; g++) geos[g].dispose();
-        for (var m = 0; m < mats.length; m++) mats[m].dispose();
+        for (var g = 0; g < geos.length; g++) disposeIfOwned(geos[g]);
+        for (var m = 0; m < mats.length; m++) disposeIfOwned(mats[m]);
       }
     });
   }
@@ -1135,8 +1270,8 @@
       },
       dispose: function () {
         session.scene.remove(group);
-        for (var g = 0; g < geos.length; g++) geos[g].dispose();
-        for (var m = 0; m < mats.length; m++) mats[m].dispose();
+        for (var g = 0; g < geos.length; g++) disposeIfOwned(geos[g]);
+        for (var m = 0; m < mats.length; m++) disposeIfOwned(mats[m]);
       }
     });
   }
@@ -1148,15 +1283,15 @@
     var r = Math.max(8.0, radius || 13.5);
 
     // Custom GLSL 360-degree rotating sonar radar floor sweep
-    var radarGeo = new THREE.PlaneGeometry(r * 2.1, r * 2.1);
-    radarGeo.rotateX(-Math.PI / 2);
+    var radarGeo = getUnitFloorPlane(session);
     var radarMat = createWaveRingShaderMaterial(THREE, c.primary, c.core, 1.0);
     var radar = new THREE.Mesh(radarGeo, radarMat);
+    radar.scale.set(r * 2.1, 1, r * 2.1);
     radar.position.set(x, 0.11, z);
     session.scene.add(radar);
 
     // Rising translucent hemispheric scan shell
-    var domeGeo = new THREE.SphereGeometry(1.0, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.45);
+    var domeGeo = getUnitDome(session, 24, 14, 0.45);
     var domeMat = createBarrierShaderMaterial(THREE, c.primary, c.secondary, getTex(session, 'vfx_hex_pattern'), {
       opacity: 0.42,
       repeatX: 8.0,
@@ -1187,8 +1322,8 @@
       },
       dispose: function () {
         session.scene.remove(radar, dome);
-        radarGeo.dispose(); radarMat.dispose();
-        domeGeo.dispose(); domeMat.dispose();
+        disposeIfOwned(radarGeo); disposeIfOwned(radarMat);
+        disposeIfOwned(domeGeo); disposeIfOwned(domeMat);
       }
     });
   }
@@ -1307,7 +1442,7 @@
   // 14. BERSERK STRIKE: Glowing Branching Magma Fissure Crater + Erupting 3D Shards + Impact Dome
   function spawnBerserkSlamVfx(session, x, z, radius, colorHex, vfx) {
     var THREE = session.THREE;
-    var c = resolveVfxColors(colorHex || '#ff4a38', vfx);
+    var c = resolveVfxColors(colorHex || '#ff9a38', vfx);
     var r = Math.max(2.6, radius || 3.8);
 
     // Massive glowing organic ground fissure crater (crisp fiery magma contrast, zero white washout!)
@@ -1317,7 +1452,7 @@
     spawnSparkBurst(session, x, 0.75, z, c.primary, 22);
 
     // Compressed kinetic shockwave impact dome
-    var domeGeo = new THREE.SphereGeometry(1.0, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5);
+    var domeGeo = getUnitDome(session, 20, 14, 0.5);
     var domeMat = createBarrierShaderMaterial(THREE, c.primary, c.secondary, getTex(session, 'vfx_fissure_crack'), {
       opacity: 0.54,
       repeatX: 2.0,
@@ -1331,7 +1466,9 @@
     session.scene.add(dome);
 
     // 10 Jagged 3D erupting obsidian/magma shock-shards rocketing upward & outward
-    var shardGeo = new THREE.ConeGeometry(0.24, 1.05, 5);
+    var shardGeo = getSharedGeo(session, 'cone_shard_024_105_5', function (T) {
+      return new T.ConeGeometry(0.24, 1.05, 5);
+    });
     var shardMat = new THREE.MeshStandardMaterial({
       color: 0x262028,
       emissive: c.primary,
@@ -1385,8 +1522,8 @@
       },
       dispose: function () {
         session.scene.remove(dome, shardGroup);
-        domeGeo.dispose(); domeMat.dispose();
-        shardGeo.dispose(); shardMat.dispose();
+        disposeIfOwned(domeGeo); disposeIfOwned(domeMat);
+        disposeIfOwned(shardGeo); disposeIfOwned(shardMat);
       }
     });
   }
@@ -1397,10 +1534,10 @@
   function spawnWaveRing(session, x, z, maxRadius, colorHex, duration, mode) {
     var THREE = session.THREE;
     var r = Math.max(1.2, maxRadius || 3.4);
-    var geo = new THREE.PlaneGeometry(r * 2.1, r * 2.1);
-    geo.rotateX(-Math.PI / 2);
+    var geo = getUnitFloorPlane(session);
     var mat = createWaveRingShaderMaterial(THREE, hexToInt(colorHex, 0x6fd8ea), 0xffffff, mode || 0);
     var mesh = new THREE.Mesh(geo, mat);
+    mesh.scale.set(r * 2.1, 1, r * 2.1);
     mesh.position.set(x, 0.095, z);
     session.scene.add(mesh);
 
@@ -1415,8 +1552,8 @@
       },
       dispose: function () {
         session.scene.remove(mesh);
-        geo.dispose();
-        mat.dispose();
+        disposeIfOwned(geo);
+        disposeIfOwned(mat);
       }
     });
   }
@@ -1461,6 +1598,8 @@
 
     var upVec = new THREE.Vector3(0, 1, 0);
     var dirVec = new THREE.Vector3();
+    var segGeo = getUnitOpenCylinder(session, 0.048, 5);
+    var coreGeo = getUnitOpenCylinder(session, 0.018, 4);
     for (var s = 0; s < segs; s++) {
       var a = pts[s];
       var b = pts[s + 1];
@@ -1470,21 +1609,21 @@
       var midY = (a.y + b.y) * 0.5;
       var midZ = (a.z + b.z) * 0.5;
 
-      var segGeo = new THREE.CylinderGeometry(0.048, 0.048, sLen, 5, 1, true);
-      var coreGeo = new THREE.CylinderGeometry(0.018, 0.018, sLen, 4, 1, true);
       var q = new THREE.Quaternion().setFromUnitVectors(upVec, dirVec.clone().normalize());
 
       var mOut = new THREE.Mesh(segGeo, outerMat);
       mOut.position.set(midX, midY, midZ);
       mOut.quaternion.copy(q);
+      mOut.scale.set(1, sLen, 1);
 
       var mCore = new THREE.Mesh(coreGeo, coreMat);
       mCore.position.set(midX, midY, midZ);
       mCore.quaternion.copy(q);
+      mCore.scale.set(1, sLen, 1);
 
       group.add(mOut, mCore);
-      geos.push(segGeo, coreGeo);
     }
+    geos.push(segGeo, coreGeo);
 
     session.scene.add(group);
     var maxTtl = Math.max(0.14, duration || 0.28);
@@ -1500,8 +1639,8 @@
       },
       dispose: function () {
         session.scene.remove(group);
-        for (var g = 0; g < geos.length; g++) geos[g].dispose();
-        for (var m = 0; m < mats.length; m++) mats[m].dispose();
+        for (var g = 0; g < geos.length; g++) disposeIfOwned(geos[g]);
+        for (var m = 0; m < mats.length; m++) disposeIfOwned(mats[m]);
       }
     });
   }
@@ -1509,19 +1648,9 @@
   // Soft Glowing Radial Orb Particle Burst (never harsh square GL points!)
   function spawnSparkBurst(session, x, y, z, colorHex, count) {
     var THREE = session.THREE;
-    var n = clamp(count || 12, 4, 34);
-    var positions = new Float32Array(n * 3);
-    var vels = [];
-    for (var i = 0; i < n; i++) {
-      positions[i * 3] = x;
-      positions[i * 3 + 1] = y;
-      positions[i * 3 + 2] = z;
-      var a = Math.random() * Math.PI * 2;
-      var spd = 2.0 + Math.random() * 4.4;
-      vels.push({ vx: Math.cos(a) * spd, vy: 1.2 + Math.random() * 3.4, vz: Math.sin(a) * spd });
-    }
-    var geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    var n = Math.round(clamp(count || 12, 4, SPARK_MAX));
+    var variant = Math.floor(Math.random() * SPARK_VARIANTS) % SPARK_VARIANTS;
+    var geo = getSparkGeo(session, n, variant);
     var mat = new THREE.PointsMaterial({
       map: getTex(session, 'vfx_soft_glow'),
       color: hexToInt(colorHex, 0x6fd8ea),
@@ -1532,28 +1661,29 @@
       blending: THREE.AdditiveBlending
     });
     var pts = new THREE.Points(geo, mat);
+    var minScale = 0.0001;
+    pts.position.set(x, y, z);
+    pts.rotation.y = Math.random() * Math.PI * 2;
+    pts.scale.setScalar(minScale);
     session.scene.add(pts);
 
     var maxTtl = 0.48;
+    var halfGravity = 3.9; // 0.5 * 7.8
+    var floorY = 0.06;
     session.vfxList.push({
       ttl: maxTtl,
       maxTtl: maxTtl,
       update: function (dt) {
         this.ttl -= dt;
-        var attr = geo.attributes.position;
-        for (var k = 0; k < n; k++) {
-          vels[k].vy -= 7.8 * dt;
-          attr.array[k * 3] += vels[k].vx * dt;
-          attr.array[k * 3 + 1] = Math.max(0.06, attr.array[k * 3 + 1] + vels[k].vy * dt);
-          attr.array[k * 3 + 2] += vels[k].vz * dt;
-        }
-        attr.needsUpdate = true;
+        var t = clamp(this.maxTtl - this.ttl, 0, this.maxTtl);
+        pts.scale.setScalar(Math.max(minScale, t));
+        pts.position.y = Math.max(floorY - y, -halfGravity * t * t) + y;
         mat.opacity = 0.98 * clamp(this.ttl / this.maxTtl, 0, 1);
       },
       dispose: function () {
         session.scene.remove(pts);
-        geo.dispose();
-        mat.dispose();
+        disposeIfOwned(geo);
+        disposeIfOwned(mat);
       }
     });
   }
@@ -1561,7 +1691,7 @@
   function spawnImpactStar(session, x, y, z, colorHex, scale, duration) {
     var THREE = session.THREE;
     var sc = Math.max(0.8, scale || 1.8);
-    var geo = new THREE.PlaneGeometry(sc, sc);
+    var geo = getUnitPlane(session);
     var mat = new THREE.MeshBasicMaterial({
       map: getTex(session, 'vfx_impact_star'),
       color: hexToInt(colorHex, 0xffffff),
@@ -1574,6 +1704,7 @@
     var mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, y, z);
     mesh.rotation.x = -0.35;
+    mesh.scale.set(sc * 0.55, sc * 0.55, 1);
     session.scene.add(mesh);
 
     var maxTtl = Math.max(0.14, duration || 0.24);
@@ -1583,15 +1714,15 @@
       update: function (dt) {
         this.ttl -= dt;
         var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
-        var s = 0.55 + Math.sin(p * Math.PI * 0.85) * 0.95;
+        var s = (0.55 + Math.sin(p * Math.PI * 0.85) * 0.95) * sc;
         mesh.scale.set(s, s, 1);
         mesh.rotation.z += dt * 4.5;
         mat.opacity = 0.98 * (1 - p);
       },
       dispose: function () {
         session.scene.remove(mesh);
-        geo.dispose();
-        mat.dispose();
+        disposeIfOwned(geo);
+        disposeIfOwned(mat);
       }
     });
   }
@@ -1600,8 +1731,8 @@
     var THREE = session.THREE;
     var r = Math.max(1.2, radius || 2.5);
     var key = 'sigil_' + String(sigilStyle || 'bagua').replace(/^sigil_/, '');
-    var geo = new THREE.PlaneGeometry(r * 2.0, r * 2.0);
-    geo.rotateX(-Math.PI / 2);
+    var size = r * 2.0;
+    var geo = getUnitFloorPlane(session);
     var mat = new THREE.MeshBasicMaterial({
       map: getTex(session, key),
       color: hexToInt(colorHex, 0x6fd8ea),
@@ -1612,6 +1743,7 @@
     });
     var mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, 0.088, z);
+    mesh.scale.set(size * 0.55, 1, size * 0.55);
     session.scene.add(mesh);
 
     var maxTtl = Math.max(0.32, duration || 0.65);
@@ -1621,15 +1753,15 @@
       update: function (dt) {
         this.ttl -= dt;
         var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
-        var sc = 0.55 + Math.pow(p, 0.55) * 0.65;
+        var sc = (0.55 + Math.pow(p, 0.55) * 0.65) * size;
         mesh.scale.set(sc, 1, sc);
         mesh.rotation.y += dt * 1.35;
         mat.opacity = 0.88 * (1 - p);
       },
       dispose: function () {
         session.scene.remove(mesh);
-        geo.dispose();
-        mat.dispose();
+        disposeIfOwned(geo);
+        disposeIfOwned(mat);
       }
     });
   }

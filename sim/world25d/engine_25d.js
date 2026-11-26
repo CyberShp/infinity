@@ -23,6 +23,42 @@
   var HUD_TICK_INTERVAL = 0.1; // ~10 Hz
   var INTERACT_RANGE = 2.4;
 
+  // Dark-horror lighting: actors are lit by the scene; only emissive-map accents
+  // (visors, blades, lantern) self-illuminate.
+  var ACTOR_EMISSIVE_BASE = 0.30;
+  var ACTOR_EMISSIVE_BOSS = 0.52;
+
+  // Pooled station point lights: seconds to fade a slot out/in when it is reassigned.
+  var LIGHT_POOL_FADE_SEC = 0.35;
+  // Station fixtures within this radius of an EMP detonation black out.
+  var EMP_BLACKOUT_RADIUS = 22.0;
+
+  function readArtTokens() {
+    return global.INFINITY && global.INFINITY.ArtTokens ? global.INFINITY.ArtTokens : null;
+  }
+
+  function semanticInt(key, fallback) {
+    var tokens = readArtTokens();
+    if (tokens && tokens.SEMANTIC && typeof tokens.SEMANTIC[key] === 'number') {
+      return tokens.SEMANTIC[key];
+    }
+    return fallback;
+  }
+
+  // Shared VFX resources (userData.shared) are cached per session and released only
+  // through the tracked-resource sweep in unmount().
+  function disposeOwned(res) {
+    if (!res || typeof res.dispose !== 'function') return;
+    if (res.userData && res.userData.shared) return;
+    res.dispose();
+  }
+
+  function maxActiveVfxBudget() {
+    var tokens = readArtTokens();
+    var n = tokens && tokens.BUDGETS ? Number(tokens.BUDGETS.maxActiveVfx) : NaN;
+    return n > 0 ? n : 48;
+  }
+
   var ORDER_LABELS = {
     auto: '自主行动',
     follow: '紧跟掩护',
@@ -37,12 +73,12 @@
   };
 
   var DEFAULT_ZONES = {
-    concourse:  { id: 'concourse',  name: 'B1 检票大厅',   code: 'Z-01', cx: 10, cz: 10, color: '#6fd8ea' },
+    concourse:  { id: 'concourse',  name: 'B1 检票大厅',   code: 'Z-01', cx: 10, cz: 10, color: '#68c8de' },
     corridor:   { id: 'corridor',   name: 'B2 换乘长廊',   code: 'Z-02', cx: 26, cz: 18, color: '#d6b274' },
-    dispatch:   { id: 'dispatch',   name: '信号调度室',    code: 'Z-03', cx: 30, cz: 7,  color: '#58c4a6' },
-    substation: { id: 'substation', name: '旧变电间',      code: 'Z-04', cx: 11, cz: 29, color: '#6fa8ff' },
-    tunnel:     { id: 'tunnel',     name: '废弃应急通道',  code: 'Z-05', cx: 34, cz: 30, color: '#b98ce0' },
-    platform0:  { id: 'platform0',  name: '0号站台铁轨',   code: 'Z-06', cx: 47, cz: 18, color: '#e85d4a' }
+    dispatch:   { id: 'dispatch',   name: '信号调度室',    code: 'Z-03', cx: 30, cz: 7,  color: '#52c4a2' },
+    substation: { id: 'substation', name: '旧变电间',      code: 'Z-04', cx: 11, cz: 29, color: '#6e9eff' },
+    tunnel:     { id: 'tunnel',     name: '废弃应急通道',  code: 'Z-05', cx: 34, cz: 30, color: '#a884e0' },
+    platform0:  { id: 'platform0',  name: '0号站台铁轨',   code: 'Z-06', cx: 47, cz: 18, color: '#e69c3c' }
   };
 
   var DEFAULT_SLOTS = [
@@ -463,24 +499,28 @@
     return this.trackTex(createFallbackTexture(this.THREE, fallbackColor, fallbackAccent));
   };
 
+  EngineSession.prototype.getWeaponStyleFor = function (id) {
+    return id === 'player' ? (this.playerWeaponStyle || null) : null;
+  };
+
   EngineSession.prototype.getCharTex = function (id, frame) {
     if (this.spritesApi && typeof this.spritesApi.getCharTexture === 'function') {
       try {
-        var t = this.spritesApi.getCharTexture(id, frame || 'idle');
+        var t = this.spritesApi.getCharTexture(id, frame || 'idle', this.getWeaponStyleFor(id));
         if (t) return t;
       } catch (_) {}
     }
-    var colors = {
-      player: '#6fd8ea', yanci: '#7ca7d9', lujin: '#d97b54',
-      xutan: '#58c4a6', shenyan: '#c9a66b', inspector: '#e83848'
-    };
-    return this.trackTex(createFallbackTexture(this.THREE, colors[id] || '#88aabb', '#ffffff'));
+    var tokens = INFINITY.ArtTokens;
+    var fallbackCol = (tokens && typeof tokens.getCharacterColor === 'function')
+      ? tokens.getCharacterColor(id, '#88aabb')
+      : '#88aabb';
+    return this.trackTex(createFallbackTexture(this.THREE, fallbackCol, '#ffffff'));
   };
 
   EngineSession.prototype.getCharNormalTex = function (id, frame) {
     if (this.spritesApi && typeof this.spritesApi.getCharNormalTexture === 'function') {
       try {
-        var t = this.spritesApi.getCharNormalTexture(id, frame || 'idle');
+        var t = this.spritesApi.getCharNormalTexture(id, frame || 'idle', this.getWeaponStyleFor(id));
         if (t) return t;
       } catch (_) {}
     }
@@ -490,7 +530,7 @@
   EngineSession.prototype.getCharEmissiveTex = function (id, frame) {
     if (this.spritesApi && typeof this.spritesApi.getCharEmissiveTexture === 'function') {
       try {
-        var t = this.spritesApi.getCharEmissiveTexture(id, frame || 'idle');
+        var t = this.spritesApi.getCharEmissiveTexture(id, frame || 'idle', this.getWeaponStyleFor(id));
         if (t) return t;
       } catch (_) {}
     }
@@ -911,6 +951,8 @@
       bloodlines: (built && Array.isArray(built.bloodlines)) ? built.bloodlines : [],
       resonanceSummary: (built && built.resonanceSummary) || null
     };
+    // Held weapon sprite follows the basic-attack style (sword | cyber | occult | tactical).
+    this.playerWeaponStyle = basic.style || (charVisual && charVisual.weaponStyle) || 'sword';
   };
 
   // ---------------------------------------------------------------------------
@@ -919,19 +961,19 @@
   EngineSession.prototype.buildLighting = function () {
     var THREE = this.THREE;
 
-    // Atmospheric PBR studio lighting: cool subterranean fill + raking directional key + warm rim contrast
-    // Designed to bring out tangent-space normal maps on floors, glazed bricks, pillars, and HD-2D characters!
-    var amb = new THREE.AmbientLight(0x3a4d6b, 0.78);
+    // Dark-horror balance: low global fill so the flashlight, zone lamps and the
+    // Inspector's lantern own the light. Values assume the sRGB-correct PostFX path.
+    var amb = new THREE.AmbientLight(0x3a4d6b, 0.26);
     this.scene.add(amb);
 
-    var hemi = new THREE.HemisphereLight(0x6e92bd, 0x161d2b, 0.86);
+    var hemi = new THREE.HemisphereLight(0x6e92bd, 0x161d2b, 0.32);
     this.scene.add(hemi);
 
-    var dirKey = new THREE.DirectionalLight(0xd8f0ff, 0.96);
+    var dirKey = new THREE.DirectionalLight(0xd8f0ff, 0.38);
     dirKey.position.set(14, 18, 16);
     this.scene.add(dirKey);
 
-    var dirRim = new THREE.DirectionalLight(0xffa060, 0.44);
+    var dirRim = new THREE.DirectionalLight(0xffa060, 0.22);
     dirRim.position.set(-18, 10, -14);
     this.scene.add(dirRim);
 
@@ -940,7 +982,7 @@
     flashTarget.position.set(12, 0.2, 10);
     this.scene.add(flashTarget);
 
-    var flash = new THREE.SpotLight(0xdcf5ff, 2.55, 25, Math.PI / 3.8, 0.58, 1.3);
+    var flash = new THREE.SpotLight(0xdcf5ff, 3.1, 25, Math.PI / 3.8, 0.58, 1.3);
     flash.position.set(10, 2.15, 10);
     flash.target = flashTarget;
     this.scene.add(flash);
@@ -1456,7 +1498,7 @@
       normalScale: new THREE.Vector2(1.25, 1.25),
       emissiveMap: emIdle || texIdle,
       emissive: 0xffffff,
-      emissiveIntensity: isBoss ? 1.05 : 0.88,
+      emissiveIntensity: isBoss ? ACTOR_EMISSIVE_BOSS : ACTOR_EMISSIVE_BASE,
       roughness: 0.56,
       metalness: 0.16,
       transparent: true,
@@ -1712,7 +1754,7 @@
       dashTimer: 0,
       dashVx: 0,
       dashVz: 0,
-      dashColor: 0xff4658,
+      dashColor: semanticInt('dashTrailInt', 0x52e5ff),
       channelTimer: 0,
       lowHpPulseCd: 0,
       footstepAccum: 0,
@@ -2444,10 +2486,18 @@
       var rtW = Math.max(1, Math.floor(width * pr));
       var rtH = Math.max(1, Math.floor(height * pr));
 
+      // The scene is written to the RT in linear space (three r147 forces LinearEncoding
+      // for render targets). Prefer a half-float target so dark gradients do not band
+      // before the post pass re-encodes to sRGB.
+      var caps = this.renderer.capabilities || {};
+      var exts = this.renderer.extensions;
+      var canHalfFloat = Boolean(caps.isWebGL2 && exts && typeof exts.has === 'function' &&
+        (exts.has('EXT_color_buffer_float') || exts.has('EXT_color_buffer_half_float')));
       var rt = new THREE.WebGLRenderTarget(rtW, rtH, {
         minFilter: THREE.LinearFilter,
         magFilter: THREE.LinearFilter,
         format: THREE.RGBAFormat,
+        type: canHalfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType,
         depthBuffer: true,
         stencilBuffer: false
       });
@@ -2473,6 +2523,15 @@
         'uniform float uLowHp;',
         'uniform float uFlash;',
         'varying vec2 vUv;',
+        '',
+        '// Exact piecewise sRGB OETF. The RT holds linear color, so the post pass must',
+        '// encode before output or PostFX-on renders darker than the direct path.',
+        'vec3 linearToSRGB(vec3 c) {',
+        '  c = max(c, vec3(0.0));',
+        '  vec3 lo = c * 12.92;',
+        '  vec3 hi = 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055;',
+        '  return mix(lo, hi, step(vec3(0.0031308), c));',
+        '}',
         '',
         'vec3 brightPass(vec3 c) {',
         '  float luma = dot(c, vec3(0.299, 0.587, 0.114));',
@@ -2519,6 +2578,9 @@
         '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(o2.x, -o2.y), 0.0, 1.0)).rgb) * 0.07;',
         '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(-o2.x, -o2.y), 0.0, 1.0)).rgb) * 0.07;',
         '  col += bloom * vec3(1.04, 1.01, 1.04) * 0.36;',
+        '',
+        '  // Linear -> sRGB; vignette, grain and status tints below operate in display space',
+        '  col = linearToSRGB(col);',
         '',
         '  // Obsidian vignette + subtle micro film grain',
         '  vec2 centered = vUv * 2.0 - 1.0;',
@@ -2623,8 +2685,39 @@
       u.uLowHp.value = this.lowHpBlend;
       u.uFlash.value = clamp(this.parryFlashTimer / 0.22, 0, 1);
 
-      this.renderer.setRenderTarget(fx.rt);
-      this.renderer.render(this.scene, this.camera);
+      // three r147 applies fog after output encoding and writes clear/background colors raw,
+      // so all three are display-space values. Swap in their linear equivalents while
+      // rendering into the linear RT so the post pass's sRGB encode does not lift them.
+      var fog = this.scene.fog;
+      var bg = this.scene.background;
+      var bgIsColor = bg && typeof bg.isColor === 'boolean' && bg.isColor;
+      if (!fx.fogDisplay && fog && fog.color) {
+        fx.fogDisplay = fog.color.clone();
+        fx.fogLinear = fog.color.clone().convertSRGBToLinear();
+      }
+      if (!fx.bgDisplay && bgIsColor) {
+        fx.bgDisplay = bg.clone();
+        fx.bgLinear = bg.clone().convertSRGBToLinear();
+      }
+      if (!fx.clearDisplay) {
+        fx.clearDisplay = new this.THREE.Color();
+        this.renderer.getClearColor(fx.clearDisplay);
+        fx.clearLinear = fx.clearDisplay.clone().convertSRGBToLinear();
+      }
+
+      try {
+        if (fog && fx.fogLinear) fog.color.copy(fx.fogLinear);
+        if (bgIsColor && fx.bgLinear) bg.copy(fx.bgLinear);
+        this.renderer.setClearColor(fx.clearLinear, 1);
+
+        this.renderer.setRenderTarget(fx.rt);
+        this.renderer.render(this.scene, this.camera);
+      } finally {
+        if (fog && fx.fogDisplay) fog.color.copy(fx.fogDisplay);
+        if (bgIsColor && fx.bgDisplay) bg.copy(fx.bgDisplay);
+        if (fx.clearDisplay) this.renderer.setClearColor(fx.clearDisplay, 1);
+      }
+
       this.renderer.setRenderTarget(null);
       this.renderer.render(fx.scene, fx.camera);
     } catch (_) {
@@ -3050,7 +3143,7 @@
       p.dashTimer = Math.max(0, p.dashTimer - simDt);
       p.vx = p.dashVx;
       p.vz = p.dashVz;
-      this.spawnAfterimage(p.x, p.z, 'player', p.facingLeft, p.dashColor || 0xff4658, 0.28, 'dash');
+      this.spawnAfterimage(p.x, p.z, 'player', p.facingLeft, p.dashColor || semanticInt('dashTrailInt', 0x52e5ff), 0.28, 'dash');
     } else if (mx !== 0 || mz !== 0) {
       var len = Math.sqrt(mx * mx + mz * mz);
       p.vx = (mx / len) * speed;
@@ -3238,7 +3331,7 @@
       actor.vis.mat.emissiveIntensity = 0.85;
     } else {
       actor.vis.mat.emissive.setHex(0xffffff);
-      actor.vis.mat.emissiveIntensity = actor.id === 'inspector' ? 1.05 : 0.88;
+      actor.vis.mat.emissiveIntensity = actor.id === 'inspector' ? ACTOR_EMISSIVE_BOSS : ACTOR_EMISSIVE_BASE;
     }
 
     // Dynamic HP / SAN per-unit GLSL shader uniform updates (all combat units)
@@ -3610,8 +3703,9 @@
         p.shieldColor = colorHex;
         p.shieldMesh.visible = true;
         if (p.shieldMat && p.shieldMat.uniforms) {
-          if (p.shieldMat.uniforms.uColorA) p.shieldMat.uniforms.uColorA.value.setHex(colorHex);
-          if (p.shieldMat.uniforms.uColorB) p.shieldMat.uniforms.uColorB.value.setHex(secHex);
+          // VfxStudio shader uniforms are linear (outputs pass through linearToOutputTexel)
+          if (p.shieldMat.uniforms.uColorA) p.shieldMat.uniforms.uColorA.value.setHex(colorHex).convertSRGBToLinear();
+          if (p.shieldMat.uniforms.uColorB) p.shieldMat.uniforms.uColorB.value.setHex(secHex).convertSRGBToLinear();
         } else if (p.shieldMat && p.shieldMat.color) {
           p.shieldMat.color.setHex(colorHex);
         }
@@ -3782,6 +3876,7 @@
         var slamRad = Math.max(3.6, radius);
         var slamDmg = Math.round(power * 1.45);
         this.vfxList.push({
+          persistent: true, // gameplay timer: slam damage resolves on expiry
           ttl: 0.16,
           maxTtl: 0.16,
           update: function (dt) {
@@ -3882,8 +3977,8 @@
       if (w.ttl <= 0) {
         this.spawnWardEmbers(w.x, w.z, w.radius);
         this.scene.remove(w.group);
-        for (var g = 0; g < w.geos.length; g++) w.geos[g].dispose();
-        for (var m = 0; m < w.mats.length; m++) w.mats[m].dispose();
+        for (var g = 0; g < w.geos.length; g++) disposeOwned(w.geos[g]);
+        for (var m = 0; m < w.mats.length; m++) disposeOwned(w.mats[m]);
         this.wards.splice(i, 1);
       }
     }
@@ -3941,8 +4036,8 @@
   EngineSession.prototype.removeBlinkBeacon = function () {
     if (!this.blinkBeacon) return;
     this.scene.remove(this.blinkBeacon.group);
-    for (var g = 0; g < this.blinkBeacon.geos.length; g++) this.blinkBeacon.geos[g].dispose();
-    for (var m = 0; m < this.blinkBeacon.mats.length; m++) this.blinkBeacon.mats[m].dispose();
+    for (var g = 0; g < this.blinkBeacon.geos.length; g++) disposeOwned(this.blinkBeacon.geos[g]);
+    for (var m = 0; m < this.blinkBeacon.mats.length; m++) disposeOwned(this.blinkBeacon.mats[m]);
     this.blinkBeacon = null;
   };
 
@@ -3950,8 +4045,8 @@
     if (this.drones.length >= 2) {
       var old = this.drones.shift();
       this.scene.remove(old.group);
-      old.geos.forEach(function (g) { g.dispose(); });
-      old.mats.forEach(function (m) { m.dispose(); });
+      old.geos.forEach(disposeOwned);
+      old.mats.forEach(disposeOwned);
     }
     if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.buildTurretDrone === 'function') {
       var d = INFINITY.VfxStudio.buildTurretDrone(this, x, z, duration, colorHex, vfx);
@@ -4005,8 +4100,8 @@
       if (dr.ttl <= 0) {
         this.spawnSparkBurst(dr.x, 1.2, dr.z, dr.colorHex || 0x58f5c8, 10);
         this.scene.remove(dr.group);
-        dr.geos.forEach(function (g) { g.dispose(); });
-        dr.mats.forEach(function (m) { m.dispose(); });
+        dr.geos.forEach(disposeOwned);
+        dr.mats.forEach(disposeOwned);
         this.drones.splice(i, 1);
       }
     }
@@ -4041,8 +4136,8 @@
       }
       if (dc.ttl <= 0) {
         this.scene.remove(dc.group);
-        dc.geos.forEach(function (g) { g.dispose(); });
-        dc.mats.forEach(function (m) { m.dispose(); });
+        dc.geos.forEach(disposeOwned);
+        dc.mats.forEach(disposeOwned);
         this.decoys.splice(i, 1);
       }
     }
@@ -4094,8 +4189,8 @@
   EngineSession.prototype.clearReconBeacons = function () {
     for (var i = 0; i < this.reconBeacons.length; i++) {
       this.scene.remove(this.reconBeacons[i].mesh);
-      this.reconBeacons[i].geo.dispose();
-      this.reconBeacons[i].mat.dispose();
+      disposeOwned(this.reconBeacons[i].geo);
+      disposeOwned(this.reconBeacons[i].mat);
     }
     this.reconBeacons = [];
   };
@@ -4109,12 +4204,12 @@
     }
     if (Array.isArray(fw.geos)) {
       for (var i = 0; i < fw.geos.length; i++) {
-        try { fw.geos[i].dispose(); } catch (_) {}
+        try { disposeOwned(fw.geos[i]); } catch (_) {}
       }
     }
     if (Array.isArray(fw.mats)) {
       for (var j = 0; j < fw.mats.length; j++) {
-        try { fw.mats[j].dispose(); } catch (_) {}
+        try { disposeOwned(fw.mats[j]); } catch (_) {}
       }
     }
     this.focusWaypoint = null;
@@ -4490,10 +4585,10 @@
 
       if (remove) {
         this.scene.remove(pr.mesh);
-        if (pr.geos) pr.geos.forEach(function (g) { g.dispose(); });
-        else if (pr.geo) pr.geo.dispose();
-        if (pr.mats) pr.mats.forEach(function (m) { m.dispose(); });
-        else if (pr.mat) pr.mat.dispose();
+        if (pr.geos) pr.geos.forEach(disposeOwned);
+        else if (pr.geo) disposeOwned(pr.geo);
+        if (pr.mats) pr.mats.forEach(disposeOwned);
+        else if (pr.mat) disposeOwned(pr.mat);
         this.projectiles.splice(i, 1);
       }
     }
@@ -5546,6 +5641,7 @@
     // Dramatic brief moment before triggering victory ending
     var self = this;
     this.vfxList.push({
+      persistent: true, // gameplay timer: victory ending fires on expiry
       ttl: 1.55,
       maxTtl: 1.55,
       update: function (dt) {
@@ -5885,8 +5981,8 @@
       sr.mat.opacity = 0.55 * (1 - p);
       if (sr.ttl <= 0) {
         this.scene.remove(sr.mesh);
-        sr.geo.dispose();
-        sr.mat.dispose();
+        disposeOwned(sr.geo);
+        disposeOwned(sr.mat);
         this.soundRipples.splice(i, 1);
       }
     }
@@ -6218,8 +6314,8 @@
       },
       dispose: function () {
         self.scene.remove(group);
-        for (var gi = 0; gi < geos.length; gi++) geos[gi].dispose();
-        for (var mi = 0; mi < mats.length; mi++) mats[mi].dispose();
+        for (var gi = 0; gi < geos.length; gi++) disposeOwned(geos[gi]);
+        for (var mi = 0; mi < mats.length; mi++) disposeOwned(mats[mi]);
       }
     });
   };
@@ -6284,14 +6380,14 @@
 
     if (npcId === 'shenyan') {
       // 沈砚: Dark-red forged stopwatch pulse + static lightning crackles
-      this.spawnSigilPulse(x, z, 2.5, 'occult_eye', 0xd64550, 0.7);
-      this.spawnShockRing(x, z, 2.4, 0xd64550, 0.5);
+      this.spawnSigilPulse(x, z, 2.5, 'occult_eye', 0xa8509a, 0.7);
+      this.spawnShockRing(x, z, 2.4, 0xa8509a, 0.5);
       for (var bi = 0; bi < 2; bi++) {
         var ba = Math.random() * Math.PI * 2;
         this.spawnLightningBolt(
           x, 1.0, z,
           x + Math.cos(ba) * 1.45, 0.35 + Math.random() * 0.9, z + Math.sin(ba) * 1.45,
-          0xff4658, 0.22, 5
+          0xd8a860, 0.22, 5
         );
       }
     }
@@ -6351,7 +6447,33 @@
     });
   };
 
+  // Handles with maxTtl above this are tied to gameplay objects (wards, drones, decoys)
+  // and are never evicted by the VFX budget.
+  var VFX_EVICTABLE_MAX_TTL = 2.5;
+
+  EngineSession.prototype.enforceVfxBudget = function () {
+    var budget = maxActiveVfxBudget();
+    var excess = this.vfxList.length - budget;
+    if (excess <= 0) return 0;
+    var evicted = 0;
+    // Oldest entries sit at the front; evict transient cosmetic handles first.
+    for (var i = 0; i < this.vfxList.length && evicted < excess; ) {
+      var v = this.vfxList[i];
+      var transient = v && !v.persistent &&
+        (typeof v.maxTtl !== 'number' || v.maxTtl <= VFX_EVICTABLE_MAX_TTL);
+      if (transient) {
+        try { v.dispose(); } catch (_) {}
+        this.vfxList.splice(i, 1);
+        evicted += 1;
+      } else {
+        i += 1;
+      }
+    }
+    return evicted;
+  };
+
   EngineSession.prototype.updateVfx = function (simDt, realDt) {
+    this.enforceVfxBudget();
     for (var i = this.vfxList.length - 1; i >= 0; i--) {
       var v = this.vfxList[i];
       v.update(simDt, realDt);
@@ -6403,7 +6525,8 @@
       var dir = this.getAimDir();
       this.flashLight.position.set(p.x, 2.15, p.z);
       this.flashTarget.position.set(p.x + dir.x * 7.2, 0.15, p.z + dir.z * 7.2);
-      this.flashLight.intensity = p.stealthTimer > 0 ? 1.1 : 2.35;
+      // Flashlight is the dominant key light under the dark-horror balance
+      this.flashLight.intensity = p.stealthTimer > 0 ? 1.3 : 3.1;
     }
     if (this.playerGlow) {
       this.playerGlow.position.set(p.x, 1.55, p.z);
@@ -6451,7 +6574,42 @@
       }
     }
 
-    if (this.stationBulbMat) {
+    // Per-fixture light level (flicker + local EMP blackout), shared by bulbs and pooled lights
+    var defs = this.stationLightDefs;
+    var levels = this.stationLightLevels || (this.stationLightLevels = []);
+    var overrides = this.stationLightOverrides || (this.stationLightOverrides = []);
+    for (var li = 0; li < defs.length; li++) {
+      var def = defs[li];
+      var flk = 1.0;
+      var overrideHex = null;
+      if (def.flicker > 0) {
+        var wave = Math.sin(t * 11.3 + def.seed) * Math.sin(t * 27.1 + def.seed * 2);
+        flk = wave > 0.72 ? Math.max(0.25, 1.0 - def.flicker * 2.1) : (1.0 - def.flicker * 0.35 + wave * def.flicker * 0.45);
+      }
+      if (empActive && dist2D(def.x, def.z, this.empBlackoutPos.x, this.empBlackoutPos.z) <= EMP_BLACKOUT_RADIUS) {
+        if (this.empBlackoutTimer > 1.0) {
+          var stutter = Math.sin(t * 53.0 + def.seed * 7.0);
+          flk = stutter > 0.86 ? 0.28 : 0.03;
+          if (stutter > 0.86) overrideHex = 0x4de8ff;
+        } else {
+          var recover = 1.0 - this.empBlackoutTimer;
+          flk *= lerp(0.12, 1.0, recover) * (Math.sin(t * 37.0 + def.seed * 3.0) > -0.25 ? 1.0 : 0.14);
+        }
+      }
+      levels[li] = flk;
+      overrides[li] = overrideHex;
+    }
+
+    // Fixture bulbs: per-instance level so EMP blackout stays local to its radius
+    var bulbs = this.stationBulbControl;
+    if (bulbs && typeof bulbs.setLevel === 'function') {
+      var bulbCount = Math.min(bulbs.count || 0, defs.length);
+      for (var bi = 0; bi < bulbCount; bi++) {
+        bulbs.setLevel(bi, levels[bi], overrides[bi]);
+      }
+      bulbs.commit();
+    } else if (this.stationBulbMat) {
+      // Legacy shared-material fallback (SceneArchitect unavailable)
       if (empActive) {
         var bPulse = (Math.sin(t * 49.0) > 0.72) ? 0x4de8ff : 0x162230;
         this.stationBulbMat.color.setHex(bPulse);
@@ -6460,39 +6618,57 @@
       }
     }
 
-    // Pooled nearest station flickering lights around camera (<=4 pooled lights)
-    if (this.stationLightPool.length > 0 && this.stationLightDefs.length > 0) {
-      var sorted = this.stationLightDefs.slice().sort(function (a, b) {
-        var da = (a.x - p.x) * (a.x - p.x) + (a.z - p.z) * (a.z - p.z);
-        var db = (b.x - p.x) * (b.x - p.x) + (b.z - p.z) * (b.z - p.z);
-        return da - db;
-      });
-      for (var i = 0; i < this.stationLightPool.length; i++) {
-        var pl = this.stationLightPool[i];
-        var def = sorted[i];
-        if (!def) {
+    // Pooled nearest station lights (<= 4). Slots fade out before being reassigned and
+    // currently-held fixtures get a distance bias, so lights never pop when ranks swap.
+    var pool = this.stationLightPool;
+    if (pool.length > 0 && defs.length > 0) {
+      var slots = this.stationLightSlots;
+      if (!slots || slots.length !== pool.length) {
+        slots = this.stationLightSlots = pool.map(function () { return { defIdx: -1, fade: 0 }; });
+      }
+      var heldBy = {};
+      for (var hs = 0; hs < slots.length; hs++) {
+        if (slots[hs].defIdx >= 0) heldBy[slots[hs].defIdx] = hs;
+      }
+      var ranked = [];
+      for (var ri = 0; ri < defs.length; ri++) {
+        var ddx = defs[ri].x - p.x;
+        var ddz = defs[ri].z - p.z;
+        var dsq = ddx * ddx + ddz * ddz;
+        ranked.push({ idx: ri, score: heldBy[ri] !== undefined ? dsq * 0.72 : dsq });
+      }
+      ranked.sort(function (a, b) { return a.score - b.score; });
+      var desired = {};
+      var desiredOrder = [];
+      for (var di = 0; di < Math.min(pool.length, ranked.length); di++) {
+        desired[ranked[di].idx] = true;
+        desiredOrder.push(ranked[di].idx);
+      }
+      var waiting = desiredOrder.filter(function (idx) { return heldBy[idx] === undefined; });
+
+      var fadeStep = realDt / LIGHT_POOL_FADE_SEC;
+      for (var si2 = 0; si2 < slots.length; si2++) {
+        var slot = slots[si2];
+        var pl = pool[si2];
+        var keep = slot.defIdx >= 0 && desired[slot.defIdx];
+        if (!keep && slot.fade <= 0.001) {
+          slot.fade = 0;
+          slot.defIdx = waiting.length > 0 ? waiting.shift() : -1;
+          if (slot.defIdx >= 0) {
+            var nd = defs[slot.defIdx];
+            pl.position.set(nd.x, 3.25, nd.z);
+            pl.distance = nd.distance;
+          }
+          keep = slot.defIdx >= 0;
+        }
+        slot.fade = clamp(slot.fade + (keep ? fadeStep : -fadeStep), 0, 1);
+        if (slot.defIdx < 0) {
           pl.intensity = 0;
           continue;
         }
-        pl.position.set(def.x, 3.25, def.z);
-        pl.color.setHex(def.color);
-        pl.distance = def.distance;
-        var flk = 1.0;
-        if (def.flicker > 0) {
-          var wave = Math.sin(t * 11.3 + def.seed) * Math.sin(t * 27.1 + def.seed * 2);
-          flk = wave > 0.72 ? Math.max(0.25, 1.0 - def.flicker * 2.1) : (1.0 - def.flicker * 0.35 + wave * def.flicker * 0.45);
-        }
-        if (empActive && dist2D(def.x, def.z, this.empBlackoutPos.x, this.empBlackoutPos.z) <= 22.0) {
-          if (this.empBlackoutTimer > 1.0) {
-            var stutter = Math.sin(t * 53.0 + def.seed * 7.0);
-            flk = stutter > 0.86 ? 0.28 : 0.03;
-            pl.color.setHex(stutter > 0.86 ? 0x4de8ff : def.color);
-          } else {
-            var recover = 1.0 - this.empBlackoutTimer;
-            flk *= lerp(0.12, 1.0, recover) * (Math.sin(t * 37.0 + def.seed * 3.0) > -0.25 ? 1.0 : 0.14);
-          }
-        }
-        pl.intensity = def.intensity * flk;
+        var sd = defs[slot.defIdx];
+        pl.color.setHex(overrides[slot.defIdx] !== null ? overrides[slot.defIdx] : sd.color);
+        pl.intensity = sd.intensity * levels[slot.defIdx] * slot.fade;
       }
     }
   };
@@ -6941,14 +7117,14 @@
         var prj = this.projectiles[pi];
         this.scene.remove(prj.mesh);
         if (prj.geos) {
-          prj.geos.forEach(function (g) { g.dispose(); });
+          prj.geos.forEach(disposeOwned);
         } else if (prj.geo) {
-          prj.geo.dispose();
+          disposeOwned(prj.geo);
         }
         if (prj.mats) {
-          prj.mats.forEach(function (m) { m.dispose(); });
+          prj.mats.forEach(disposeOwned);
         } else if (prj.mat) {
-          prj.mat.dispose();
+          disposeOwned(prj.mat);
         }
       } catch (_) {}
     }
@@ -6957,8 +7133,8 @@
     for (var wi = 0; wi < this.wards.length; wi++) {
       try {
         this.scene.remove(this.wards[wi].group);
-        this.wards[wi].geos.forEach(function (g) { g.dispose(); });
-        this.wards[wi].mats.forEach(function (m) { m.dispose(); });
+        this.wards[wi].geos.forEach(disposeOwned);
+        this.wards[wi].mats.forEach(disposeOwned);
       } catch (_) {}
     }
     this.wards = [];
@@ -6966,8 +7142,8 @@
     for (var di = 0; di < this.drones.length; di++) {
       try {
         this.scene.remove(this.drones[di].group);
-        this.drones[di].geos.forEach(function (g) { g.dispose(); });
-        this.drones[di].mats.forEach(function (m) { m.dispose(); });
+        this.drones[di].geos.forEach(disposeOwned);
+        this.drones[di].mats.forEach(disposeOwned);
       } catch (_) {}
     }
     this.drones = [];
@@ -6975,8 +7151,8 @@
     for (var dci = 0; dci < this.decoys.length; dci++) {
       try {
         this.scene.remove(this.decoys[dci].group);
-        this.decoys[dci].geos.forEach(function (g) { g.dispose(); });
-        this.decoys[dci].mats.forEach(function (m) { m.dispose(); });
+        this.decoys[dci].geos.forEach(disposeOwned);
+        this.decoys[dci].mats.forEach(disposeOwned);
       } catch (_) {}
     }
     this.decoys = [];
@@ -6984,8 +7160,8 @@
     for (var sri = 0; sri < this.soundRipples.length; sri++) {
       try {
         this.scene.remove(this.soundRipples[sri].mesh);
-        this.soundRipples[sri].geo.dispose();
-        this.soundRipples[sri].mat.dispose();
+        disposeOwned(this.soundRipples[sri].geo);
+        disposeOwned(this.soundRipples[sri].mat);
       } catch (_) {}
     }
     this.soundRipples = [];

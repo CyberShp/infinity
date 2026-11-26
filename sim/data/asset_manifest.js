@@ -45,19 +45,24 @@
   };
 
   /*
-   * Optional ComfyUI / Midjourney seamless pixel-art tile overrides.
+   * Optional ComfyUI / Midjourney / Aseprite seamless pixel-art tile overrides.
    * Kept empty by default so PixelSprites uses procedural HD-2D canvas textures
    * with ZERO 404 console errors. Drop seamless 128x128 or 256x256 .webp/.png
-   * files into sim/assets/tiles/ and uncomment the matching entries below to hot-swap:
+   * files into sim/assets/tiles/ and uncomment the matching canonical entries:
    *
-   *   floor_slate:   'assets/tiles/floor_slate.webp',
-   *   wall_tile:     'assets/tiles/wall_tile.webp',
-   *   wall_concrete: 'assets/tiles/wall_concrete.webp',
-   *   yellow_line:   'assets/tiles/yellow_line.webp',
-   *   rail_bed:      'assets/tiles/rail_bed.webp',
-   *   gate_metal:    'assets/tiles/gate_metal.webp'
+   *   floor_slate:    'assets/tiles/floor_slate.webp',
+   *   floor_platform: 'assets/tiles/floor_platform.webp',
+   *   floor_hazard:   'assets/tiles/floor_hazard.webp',
+   *   floor_rail:     'assets/tiles/floor_rail.webp',
+   *   wall_concrete:  'assets/tiles/wall_concrete.webp',
+   *   wall_neon:      'assets/tiles/wall_neon.webp',
+   *   train_hull:     'assets/tiles/train_hull.webp'
    */
   var TILES = {};
+
+  // Optional external icon & sprite overrides (zero-404 fallback to procedural synth)
+  var ICONS = {};
+  var SPRITES = {};
 
   function resolvePath(relPath) {
     if (!relPath || typeof relPath !== 'string') return null;
@@ -87,12 +92,30 @@
     return rel ? resolvePath(rel) : null;
   }
 
+  function getIconUrl(id) {
+    if (!id) return null;
+    var key = String(id).trim();
+    var rel = ICONS[key];
+    return rel ? resolvePath(rel) : null;
+  }
+
+  function getSpriteUrl(id) {
+    if (!id) return null;
+    var key = String(id).trim().toLowerCase();
+    var rel = SPRITES[key];
+    return rel ? resolvePath(rel) : null;
+  }
+
   INFINITY.ASSETS = {
     basePrefix: BASE_PREFIX,
     portraits: PORTRAITS,
     tiles: TILES,
+    icons: ICONS,
+    sprites: SPRITES,
     resolvePath: resolvePath,
     getPortraitUrl: getPortraitUrl,
-    getTileUrl: getTileUrl
+    getTileUrl: getTileUrl,
+    getIconUrl: getIconUrl,
+    getSpriteUrl: getSpriteUrl
   };
 })(typeof window !== 'undefined' ? window : globalThis);

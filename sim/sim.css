@@ -989,11 +989,11 @@ button {
   border: 1px solid transparent;
 }
 
-.tier-D { background: rgba(140, 150, 165, 0.16); color: #b8c2cf; border-color: rgba(140, 150, 165, 0.3); }
-.tier-C { background: rgba(88, 196, 166, 0.16); color: #7ee3c7; border-color: rgba(88, 196, 166, 0.34); }
-.tier-B { background: rgba(111, 216, 234, 0.16); color: #8ee6f5; border-color: rgba(111, 216, 234, 0.38); }
-.tier-A { background: rgba(214, 178, 116, 0.18); color: #f0cf8e; border-color: rgba(214, 178, 116, 0.45); }
-.tier-S { background: rgba(200, 55, 55, 0.24); color: #ff9a8c; border-color: rgba(232, 93, 74, 0.55); }
+.tier-D { background: rgba(140, 150, 165, 0.16); color: #b8c2cf; border-color: rgba(140, 150, 165, 0.34); }
+.tier-C { background: rgba(202, 134, 76, 0.18); color: #e2a76f; border-color: rgba(212, 148, 90, 0.44); }
+.tier-B { background: rgba(104, 174, 238, 0.18); color: #8cc4f6; border-color: rgba(120, 184, 240, 0.46); }
+.tier-A { background: rgba(232, 188, 92, 0.20); color: #f4d27d; border-color: rgba(242, 201, 107, 0.54); }
+.tier-S { background: linear-gradient(135deg, rgba(235, 244, 255, 0.26), rgba(154, 224, 255, 0.22), rgba(246, 222, 164, 0.24)); color: #f5f8ff; border-color: rgba(226, 240, 255, 0.78); box-shadow: 0 0 10px rgba(154, 230, 255, 0.28); }
 
 .canon-badge {
   font-size: 10px;

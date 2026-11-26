@@ -49,8 +49,15 @@
     var cfg = opts || {};
     var tex = new THREE.CanvasTexture(canvas);
     tex.generateMipmaps = cfg.mipmaps !== false;
-    tex.minFilter = cfg.nearest ? THREE.NearestFilter : (tex.generateMipmaps ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter);
-    tex.magFilter = cfg.nearest ? THREE.NearestFilter : THREE.LinearFilter;
+    if (cfg.nearest) {
+      // Crisp HD-2D pixel edges on magnification; mipmapped textures keep a filtered
+      // minification chain so perspective floors do not shimmer at distance.
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = tex.generateMipmaps ? THREE.NearestMipmapLinearFilter : THREE.NearestFilter;
+    } else {
+      tex.minFilter = tex.generateMipmaps ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+    }
     tex.wrapS = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
     tex.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
     if (cfg.srgb && THREE.sRGBEncoding !== undefined) {
@@ -781,8 +788,8 @@
       coatDark: '#0f1520',
       shirt: '#e3edf7',
       pants: '#151b26',
-      accent: '#5ce4ff',
-      accentSoft: 'rgba(92, 228, 255, 0.45)',
+      accent: '#4ee4ff',
+      accentSoft: 'rgba(78, 228, 255, 0.45)',
       gold: '#f0c46c',
       eye: '#68e8ff',
       weapon: 'energy_blade',
@@ -798,10 +805,10 @@
       coatDark: '#141924',
       shirt: '#edf1f7',
       pants: '#1a202d',
-      accent: '#f0c46c',
-      accentSoft: 'rgba(240, 196, 108, 0.45)',
+      accent: '#7ca7d9',
+      accentSoft: 'rgba(124, 167, 217, 0.45)',
       gold: '#f7d688',
-      eye: '#ffe094',
+      eye: '#bcd6f2',
       weapon: 'law_ledger',
       accessory: 'glasses_tie'
     },
@@ -815,8 +822,8 @@
       coatDark: '#171515',
       shirt: '#3c3634',
       pants: '#1c1b1d',
-      accent: '#ff9638',
-      accentSoft: 'rgba(255, 150, 56, 0.48)',
+      accent: '#e88c4a',
+      accentSoft: 'rgba(232, 140, 74, 0.48)',
       gold: '#ffb95e',
       eye: '#ffb454',
       weapon: 'rail_carbine',
@@ -832,10 +839,10 @@
       coatDark: '#0f1d25',
       shirt: '#d6eef5',
       pants: '#17232c',
-      accent: '#52f0ff',
-      accentSoft: 'rgba(82, 240, 255, 0.48)',
+      accent: '#52d6b4',
+      accentSoft: 'rgba(82, 214, 180, 0.48)',
       gold: '#8ceeff',
-      eye: '#5ef2ff',
+      eye: '#6ef0d0',
       weapon: 'pke_tablet',
       accessory: 'visor_hood'
     },
@@ -849,10 +856,10 @@
       coatDark: '#1e0b11',
       shirt: '#20191e',
       pants: '#18141a',
-      accent: '#ff4258',
-      accentSoft: 'rgba(255, 66, 88, 0.48)',
+      accent: '#c9a66b',
+      accentSoft: 'rgba(201, 166, 107, 0.48)',
       gold: '#d8aa58',
-      eye: '#ff3b52',
+      eye: '#e8b860',
       weapon: 'pocket_watch',
       accessory: 'high_collar'
     }
@@ -872,7 +879,20 @@
     }
   }
 
-  function buildCharCanvas(id, frame) {
+  // Basic-attack style -> held weapon sprite variant (player loadout visualization).
+  var WEAPON_BY_STYLE = {
+    sword: 'energy_blade',
+    cyber: 'rail_carbine',
+    occult: 'occult_talisman',
+    tactical: 'tactical_baton'
+  };
+
+  function resolveWeaponStyle(weaponStyle) {
+    var key = weaponStyle ? String(weaponStyle) : '';
+    return WEAPON_BY_STYLE[key] ? key : '';
+  }
+
+  function buildCharCanvas(id, frame, weaponStyle) {
     if (id === 'inspector') {
       return buildInspectorCanvas(frame);
     }
@@ -884,6 +904,10 @@
     ctx.imageSmoothingEnabled = true;
 
     var p = CHAR_PROFILES[id] || CHAR_PROFILES.player;
+    var styleKey = resolveWeaponStyle(weaponStyle);
+    if (styleKey && WEAPON_BY_STYLE[styleKey] !== p.weapon) {
+      p = Object.assign({}, p, { weapon: WEAPON_BY_STYLE[styleKey] });
+    }
     var f = String(frame || 'idle');
     var isWalk1 = f === 'walk1';
     var isWalk2 = f === 'walk2';
@@ -1244,7 +1268,7 @@
       var bGrad = ctx.createLinearGradient(0, -7, 0, -44);
       bGrad.addColorStop(0, '#ffffff');
       bGrad.addColorStop(0.35, p.accent);
-      bGrad.addColorStop(1, 'rgba(92, 228, 255, 0.2)');
+      bGrad.addColorStop(1, 'rgba(255, 255, 255, 0.12)');
       ctx.beginPath();
       ctx.moveTo(-3.5, -7);
       ctx.lineTo(0, -45);
@@ -1280,7 +1304,7 @@
       ctx.rotate(isAction ? -0.15 : 0.35);
       drawRoundedRect(ctx, -6, -5, 34, 9.5, 2.5);
       strokeOutlinedPath(ctx, '#282d36', '#070a10', 2.0);
-      ctx.fillStyle = '#ff9638';
+      ctx.fillStyle = p.accent;
       ctx.fillRect(6, -2.5, 18, 4.2);
       ctx.fillStyle = '#fff3c0';
       ctx.fillRect(10, -1.3, 12, 1.8);
@@ -1291,7 +1315,7 @@
       ctx.translate(5, 24);
       drawRoundedRect(ctx, -5, -7, 15, 12, 2);
       strokeOutlinedPath(ctx, '#12222d', '#070a10', 1.8);
-      ctx.fillStyle = '#58f2ff';
+      ctx.fillStyle = p.accent;
       ctx.fillRect(-3, -5, 11, 8);
       // Floating holographic wave projection
       var hGrad = ctx.createRadialGradient(3, -10, 1, 3, -10, 13);
@@ -1314,11 +1338,39 @@
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(3, 15, 5.5, 0, Math.PI * 2);
-      strokeOutlinedPath(ctx, '#ff3b52', '#d8aa58', 2.0);
+      strokeOutlinedPath(ctx, '#7a3550', '#d8aa58', 2.0);
       ctx.fillStyle = '#ffe4ea';
       ctx.beginPath();
       ctx.arc(3, 15, 2.2, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
+    } else if (p.weapon === 'occult_talisman') {
+      // Fanned paper talismans with accent-inked seal glyphs
+      ctx.save();
+      ctx.translate(4, 25);
+      ctx.rotate(isAction ? -0.4 : 0.15);
+      for (var ti = -1; ti <= 1; ti++) {
+        ctx.save();
+        ctx.rotate(ti * 0.32);
+        drawRoundedRect(ctx, -3.2, -22, 6.4, 20, 1);
+        strokeOutlinedPath(ctx, '#e9dcc0', '#070a10', 1.4);
+        ctx.fillStyle = p.accent;
+        ctx.fillRect(-1.4, -19, 2.8, 3.2);
+        ctx.fillRect(-0.7, -14.5, 1.4, 9);
+        ctx.restore();
+      }
+      ctx.restore();
+    } else if (p.weapon === 'tactical_baton') {
+      // Collapsible tactical baton with accent grip band
+      ctx.save();
+      ctx.translate(2, 27);
+      ctx.rotate(isAction ? -0.55 : 0.5);
+      drawRoundedRect(ctx, -2.2, -34, 4.4, 40, 1.8);
+      strokeOutlinedPath(ctx, '#2a303a', '#070a10', 1.6);
+      ctx.fillStyle = '#5a6474';
+      ctx.fillRect(-1, -32, 2, 22);
+      ctx.fillStyle = p.accent;
+      ctx.fillRect(-2.6, -2, 5.2, 3.2);
       ctx.restore();
     }
     ctx.restore();
@@ -1578,16 +1630,21 @@
    * -------------------------------------------------------------------------- */
   var charCanvasCache = Object.create(null);
 
-  function getCachedCharCanvas(id, frame) {
-    var key = String(id || 'player') + ':' + String(frame || 'idle');
+  function charCacheKey(id, frame, weaponStyle) {
+    var styleKey = id === 'inspector' ? '' : resolveWeaponStyle(weaponStyle);
+    return String(id || 'player') + ':' + String(frame || 'idle') + (styleKey ? ':' + styleKey : '');
+  }
+
+  function getCachedCharCanvas(id, frame, weaponStyle) {
+    var key = charCacheKey(id, frame, weaponStyle);
     if (!charCanvasCache[key]) {
-      charCanvasCache[key] = buildCharCanvas(id, frame);
+      charCanvasCache[key] = buildCharCanvas(id, frame, weaponStyle);
     }
     return charCanvasCache[key];
   }
 
-  function buildCharNormalCanvas(id, frame) {
-    var srcCanvas = getCachedCharCanvas(id, frame);
+  function buildCharNormalCanvas(id, frame, weaponStyle) {
+    var srcCanvas = getCachedCharCanvas(id, frame, weaponStyle);
     var w = srcCanvas.width || 128;
     var h = srcCanvas.height || 128;
     var out = makeCanvas(w, h);
@@ -1678,8 +1735,8 @@
     return out;
   }
 
-  function buildCharEmissiveCanvas(id, frame) {
-    var srcCanvas = getCachedCharCanvas(id, frame);
+  function buildCharEmissiveCanvas(id, frame, weaponStyle) {
+    var srcCanvas = getCachedCharCanvas(id, frame, weaponStyle);
     var w = srcCanvas.width || 128;
     var h = srcCanvas.height || 128;
     var out = makeCanvas(w, h);
@@ -1709,7 +1766,8 @@
       // Preserve glowing accents (weapons, visors, cyan/amber/crimson eyes, storm lantern) at high emissive,
       // while keeping coats/skin at a subtle 0.22 floor so dynamic PBR normal lighting truly sculpts the body!
       var isGlowAccent = (maxC > 0.72 && sat > 0.42) || (luma > 0.90) || (isBoss && r > 0.75 && g < 0.38);
-      var weight = isGlowAccent ? 0.92 : 0.22;
+      // Body floor kept very low so scene lighting (flashlight, zone lamps, lantern) sculpts the figure.
+      var weight = isGlowAccent ? 1.0 : 0.08;
 
       dst[i]     = Math.min(255, Math.round(src[i] * weight));
       dst[i + 1] = Math.min(255, Math.round(src[i + 1] * weight));
@@ -2315,7 +2373,7 @@
           entry.canvas.height = targetSize;
         }
         var ctx = entry.canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, targetSize, targetSize);
         ctx.drawImage(img, 0, 0, targetSize, targetSize);
         entry.loadedUrl = url;
@@ -2336,7 +2394,7 @@
     var key = 'tile:' + tileName;
     if (textureCache[key]) return textureCache[key];
     var canvas = buildTileCanvas(tileName);
-    var tex = toTexture(canvas, true, { srgb: true, mipmaps: true, anisotropy: 4 });
+    var tex = toTexture(canvas, true, { srgb: true, mipmaps: true, anisotropy: 4, nearest: true });
     textureCache[key] = tex;
     var entry = { name: tileName, canvas: canvas, tex: tex, loadedUrl: null };
     tileEntries[tileName] = entry;
@@ -2349,7 +2407,7 @@
     var key = 'tileBump:' + tileName;
     if (textureCache[key]) return textureCache[key];
     var canvas = buildTileBumpCanvas(tileName);
-    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4 });
+    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4, nearest: true });
     textureCache[key] = tex;
     return tex;
   }
@@ -2359,7 +2417,7 @@
     var key = 'tileNormal:' + tileName;
     if (textureCache[key]) return textureCache[key];
     var canvas = buildTileNormalCanvas(tileName);
-    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4 });
+    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4, nearest: true });
     textureCache[key] = tex;
     return tex;
   }
@@ -2369,7 +2427,7 @@
     var key = 'tileRough:' + tileName;
     if (textureCache[key]) return textureCache[key];
     var canvas = buildTileRoughnessCanvas(tileName);
-    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4 });
+    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4, nearest: true });
     textureCache[key] = tex;
     return tex;
   }
@@ -2392,44 +2450,41 @@
     hurt: true
   };
 
-  function getCharTexture(id, frame) {
-    var cid = String(id || 'player');
+  function normalizeCharFrame(frame) {
     var cframe = String(frame || 'idle');
-    if (!VALID_CHAR_FRAMES[cframe]) {
-      cframe = 'idle';
-    }
-    var key = 'char:' + cid + ':' + cframe;
+    return VALID_CHAR_FRAMES[cframe] ? cframe : 'idle';
+  }
+
+  // Optional 3rd arg weaponStyle ('sword' | 'cyber' | 'occult' | 'tactical'); 2-arg calls unchanged.
+  function getCharTexture(id, frame, weaponStyle) {
+    var cid = String(id || 'player');
+    var cframe = normalizeCharFrame(frame);
+    var key = 'char:' + charCacheKey(cid, cframe, weaponStyle);
     if (textureCache[key]) return textureCache[key];
-    var canvas = getCachedCharCanvas(cid, cframe);
-    var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4 });
+    var canvas = getCachedCharCanvas(cid, cframe, weaponStyle);
+    var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4, nearest: true });
     textureCache[key] = tex;
     return tex;
   }
 
-  function getCharNormalTexture(id, frame) {
+  function getCharNormalTexture(id, frame, weaponStyle) {
     var cid = String(id || 'player');
-    var cframe = String(frame || 'idle');
-    if (!VALID_CHAR_FRAMES[cframe]) {
-      cframe = 'idle';
-    }
-    var key = 'charNormal:' + cid + ':' + cframe;
+    var cframe = normalizeCharFrame(frame);
+    var key = 'charNormal:' + charCacheKey(cid, cframe, weaponStyle);
     if (textureCache[key]) return textureCache[key];
-    var canvas = buildCharNormalCanvas(cid, cframe);
-    var tex = toTexture(canvas, false, { srgb: false, mipmaps: false, anisotropy: 4 });
+    var canvas = buildCharNormalCanvas(cid, cframe, weaponStyle);
+    var tex = toTexture(canvas, false, { srgb: false, mipmaps: false, anisotropy: 4, nearest: true });
     textureCache[key] = tex;
     return tex;
   }
 
-  function getCharEmissiveTexture(id, frame) {
+  function getCharEmissiveTexture(id, frame, weaponStyle) {
     var cid = String(id || 'player');
-    var cframe = String(frame || 'idle');
-    if (!VALID_CHAR_FRAMES[cframe]) {
-      cframe = 'idle';
-    }
-    var key = 'charEmissive:' + cid + ':' + cframe;
+    var cframe = normalizeCharFrame(frame);
+    var key = 'charEmissive:' + charCacheKey(cid, cframe, weaponStyle);
     if (textureCache[key]) return textureCache[key];
-    var canvas = buildCharEmissiveCanvas(cid, cframe);
-    var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4 });
+    var canvas = buildCharEmissiveCanvas(cid, cframe, weaponStyle);
+    var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4, nearest: true });
     textureCache[key] = tex;
     return tex;
   }
@@ -2461,6 +2516,7 @@
     getCharEmissiveTexture: getCharEmissiveTexture,
     getPropTexture: getPropTexture,
     getSpriteDimensions: getSpriteDimensions,
+    WEAPON_BY_STYLE: WEAPON_BY_STYLE,
     // Expose pure builders for deterministic unit tests
     _buildTileCanvas: buildTileCanvas,
     _buildTileBumpCanvas: buildTileBumpCanvas,

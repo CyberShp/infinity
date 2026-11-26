@@ -21,9 +21,12 @@ PORTRAIT_PROMPTS = {
 
 TILE_PROMPTS = {
     "floor_slate": "seamless tileable top-down dark HD-2D pixel art texture, wet weathered dark slate subway floor tiles with damp puddles, Signalis aesthetic, crisp 64x64 pixel grid, no perspective",
+    "floor_platform": "seamless tileable top-down dark HD-2D pixel art texture, dark weathered subway platform concrete slabs with subtle expansion joints and grit, Signalis aesthetic, crisp 64x64 pixel grid, no perspective",
+    "floor_hazard": "seamless tileable top-down dark HD-2D pixel art texture, worn amber-yellow and black diagonal subway platform warning line on dark concrete, Signalis aesthetic, crisp 64x64 pixel grid, no perspective",
+    "floor_rail": "seamless tileable top-down dark HD-2D pixel art texture, dark recessed subway rail ballast gravel with weathered timber sleepers and steel twin tracks, Signalis aesthetic, crisp 64x64 pixel grid, no perspective",
     "wall_concrete": "seamless tileable dark HD-2D pixel art texture, grimy cracked underground metro concrete wall with water stains and dark steel baseboard, Signalis aesthetic, crisp pixels",
-    "wall_neon": "seamless tileable dark HD-2D pixel art texture, dark subway concrete wall with thin glowing cyan and crimson emergency strip light, Signalis aesthetic, crisp pixels",
-    "floor_hazard": "seamless tileable top-down dark HD-2D pixel art texture, worn yellow and black diagonal subway platform warning line on dark concrete, Signalis aesthetic, crisp pixels"
+    "wall_neon": "seamless tileable dark HD-2D pixel art texture, dark subway concrete wall with thin glowing cyan and amber emergency strip light, Signalis aesthetic, crisp pixels",
+    "train_hull": "seamless tileable dark HD-2D pixel art texture, scorched riveted dark iron ghost subway train exterior hull plating with faint frost and grime, Signalis aesthetic, crisp pixels"
 }
 
 

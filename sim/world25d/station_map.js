@@ -23,13 +23,33 @@
   var T_HAZARD = 3;
   var T_RAIL = 4;
 
+  // Zone colors are sourced from INFINITY.ArtTokens.ZONES (single source of truth).
+  // Inline fallbacks mirror art_tokens.js so the map stays valid if tokens fail to load.
+  // Platform 0 uses warning amber: threat red is reserved for the Inspector.
+  var ZONE_COLOR_FALLBACK = {
+    concourse:  '#68c8de',
+    corridor:   '#d6b274',
+    dispatch:   '#52c4a2',
+    substation: '#6e9eff',
+    tunnel:     '#a884e0',
+    platform0:  '#e69c3c'
+  };
+
+  function resolveZoneColor(zoneId) {
+    var tokens = INFINITY.ArtTokens;
+    if (tokens && tokens.ZONES && tokens.ZONES[zoneId] && tokens.ZONES[zoneId].color) {
+      return tokens.ZONES[zoneId].color;
+    }
+    return ZONE_COLOR_FALLBACK[zoneId];
+  }
+
   var ZONES = {
-    concourse:  { id: 'concourse',  name: 'B1 检票大厅',   code: 'Z-01', cx: 10, cz: 10, color: '#6fd8ea' },
-    corridor:   { id: 'corridor',   name: 'B2 换乘长廊',   code: 'Z-02', cx: 26, cz: 18, color: '#d6b274' },
-    dispatch:   { id: 'dispatch',   name: '信号调度室',    code: 'Z-03', cx: 30, cz: 7,  color: '#58c4a6' },
-    substation: { id: 'substation', name: '旧变电间',      code: 'Z-04', cx: 11, cz: 29, color: '#6fa8ff' },
-    tunnel:     { id: 'tunnel',     name: '废弃应急通道',  code: 'Z-05', cx: 34, cz: 30, color: '#b98ce0' },
-    platform0:  { id: 'platform0',  name: '0号站台铁轨',   code: 'Z-06', cx: 47, cz: 18, color: '#e85d4a' }
+    concourse:  { id: 'concourse',  name: 'B1 检票大厅',   code: 'Z-01', cx: 10, cz: 10, color: resolveZoneColor('concourse') },
+    corridor:   { id: 'corridor',   name: 'B2 换乘长廊',   code: 'Z-02', cx: 26, cz: 18, color: resolveZoneColor('corridor') },
+    dispatch:   { id: 'dispatch',   name: '信号调度室',    code: 'Z-03', cx: 30, cz: 7,  color: resolveZoneColor('dispatch') },
+    substation: { id: 'substation', name: '旧变电间',      code: 'Z-04', cx: 11, cz: 29, color: resolveZoneColor('substation') },
+    tunnel:     { id: 'tunnel',     name: '废弃应急通道',  code: 'Z-05', cx: 34, cz: 30, color: resolveZoneColor('tunnel') },
+    platform0:  { id: 'platform0',  name: '0号站台铁轨',   code: 'Z-06', cx: 47, cz: 18, color: resolveZoneColor('platform0') }
   };
 
   /* --------------------------------------------------------------------------
@@ -197,17 +217,17 @@
     // Corridor (sodium amber & dim warm emergency lamps)
     { x: 25.5, z: 18.5, color: '#d6b274', intensity: 2.0, distance: 16, flicker: 0.08 },
     { x: 36.5, z: 18.5, color: '#e08d58', intensity: 1.9, distance: 16, flicker: 0.18 },
-    // Dispatch (CRT emerald-teal + crimson switch-lockout warning beacon)
+    // Dispatch (CRT emerald-teal + amber switch-lockout warning beacon)
     { x: 30.5, z: 6.5,  color: '#58c4a6', intensity: 2.2, distance: 15, flicker: 0.05 },
-    { x: 25.5, z: 5.5,  color: '#e84a5a', intensity: 1.4, distance: 11, flicker: 0.30 },
+    { x: 25.5, z: 5.5,  color: '#ff8a3b', intensity: 1.4, distance: 11, flicker: 0.30 },
     // Substation (ozone blue arc lamps)
     { x: 11.5, z: 28.5, color: '#6fa8ff', intensity: 2.2, distance: 16, flicker: 0.22 },
     { x: 5.5,  z: 32.5, color: '#4b7ee0', intensity: 1.6, distance: 13, flicker: 0.35 },
     // Tunnel (eerie violet maintenance strips)
     { x: 27.5, z: 30.5, color: '#b98ce0', intensity: 1.7, distance: 14, flicker: 0.20 },
     { x: 37.5, z: 30.5, color: '#9b6bd4', intensity: 1.6, distance: 14, flicker: 0.28 },
-    // Platform 0 (Signalis crimson warning & amber rail-edge flood)
-    { x: 46.5, z: 10.5, color: '#e85d4a', intensity: 2.3, distance: 18, flicker: 0.15 },
+    // Platform 0 (warning amber & sodium rail-edge flood; threat red reserved for the Inspector)
+    { x: 46.5, z: 10.5, color: '#e69c3c', intensity: 2.3, distance: 18, flicker: 0.15 },
     { x: 46.5, z: 26.5, color: '#f0a848', intensity: 2.1, distance: 18, flicker: 0.10 }
   ];
 
