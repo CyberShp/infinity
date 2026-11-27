@@ -1653,8 +1653,38 @@ body[data-scene="exam"] {
 
 .hud25d-zone-name {
   font-family: var(--font-serif);
-  font-size: 14.5px;
+  font-size: 14px;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud25d-subzone-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-left: 2px solid var(--zone-accent, #68c8de);
+  background: rgba(16, 24, 36, 0.72);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.hud25d-subzone-code {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--zone-accent, #68c8de);
+  flex-shrink: 0;
+}
+
+.hud25d-subzone-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #dce9f5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1836,6 +1866,13 @@ body[data-scene="exam"] {
   justify-content: space-between;
   gap: 6px;
   font-size: 11px;
+  flex-wrap: wrap;
+}
+
+.hud25d-clue-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .hud25d-clue-pill {
@@ -1844,6 +1881,164 @@ body[data-scene="exam"] {
   background: rgba(214, 178, 116, 0.12);
   border: 1px solid rgba(214, 178, 116, 0.3);
   color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+.hud25d-clue-pill:hover {
+  border-color: rgba(214, 178, 116, 0.6);
+  color: var(--text-primary);
+}
+
+.hud25d-env-clue-pill {
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(92, 232, 200, 0.10);
+  border: 1px solid rgba(92, 232, 200, 0.34);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+.hud25d-env-clue-pill:hover {
+  border-color: rgba(92, 232, 200, 0.68);
+  color: #e2fff8;
+}
+
+.hud25d-env-clue-banner {
+  margin-top: 2px;
+  padding: 7px 9px;
+  border-radius: 5px;
+  background: rgba(9, 14, 21, 0.94);
+  border: 1px solid rgba(92, 232, 200, 0.36);
+  border-left: 3px solid #5ce8c8;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hud25d-env-clue-banner.source-cover {
+  border-color: rgba(242, 169, 68, 0.38);
+  border-left-color: #f2a944;
+}
+
+.hud25d-env-clue-banner.hidden {
+  display: none;
+}
+
+.hud25d-env-clue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.hud25d-env-clue-badges {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hud25d-env-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(92, 232, 200, 0.16);
+  color: #7df2d6;
+}
+
+.hud25d-env-clue-banner.source-cover .hud25d-env-tag {
+  background: rgba(242, 169, 68, 0.18);
+  color: #ffc872;
+}
+
+.hud25d-env-zone {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.hud25d-env-clue-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hud25d-env-mini-btn {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.hud25d-env-mini-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+.hud25d-env-clue-title {
+  font-size: 12px;
+  color: #eef8ff;
+  line-height: 1.3;
+}
+
+.hud25d-env-clue-body {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #b5c4d6;
+}
+
+.hud25d-env-clue-effect {
+  font-size: 10.5px;
+  color: #7df2d6;
+  padding-top: 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.hud25d-env-clue-banner.source-cover .hud25d-env-clue-effect {
+  color: #ffc872;
+}
+
+.clues-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  margin: 4px 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 4px;
+}
+
+.clue-card-env {
+  border-left: 3px solid #5ce8c8;
+}
+
+.clue-card-env.source-cover {
+  border-left-color: #f2a944;
+}
+
+.clue-badge-inline {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(92, 232, 200, 0.14);
+  color: #7df2d6;
+  margin-right: 5px;
+}
+
+.clue-card-env.source-cover .clue-badge-inline {
+  background: rgba(242, 169, 68, 0.16);
+  color: #ffc872;
 }
 
 .hud25d-inspector-pill {

@@ -154,7 +154,7 @@ test('PixelSprites upgraded resolutions: 256x256 tiles/props, 128x128 cast, 160x
 test('SceneArchitect props stay clear of player spawn and interactables, and StationMap A* stays connected', () => {
   const specs = SceneArchitect.getZonePropSpecs();
   const interactables = StationMap.getInteractables();
-  const spawn = { x: 10.5, z: 10.5 };
+  const spawn = StationMap.getZoneCenter('concourse');
 
   const groundProps = [
     ...specs.turnstiles,
@@ -162,7 +162,7 @@ test('SceneArchitect props stay clear of player spawn and interactables, and Sta
     ...specs.serverRacks,
     ...specs.cratesAndBarricades
   ];
-  assert.ok(groundProps.length >= 10, 'Expected rich ground storytelling props across zones');
+  assert.ok(groundProps.length >= 24, 'Expected rich ground storytelling props across 4x expanded zones');
 
   for (const p of groundProps) {
     const dSpawn = Math.hypot(p.x - spawn.x, p.z - spawn.z);
@@ -174,16 +174,11 @@ test('SceneArchitect props stay clear of player spawn and interactables, and Sta
   }
 
   // Verify A* connectivity from spawn to key points in all 6 zones
-  const zoneWaypoints = [
-    { name: 'dispatch', x: 30.5, z: 6.5 },
-    { name: 'corridor', x: 31.5, z: 18.5 },
-    { name: 'substation', x: 11.5, z: 28.5 },
-    { name: 'tunnel', x: 31.5, z: 30.5 },
-    { name: 'platform0', x: 45.5, z: 18.5 }
-  ];
-  for (const wp of zoneWaypoints) {
+  const zoneIds = ['dispatch', 'corridor', 'substation', 'tunnel', 'platform0'];
+  for (const zId of zoneIds) {
+    const wp = StationMap.getZoneCenter(zId);
     const pathPts = StationMap.findPath(spawn.x, spawn.z, wp.x, wp.z);
-    assert.ok(Array.isArray(pathPts) && pathPts.length > 0, `A* path to ${wp.name} must remain connected`);
+    assert.ok(Array.isArray(pathPts) && pathPts.length > 0, `A* path to ${zId} must remain connected`);
   }
 });
 
@@ -417,10 +412,12 @@ test('P2 VfxStudio.spawnFlipbookVfx enforces dual-layer ink/bright rendering and
     trackGeo(g) { return g; }
   };
 
+  const railMinX = StationMap.RAIL_MIN_X || 104;
+  const platCenter = StationMap.getZoneCenter('platform0');
   const groundFx = VfxStudio.spawnFlipbookVfx(session, {
     name: 'hades_tao_ground',
-    x: 49.6,
-    z: 18.5,
+    x: railMinX - 0.4,
+    z: platCenter.z,
     radius: 2.8,
     layer: 'ground'
   });
@@ -431,7 +428,7 @@ test('P2 VfxStudio.spawnFlipbookVfx enforces dual-layer ink/bright rendering and
   assert.equal(groundFx.group.children.length, 2, 'Flipbook must render dual-layer (ink backing + bright cel)');
   assert.equal(groundFx.inkMesh.material.blending, MockTHREE.NormalBlending);
   assert.equal(groundFx.brightMesh.material.blending, MockTHREE.AdditiveBlending);
-  assert.ok(groundFx.group.position.x + groundFx.radius <= 50.05, 'Ground flipbook must clamp clear of rail_trench (x >= 50)');
+  assert.ok(groundFx.group.position.x + groundFx.radius <= railMinX + 0.05, `Ground flipbook must clamp clear of rail_trench (x >= ${railMinX})`);
 
   const slashFx = VfxStudio.spawnFlipbookVfx(session, {
     name: 'hades_cyan',
@@ -484,29 +481,33 @@ test('P2 Art Bible Iron Rule 4: swept knockback blocks rail_trench (grid=4) & wa
   assert.equal(typeof World25D.resolveSweptMovement, 'function');
   const grid = StationMap.getGrid();
 
-  // 1. Huge knockback near Platform 0 yellow line toward sunken rail_trench (x = 50..53, grid === 4)
-  const railPush = World25D.resolveSweptMovement(StationMap, 49.2, 18.5, 53.8, 18.5, 0.56);
+  const railMinX = StationMap.RAIL_MIN_X || 104;
+  const trainX = StationMap.TRAIN_X || 106.5;
+  const platZ = StationMap.getZoneCenter('platform0').z;
+
+  // 1. Huge knockback near Platform 0 yellow line toward sunken rail_trench (grid === 4)
+  const railPush = World25D.resolveSweptMovement(StationMap, railMinX - 0.8, platZ, railMinX + 3.8, platZ, 0.56);
   assert.equal(railPush.hit, true, 'Knockback toward rail_trench must register collision');
   assert.equal(railPush.hitRailEdge, true, 'Knockback toward rail_trench must flag hitRailEdge');
-  assert.ok(railPush.x < 50.0, `Actor crossed into rail_trench (x=${railPush.x.toFixed(2)})`);
+  assert.ok(railPush.x < railMinX, `Actor crossed into rail_trench (x=${railPush.x.toFixed(2)})`);
   assert.equal(StationMap.isWalkable(railPush.x, railPush.z), true, 'Final position must stay strictly walkable');
   assert.notEqual(grid[Math.floor(railPush.z)][Math.floor(railPush.x)], 4, 'Actor must never land on grid===4 rail_trench');
 
-  // 2. High-speed knockback into Corridor cover pillar (x=25..26, z=16, grid === 1)
-  const wallPush = World25D.resolveSweptMovement(StationMap, 24.3, 16.5, 28.4, 16.5, 0.42);
+  // 2. High-speed knockback into Corridor cover pillar (x=94..95, z=62, grid === 1)
+  const wallPush = World25D.resolveSweptMovement(StationMap, 93.3, 62.5, 97.4, 62.5, 0.42);
   assert.equal(wallPush.hit, true, 'Knockback into pillar must register collision');
   assert.equal(wallPush.hitWall, true, 'Knockback into pillar must flag hitWall for rebound/debris');
-  assert.ok(wallPush.x < 25.0, `Actor tunneled through pillar (x=${wallPush.x.toFixed(2)})`);
+  assert.ok(wallPush.x < 94.0, `Actor tunneled through pillar (x=${wallPush.x.toFixed(2)})`);
   assert.equal(StationMap.isWalkable(wallPush.x, wallPush.z), true);
 
   // 3. Ground decal clamping near Platform 0 edge must never overhang into rail_trench
-  const decal = VfxStudio.clampGroundDecal(StationMap, 49.7, 18.5, 2.4);
+  const decal = VfxStudio.clampGroundDecal(StationMap, railMinX - 0.3, platZ, 2.4);
   assert.equal(decal.valid, true, 'Walkable platform edge decal should clamp validly');
   assert.equal(StationMap.isWalkable(decal.x, decal.z), true, 'Clamped decal center must stay walkable');
-  assert.ok(decal.x + decal.radius <= 50.05, `Ground decal overhangs rail edge (x=${decal.x.toFixed(2)}, r=${decal.radius.toFixed(2)})`);
+  assert.ok(decal.x + decal.radius <= railMinX + 0.05, `Ground decal overhangs rail edge (x=${decal.x.toFixed(2)}, r=${decal.radius.toFixed(2)})`);
 
   // 4. Ground decal deep inside non-walkable rail_trench / out-of-bounds must report valid: false and never push off-map
-  const offRail = VfxStudio.clampGroundDecal(StationMap, 52.5, 18.5, 4.8);
+  const offRail = VfxStudio.clampGroundDecal(StationMap, trainX, platZ, 4.8);
   assert.equal(offRail.valid, false, 'Decal deep inside rail_trench must return valid: false');
   const offWall = VfxStudio.clampGroundDecal(StationMap, 0.2, 0.2, 3.0);
   assert.equal(offWall.valid, false, 'Decal inside outer wall must return valid: false');
@@ -588,6 +589,9 @@ test('P2 WebGL2 immutable texture guard: external sprite/flipbook hot-swap never
         } else if (url.includes('assets/vfx/')) {
           this.naturalWidth = 1024;
           this.naturalHeight = 1024;
+        } else if (url.includes('assets/tiles/')) {
+          this.naturalWidth = 512;
+          this.naturalHeight = 512;
         } else {
           this.naturalWidth = 1024;
           this.naturalHeight = 256;
@@ -609,6 +613,7 @@ test('P2 WebGL2 immutable texture guard: external sprite/flipbook hot-swap never
   const playerTacticalTex = PS.getCharTexture('player', 'idle', 'tactical');
   const bossTex = PS.getCharTexture('inspector', 'idle');
   const fbTex = PS.getVfxFlipbookTexture('hades_cyan');
+  const tileSlateTex = PS.getTileTexture('floor_slate', 4, 4);
 
   // Lock initial WebGL2 texStorage2D dimensions upfront
   assert.equal(playerSwordTex.image.width, 256);
@@ -619,11 +624,14 @@ test('P2 WebGL2 immutable texture guard: external sprite/flipbook hot-swap never
   assert.equal(bossTex.image.height, 384);
   assert.equal(fbTex.image.width, 1024);
   assert.equal(fbTex.image.height, 1024);
+  assert.equal(tileSlateTex.image.width, 512);
+  assert.equal(tileSlateTex.image.height, 512);
 
   const tacticalDrawsBefore = playerTacticalTex.image._draws;
   const swordDrawsBefore = playerSwordTex.image._draws;
   const bossDrawsBefore = bossTex.image._draws;
   const fbDrawsBefore = fbTex.image._draws;
+  const tileDrawsBefore = tileSlateTex.image._draws;
 
   // Simulate async WebP image arrivals after first WebGL frame render
   for (const img of loadedImages) {
@@ -639,12 +647,15 @@ test('P2 WebGL2 immutable texture guard: external sprite/flipbook hot-swap never
   assert.equal(bossTex.image.height, 384);
   assert.equal(fbTex.image.width, 1024);
   assert.equal(fbTex.image.height, 1024);
+  assert.equal(tileSlateTex.image.width, 512);
+  assert.equal(tileSlateTex.image.height, 512);
 
-  // Hot-swap must apply Style-1 external sheet to both sword & default-spawn tactical player, inspector, and flipbook
+  // Hot-swap must apply Style-1 external sheet to both sword & default-spawn tactical player, inspector, flipbook, and tile
   assert.ok(playerSwordTex.image._draws > swordDrawsBefore, 'player sword sprite must hot-swap external sheet');
   assert.ok(playerTacticalTex.image._draws > tacticalDrawsBefore, 'player default tactical sprite must hot-swap external Style-1 sheet');
   assert.ok(bossTex.image._draws > bossDrawsBefore, 'inspector sprite must hot-swap external sheet');
   assert.ok(fbTex.image._draws > fbDrawsBefore, 'flipbook must hot-swap external WebP');
+  assert.ok(tileSlateTex.image._draws > tileDrawsBefore, 'Style-1 external tile must hot-swap onto immutable 512x512 canvas');
 });
 
 test('Scene-A Vertical Slice contract: painted concourse plates, 4x4 16f flipbooks, combat key poses, ink trail & director timeline', () => {
@@ -691,4 +702,300 @@ test('Scene-A Vertical Slice contract: painted concourse plates, 4x4 16f flipboo
   assert.equal(typeof VfxStudio.spawnInkStepPuff, 'function');
   assert.equal(typeof SceneArchitect.updateAmbientDynamics, 'function');
   assert.equal(CombatFeel.getFloatingTextStyle('onomatopoeia').tier, 'onomatopoeia');
+});
+
+test('P3-A Style-1 heavy-ink scene unification: bespoke WebP tiles on disk, walkable crack/puddle decals, EdgesGeometry outlines, and willReadFrequently guard', () => {
+  const expectedTiles = ['floor_slate', 'floor_platform', 'wall_concrete'];
+  for (const key of expectedTiles) {
+    const relUrl = ASSETS.tiles && ASSETS.tiles[key];
+    assert.ok(relUrl && relUrl.endsWith(`assets/tiles/${key}.webp`), `Missing bespoke WebP tile entry for ${key}: ${relUrl}`);
+    const diskPath = path.resolve(process.cwd(), 'sim', relUrl);
+    assert.ok(fs.existsSync(diskPath), `Bespoke tile missing on disk: ${diskPath}`);
+  }
+
+  // All puddles and crack decals must stay strictly on walkable tiles and clear of rail_trench (grid === 4)
+  const specs = SceneArchitect.getZonePropSpecs();
+  const grid = StationMap.getGrid();
+  assert.ok(Array.isArray(specs.puddles) && specs.puddles.length >= 6, 'Expected Style-1 damp puddles across station zones');
+  assert.ok(Array.isArray(specs.crackDecals) && specs.crackDecals.length >= 10, 'Expected Style-1 floor fracture crack decals');
+
+  for (const p of specs.puddles) {
+    assert.equal(StationMap.isWalkable(p.x, p.z), true, `Puddle at (${p.x},${p.z}) must sit on walkable floor`);
+    assert.notEqual(grid[Math.floor(p.z)][Math.floor(p.x)], 4, `Puddle at (${p.x},${p.z}) must not enter rail_trench`);
+  }
+  for (const c of specs.crackDecals) {
+    assert.equal(StationMap.isWalkable(c.x, c.z), true, `Crack decal at (${c.x},${c.z}) must sit on walkable floor`);
+    assert.notEqual(grid[Math.floor(c.z)][Math.floor(c.x)], 4, `Crack decal at (${c.x},${c.z}) must not enter rail_trench`);
+  }
+
+  // Architectural heavy-ink silhouette outlines and Canvas2D readback optimization guards
+  const archSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/world25d/scene_architect.js'), 'utf8');
+  assert.ok(/EdgesGeometry/.test(archSrc) && /addInkOutline/.test(archSrc), 'scene_architect.js must apply EdgesGeometry ink silhouettes');
+  assert.ok(/createPillarAoTexture/.test(archSrc), 'scene_architect.js must ground cover pillars with base AO shadows');
+
+  const spriteSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/world25d/pixel_sprites.js'), 'utf8');
+  assert.ok(/willReadFrequently:\s*true/.test(spriteSrc), 'pixel_sprites.js must pass willReadFrequently: true on readback canvases');
+});
+
+test('4x Station Zero mega-scale expansion (224x152 = 34,048 m²): dynamic props/cover generation, A* reachability, and full 2.5D camera scroll bounds', () => {
+  const area = StationMap.GRID_W * StationMap.GRID_H;
+  assert.equal(StationMap.GRID_W, 224);
+  assert.equal(StationMap.GRID_H, 152);
+  assert.equal(area, 34048, `Expected exact 4x area of 112x76 (34048 m^2), got ${area}`);
+  assert.equal(StationMap.PLATFORM_START_X, 168);
+  assert.equal(StationMap.HAZARD_X, 207);
+  assert.equal(StationMap.RAIL_MIN_X, 208);
+  assert.equal(StationMap.RAIL_MAX_X, 219);
+  assert.equal(StationMap.TRAIN_X, 213.5);
+
+  const lights = StationMap.getLights();
+  assert.ok(lights.length >= 64, `Expected >= 64 atmospheric zone lights for 224x152 station, got ${lights.length}`);
+
+  // Dynamic procedural scene & cover generation in scene_architect.js
+  assert.equal(typeof SceneArchitect.generateDynamicZoneProps, 'function');
+  const dynSpecs = SceneArchitect.generateDynamicZoneProps(StationMap);
+  assert.equal(dynSpecs.meta && dynSpecs.meta.dynamicGenerated, true);
+  assert.equal(dynSpecs.meta.area, 34048);
+
+  const totalGroundProps =
+    (dynSpecs.turnstiles?.length || 0) +
+    (dynSpecs.benches?.length || 0) +
+    (dynSpecs.serverRacks?.length || 0) +
+    (dynSpecs.cratesAndBarricades?.length || 0) +
+    (dynSpecs.bollards?.length || 0);
+  assert.ok(totalGroundProps >= 90, `Expected >= 90 dynamically generated environmental props, got ${totalGroundProps}`);
+  assert.ok(dynSpecs.puddles.length >= 45, `Expected >= 45 dynamic puddles across 224x152 zones, got ${dynSpecs.puddles.length}`);
+  assert.ok(dynSpecs.crackDecals.length >= 50, `Expected >= 50 dynamic crack decals across 224x152 zones, got ${dynSpecs.crackDecals.length}`);
+
+  // Verify waist-high tactical cover barricades exist across the expanded station
+  const coverRuns = StationMap.getWalls().filter(w => w.cover || (Number(w.h) > 0 && Number(w.h) <= 1.5));
+  assert.ok(coverRuns.length >= 35, `Expected >= 35 waist-high tactical cover barricades, got ${coverRuns.length}`);
+
+  // Verify every dynamically placed ground prop sits on walkable floor and clear of rail_trench
+  const grid = StationMap.getGrid();
+  for (const listName of ['turnstiles', 'benches', 'serverRacks', 'cratesAndBarricades', 'bollards', 'landmarks']) {
+    for (const item of dynSpecs[listName] || []) {
+      assert.equal(StationMap.isWalkable(item.x, item.z), true, `Dynamic ${listName} prop at (${item.x},${item.z}) must be walkable`);
+      assert.notEqual(grid[Math.floor(item.z)][Math.floor(item.x)], 4, `Dynamic ${listName} prop at (${item.x},${item.z}) must not enter rail_trench`);
+    }
+  }
+
+  // Verify spawn & every interactable across all 6 zones is walkable and A*-reachable
+  const spawn = StationMap.getZoneCenter('concourse');
+  assert.equal(StationMap.isWalkable(spawn.x, spawn.z), true, 'Spawn center must be walkable');
+  for (const inter of StationMap.getInteractables()) {
+    assert.equal(StationMap.isWalkable(inter.x, inter.z), true, `Interactable ${inter.id} at (${inter.x},${inter.z}) must be walkable`);
+    const p = StationMap.findPath(spawn.x, spawn.z, inter.x, inter.z);
+    assert.ok(Array.isArray(p) && p.length > 0, `Interactable ${inter.id} must be A*-reachable from spawn`);
+  }
+
+  // Verify 2.5D camera scroll bounds cover all 6 zones including far Platform 0 east/south corners
+  assert.equal(typeof World25D.computeCameraScrollBounds, 'function');
+  const bounds = World25D.computeCameraScrollBounds(StationMap);
+  assert.ok(bounds.minX <= 4.0 && bounds.minZ <= 4.0, 'Camera scroll bounds must cover NW Concourse corner');
+  assert.ok(bounds.maxX >= StationMap.HAZARD_X && bounds.maxZ >= 144, `Camera scroll bounds (${bounds.maxX}x${bounds.maxZ}) must cover far Platform 0 SE region`);
+  for (const zId of Object.keys(StationMap.ZONES)) {
+    const zc = StationMap.getZoneCenter(zId);
+    assert.ok(zc.x >= bounds.minX && zc.x <= bounds.maxX && zc.z >= bounds.minZ && zc.z <= bounds.maxZ,
+      `Zone ${zId} center (${zc.x},${zc.z}) must lie inside camera scroll bounds`);
+  }
+});
+
+test('4x map dynamic interactive points: destructible covers, scene triggers, walkability/clearance, and environmental clues across all 6 zones', () => {
+  assert.equal(typeof SceneArchitect.generateDynamicInteractables, 'function');
+  const dyn = SceneArchitect.generateDynamicInteractables(StationMap);
+  assert.ok(dyn && Array.isArray(dyn.destructibles) && Array.isArray(dyn.triggers),
+    'generateDynamicInteractables must return { destructibles, triggers }');
+  assert.ok(dyn.destructibles.length >= 10, `Expected >= 10 destructible covers, got ${dyn.destructibles.length}`);
+  assert.ok(dyn.triggers.length >= 8, `Expected >= 8 scene triggers, got ${dyn.triggers.length}`);
+
+  const allItems = [...dyn.destructibles, ...dyn.triggers];
+  const seenIds = new Set();
+  const seenClueIds = new Set();
+  const coveredZones = new Set();
+  const spawn = StationMap.getZoneCenter('concourse');
+  const staticInts = StationMap.getInteractables();
+  const grid = StationMap.getGrid();
+
+  for (const item of allItems) {
+    assert.ok(item.id && !seenIds.has(item.id), `Duplicate or missing dynamic interactable id: ${item.id}`);
+    seenIds.add(item.id);
+
+    assert.equal(StationMap.isWalkable(item.x, item.z), true,
+      `Dynamic point ${item.id} at (${item.x},${item.z}) must sit on walkable floor`);
+    assert.notEqual(grid[Math.floor(item.z)][Math.floor(item.x)], 4,
+      `Dynamic point ${item.id} must not sit inside rail_trench`);
+
+    const spawnDist = Math.hypot(item.x - spawn.x, item.z - spawn.z);
+    assert.ok(spawnDist >= 2.8, `Dynamic point ${item.id} too close to spawn (${spawnDist.toFixed(2)}m)`);
+
+    for (const si of staticInts) {
+      const d = Math.hypot(item.x - si.x, item.z - si.z);
+      assert.ok(d >= 2.4, `Dynamic point ${item.id} overlaps static interactable ${si.id} (${d.toFixed(2)}m)`);
+    }
+
+    assert.ok(item.envClue && item.envClue.id && !seenClueIds.has(item.envClue.id),
+      `Dynamic point ${item.id} must carry a unique envClue.id`);
+    seenClueIds.add(item.envClue.id);
+    assert.ok(item.envClue.title && item.envClue.summary && item.envClue.tag && item.envClue.zoneCode,
+      `Dynamic point ${item.id} envClue missing required display fields`);
+    coveredZones.add(item.zoneId || item.envClue.zoneId);
+  }
+
+  for (const zId of Object.keys(StationMap.ZONES)) {
+    assert.ok(coveredZones.has(zId), `Zone ${zId} must have at least one dynamic interactive point`);
+  }
+
+  for (const cov of dyn.destructibles) {
+    assert.equal(cov.type, 'destructible_cover');
+    assert.ok(cov.hp >= 50 && cov.hp <= 200, `Destructible cover ${cov.id} hp out of bounds: ${cov.hp}`);
+    assert.ok(cov.radius > 0.4 && cov.radius < 2.0, `Destructible cover ${cov.id} radius out of bounds: ${cov.radius}`);
+  }
+
+  for (const trg of dyn.triggers) {
+    assert.equal(trg.type, 'scene_trigger');
+    assert.ok(['acoustic_lure', 'vent_purge', 'sonar_relay', 'arc_surge'].includes(trg.triggerEffect),
+      `Unexpected triggerEffect ${trg.triggerEffect} on ${trg.id}`);
+  }
+});
+
+test('21 architectural sub-zones, glazed partition walls, A* reachability, and bespoke set-pieces across all 6 zones', () => {
+  assert.ok(Array.isArray(StationMap.SUBZONES) && StationMap.SUBZONES.length >= 21,
+    `Expected >= 21 sub-zones, got ${StationMap.SUBZONES && StationMap.SUBZONES.length}`);
+  assert.equal(typeof StationMap.getSubZoneAt, 'function');
+  assert.equal(typeof StationMap.getPillarMask, 'function');
+
+  const countByZone = Object.create(null);
+  const spawn = StationMap.getZoneCenter('concourse');
+  for (const sz of StationMap.SUBZONES) {
+    countByZone[sz.zoneId] = (countByZone[sz.zoneId] || 0) + 1;
+    assert.ok(sz.id && sz.code && sz.name && sz.style, `Sub-zone ${sz.id} missing metadata`);
+
+    const sx = sz.cx + 0.5;
+    const szz = sz.cz + 0.5;
+    assert.equal(StationMap.isWalkable(sx, szz), true,
+      `Sub-zone ${sz.id} center (${sx}, ${szz}) must be walkable`);
+    const lookup = StationMap.getSubZoneAt(sx, szz);
+    assert.equal(lookup.id, sz.id,
+      `getSubZoneAt(${sx}, ${szz}) returned ${lookup && lookup.id} instead of ${sz.id}`);
+
+    const path = StationMap.findPath(spawn.x, spawn.z, sx, szz);
+    assert.ok(path.length > 0, `Sub-zone ${sz.id} (${sx}, ${szz}) must be A*-reachable from spawn`);
+  }
+
+  for (const zId of Object.keys(StationMap.ZONES)) {
+    assert.ok((countByZone[zId] || 0) >= 3,
+      `Zone ${zId} must have at least 3 distinct sub-zones, got ${countByZone[zId] || 0}`);
+  }
+
+  // Glazed architectural interior partitions must exist, block movement, yet allow glazed line-of-sight
+  const partitionRuns = StationMap.getWalls().filter((w) => w.partition);
+  assert.ok(partitionRuns.length >= 18, `Expected >= 18 glazed partition runs, got ${partitionRuns.length}`);
+  // Concourse North Ticket Checkpoint partition at (25, 21) blocks walking but preserves glazed sightline across z=21
+  assert.equal(StationMap.isWalkable(25.5, 21.5), false, 'Glazed partition at (25.5, 21.5) must block movement');
+  assert.equal(StationMap.hasLineOfSight(25.5, 19.5, 25.5, 23.5), true,
+    'Glazed partition at (25.5, 21.5) must allow elevated/glazed line of sight');
+
+  // Bespoke 3D set-pieces must populate every single one of the 6 zones and stay clear of rail trench & walls
+  const props = SceneArchitect.generateDynamicZoneProps(StationMap);
+  assert.ok(props.zoneSetPieces, 'generateDynamicZoneProps must return zoneSetPieces');
+  assert.ok(props.meta.partitionRunCount >= 18, `Expected partitionRunCount >= 18, got ${props.meta.partitionRunCount}`);
+  for (const zId of Object.keys(StationMap.ZONES)) {
+    const cnt = props.meta.subZoneSetPieces && props.meta.subZoneSetPieces[zId];
+    assert.ok(cnt >= 5, `Zone ${zId} must have >= 5 bespoke architectural set-pieces, got ${cnt}`);
+  }
+
+  // Every walkable set-piece prop must sit on walkable floor off the rail trench
+  const walkableBuckets = [
+    ...props.zoneSetPieces.concourse.tvmBanks,
+    ...props.zoneSetPieces.concourse.metalDetectors,
+    ...props.zoneSetPieces.concourse.vendingMachines,
+    ...props.zoneSetPieces.concourse.luggageClusters,
+    ...props.zoneSetPieces.corridor.payphones,
+    ...props.zoneSetPieces.dispatch.filingCabinets,
+    ...props.zoneSetPieces.substation.switchgearCabinets,
+    ...props.zoneSetPieces.substation.coolingTanks,
+    ...props.zoneSetPieces.substation.cableSpools,
+    ...props.zoneSetPieces.tunnel.maintenanceDrums,
+    ...props.zoneSetPieces.platform0.freightStacks
+  ];
+  const grid = StationMap.getGrid();
+  for (const wp of walkableBuckets) {
+    assert.equal(StationMap.isWalkable(wp.x, wp.z), true,
+      `Set-piece prop at (${wp.x}, ${wp.z}) must be walkable`);
+    assert.notEqual(grid[Math.floor(wp.z)][Math.floor(wp.x)], 4,
+      `Set-piece prop at (${wp.x}, ${wp.z}) must not sit inside rail trench`);
+  }
+});
+
+test('Dynamic per-zone scene asset configs, PostFX sync, HUD banner, and zone environmental audio', () => {
+  const zoneIds = Object.keys(StationMap.ZONES);
+  assert.equal(zoneIds.length, 6, 'Expected 6 zones in StationMap.ZONES');
+
+  assert.ok(World25D.ZONE_SCENE_CONFIGS, 'World25D.ZONE_SCENE_CONFIGS must be exported');
+  assert.equal(typeof World25D.resolveZoneSceneConfig, 'function', 'World25D.resolveZoneSceneConfig must be exported');
+
+  const fogColors = new Set();
+  const assetKeys = new Set();
+  const audioIds = new Set();
+
+  for (const zId of zoneIds) {
+    const cfg = World25D.resolveZoneSceneConfig(zId, StationMap);
+    assert.ok(cfg, `Missing zone scene config for ${zId}`);
+    assert.equal(cfg.id, zId, `Resolved id mismatch for ${zId}`);
+    assert.equal(typeof cfg.fogColor, 'number');
+    assert.ok(cfg.fogDensity > 0 && cfg.fogDensity < 0.08, `Unexpected fogDensity for ${zId}: ${cfg.fogDensity}`);
+    assert.equal(typeof cfg.bgColor, 'number');
+    assert.ok(cfg.exposure >= 0.8 && cfg.exposure <= 1.8, `Unexpected exposure for ${zId}: ${cfg.exposure}`);
+    assert.equal(typeof cfg.ambientColor, 'number');
+    assert.ok(cfg.ambientIntensity > 0, `Unexpected ambientIntensity for ${zId}`);
+    assert.equal(typeof cfg.hemiSky, 'number');
+    assert.equal(typeof cfg.hemiGround, 'number');
+    assert.equal(typeof cfg.keyColor, 'number');
+    assert.ok(cfg.keyIntensity > 0, `Unexpected keyIntensity for ${zId}`);
+    assert.equal(typeof cfg.rimColor, 'number');
+    assert.ok(cfg.rimIntensity > 0, `Unexpected rimIntensity for ${zId}`);
+    assert.ok(cfg.dust && typeof cfg.dust.driftX === 'number' && typeof cfg.dust.driftY === 'number' && typeof cfg.dust.driftZ === 'number');
+    assert.ok(cfg.assetSet && typeof cfg.assetSet.key === 'string' && cfg.assetSet.key.length > 0);
+    assert.ok(cfg.audio && typeof cfg.audio.id === 'string' && cfg.audio.id.length > 0);
+
+    fogColors.add(cfg.fogColor);
+    assetKeys.add(cfg.assetSet.key);
+    audioIds.add(cfg.audio.id);
+  }
+
+  assert.equal(fogColors.size, 6, 'All 6 zones must define distinct fog colors');
+  assert.equal(assetKeys.size, 6, 'All 6 zones must define distinct scene asset set keys');
+  assert.equal(audioIds.size, 6, 'All 6 zones must define distinct environmental audio profiles');
+
+  // Unknown zone IDs fall back gracefully to concourse
+  const fallback = World25D.resolveZoneSceneConfig('nonexistent_zone_xyz', StationMap);
+  assert.equal(fallback.id, 'concourse');
+  assert.equal(fallback.assetSet.key, World25D.ZONE_SCENE_CONFIGS.concourse.assetSet.key);
+
+  // Verify dynamic zone rendering, PostFX live color sync, HUD snapshot & banner, and audio integration in source
+  const engineSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/world25d/engine_25d.js'), 'utf8');
+  for (const needle of [
+    'buildZoneSceneAssetRigs',
+    'updateZoneEnvironment',
+    'showZoneBanner',
+    "safeAudio('setZoneAmbience', curZoneId",
+    "safeAudio('stopZoneAmbience')",
+    'fx.fogDisplay.copy(fog.color)',
+    'zoneSceneAssetKey',
+    'zoneAudioId',
+    'zoneAudioLabel'
+  ]) {
+    assert.ok(engineSrc.includes(needle), `engine_25d.js missing expected dynamic zone symbol: ${needle}`);
+  }
+
+  const audioSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/engine/audio_engine.js'), 'utf8');
+  for (const needle of [
+    'setZoneAmbience',
+    'stopZoneAmbience',
+    'getZoneAmbience',
+    "if (name === 'zone_enter')"
+  ]) {
+    assert.ok(audioSrc.includes(needle), `audio_engine.js missing expected zone ambience symbol: ${needle}`);
+  }
 });

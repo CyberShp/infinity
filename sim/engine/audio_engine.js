@@ -29,6 +29,25 @@
   var threatLevel = 0; // 0..100
   var bulletTimeEnabled = false;
 
+  // Low-frequency oppressive ambient vibration (activates automatically when HUD threat > 12)
+  var LOW_FREQ_VIBRATION_THRESHOLD = 12;
+  var ambienceLowShelf = null;
+  var threatVibrationRig = null;
+  var threatVibrationState = {
+    active: false,
+    threshold: LOW_FREQ_VIBRATION_THRESHOLD,
+    threatLevel: 0,
+    intensity: 0,
+    lowShelfGainDb: 0,
+    subDroneGain: 0,
+    lfoRateHz: 1.2,
+    lfoDepthRatio: 0,
+    lfoDepth: 0,
+    subBaseFreqHz: 42
+  };
+  var hudThreatObserver = null;
+  var hudThreatObservedEl = null;
+
   // Non-exam / shared scene lifecycle tracking
   var activeNodes = [];
   var activeIntervals = [];
@@ -56,6 +75,14 @@
     inspector: { dx: 0, dz: 30, intensity: 0 },
     train: { dx: 12, dz: 40, intensity: 0 }
   };
+
+  // Dynamic per-zone environmental ambience layer (smoothly crossfaded on zone transitions)
+  var activeZoneAmbienceId = null;
+  var activeZoneAmbienceProfile = null;
+  var activeZoneAmbienceGain = null;
+  var activeZoneAmbienceNodes = [];
+  var activeZoneAmbienceTimer = null;
+  var pendingZoneAmbience = null;
 
   function clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
@@ -232,6 +259,11 @@
       duckGain = ctx.createGain();
       duckGain.gain.setValueAtTime(1.0, now);
 
+      ambienceLowShelf = ctx.createBiquadFilter();
+      ambienceLowShelf.type = 'lowshelf';
+      ambienceLowShelf.frequency.setValueAtTime(105, now);
+      ambienceLowShelf.gain.setValueAtTime(0, now);
+
       ambienceFilter = ctx.createBiquadFilter();
       ambienceFilter.type = 'lowpass';
       ambienceFilter.frequency.setValueAtTime(3200, now);
@@ -246,7 +278,8 @@
       sfxBus = ctx.createGain();
       sfxBus.gain.setValueAtTime(1.0, now);
 
-      ambienceBus.connect(ambienceFilter);
+      ambienceBus.connect(ambienceLowShelf);
+      ambienceLowShelf.connect(ambienceFilter);
       ambienceFilter.connect(duckGain);
       spatialBus.connect(duckGain);
       duckGain.connect(bulletTimeFilter);
@@ -258,6 +291,8 @@
       masterGain.connect(ctx.destination);
 
       createNoiseBuffers(ctx);
+      ensureThreatVibrationRig();
+      applyThreatLowFreqVibration();
       return true;
     } catch (err) {
       ctx = null;
@@ -1105,6 +1140,227 @@
     safeSetTarget(ambienceFilter.Q, targetQ, now, 0.22);
   }
 
+  // =========================================================================
+  // 2B. OPPRESSIVE LOW-FREQUENCY VIBRATION LAYER (HUD THREAT LEVEL > 12)
+  // =========================================================================
+
+  function parseHudThreatLevel(text) {
+    if (text == null) return null;
+    var str = String(text).trim();
+    if (!str) return null;
+    // Matches HUD "#hud25d-threat-val" format "<sound> / <threat>" (e.g. "10 / 15")
+    var slashMatch = str.match(/\/\s*(-?\d+(?:\.\d+)?)/);
+    if (slashMatch) {
+      var parsedSlash = Number(slashMatch[1]);
+      return Number.isFinite(parsedSlash) ? clamp(parsedSlash, 0, 100) : null;
+    }
+    var numMatch = str.match(/(-?\d+(?:\.\d+)?)/);
+    if (numMatch) {
+      var parsedNum = Number(numMatch[1]);
+      return Number.isFinite(parsedNum) ? clamp(parsedNum, 0, 100) : null;
+    }
+    return null;
+  }
+
+  function computeThreatLowFreqVibration(level, sceneMode) {
+    var rawThreat = clamp(Number(level) || 0, 0, 100);
+    var nonExamScene = !!(sceneMode && !isExamScene(sceneMode));
+    var effThreat = sceneMode === 'crisis' ? Math.max(rawThreat, 84) : rawThreat;
+    var active = !nonExamScene && effThreat > LOW_FREQ_VIBRATION_THRESHOLD;
+
+    if (!active) {
+      return {
+        active: false,
+        threshold: LOW_FREQ_VIBRATION_THRESHOLD,
+        threatLevel: rawThreat,
+        intensity: 0,
+        lowShelfGainDb: 0,
+        subDroneGain: 0,
+        lfoRateHz: 1.2,
+        lfoDepthRatio: 0,
+        lfoDepth: 0,
+        subBaseFreqHz: 42
+      };
+    }
+
+    var normalized = clamp(
+      (effThreat - LOW_FREQ_VIBRATION_THRESHOLD) / (100 - LOW_FREQ_VIBRATION_THRESHOLD),
+      0,
+      1
+    );
+    // Clear physical onset as soon as HUD threat exceeds 12, escalating toward oppressive sub-tremor at 100
+    var intensity = clamp(0.18 + Math.pow(normalized, 0.78) * 0.82, 0, 1);
+    var lowShelfGainDb = Number((intensity * 11.0).toFixed(2));
+    var subDroneGain = Number((intensity * 0.23).toFixed(4));
+    var lfoRateHz = Number((1.35 + intensity * 3.15).toFixed(3));
+    var lfoDepthRatio = Number((0.20 + intensity * 0.42).toFixed(4));
+    var lfoDepth = Number((subDroneGain * lfoDepthRatio).toFixed(4));
+    var subBaseFreqHz = Number((42 - intensity * 8).toFixed(2));
+
+    return {
+      active: true,
+      threshold: LOW_FREQ_VIBRATION_THRESHOLD,
+      threatLevel: rawThreat,
+      intensity: Number(intensity.toFixed(4)),
+      lowShelfGainDb: lowShelfGainDb,
+      subDroneGain: subDroneGain,
+      lfoRateHz: lfoRateHz,
+      lfoDepthRatio: lfoDepthRatio,
+      lfoDepth: lfoDepth,
+      subBaseFreqHz: subBaseFreqHz
+    };
+  }
+
+  function ensureThreatVibrationRig() {
+    if (!ctx || !ambienceBus) return null;
+    if (threatVibrationRig) return threatVibrationRig;
+
+    var now = ctx.currentTime;
+
+    var subLp = ctx.createBiquadFilter();
+    subLp.type = 'lowpass';
+    subLp.frequency.setValueAtTime(110, now);
+    subLp.Q.setValueAtTime(1.6, now);
+
+    var modGain = ctx.createGain();
+    modGain.gain.setValueAtTime(1.0, now);
+
+    var outGain = ctx.createGain();
+    outGain.gain.setValueAtTime(0.0001, now);
+
+    subLp.connect(modGain);
+    modGain.connect(outGain);
+    outGain.connect(ambienceBus);
+
+    // Primary sub-bass fundamental + detuned beating oscillator for physical chest-pressure sensation
+    var subOsc1 = ctx.createOscillator();
+    var subOsc1Gain = ctx.createGain();
+    subOsc1.type = 'sine';
+    subOsc1.frequency.setValueAtTime(42, now);
+    subOsc1Gain.gain.setValueAtTime(0.68, now);
+    subOsc1.connect(subOsc1Gain);
+    subOsc1Gain.connect(subLp);
+    subOsc1.start(now);
+
+    var subOsc2 = ctx.createOscillator();
+    var subOsc2Gain = ctx.createGain();
+    subOsc2.type = 'triangle';
+    subOsc2.frequency.setValueAtTime(43.4, now);
+    subOsc2Gain.gain.setValueAtTime(0.28, now);
+    subOsc2.connect(subOsc2Gain);
+    subOsc2Gain.connect(subLp);
+    subOsc2.start(now);
+
+    // Subterranean pink-noise low rumble bed
+    var noiseSrc = null;
+    var noiseLp = null;
+    var noiseGain = null;
+    if (pinkBuffer) {
+      noiseSrc = ctx.createBufferSource();
+      noiseSrc.buffer = pinkBuffer;
+      noiseSrc.loop = true;
+
+      noiseLp = ctx.createBiquadFilter();
+      noiseLp.type = 'lowpass';
+      noiseLp.frequency.setValueAtTime(80, now);
+      noiseLp.Q.setValueAtTime(1.8, now);
+
+      noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.32, now);
+
+      noiseSrc.connect(noiseLp);
+      noiseLp.connect(noiseGain);
+      noiseGain.connect(subLp);
+      noiseSrc.start(now);
+    }
+
+    // LFO modulating low-frequency vibration amplitude cleanly around unity gain
+    var lfo = ctx.createOscillator();
+    var lfoDepthGain = ctx.createGain();
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(1.2, now);
+    lfoDepthGain.gain.setValueAtTime(0, now);
+    lfo.connect(lfoDepthGain);
+    lfoDepthGain.connect(modGain.gain);
+    lfo.start(now);
+
+    threatVibrationRig = {
+      subLp: subLp,
+      modGain: modGain,
+      outGain: outGain,
+      subOsc1: subOsc1,
+      subOsc2: subOsc2,
+      noiseSrc: noiseSrc,
+      noiseLp: noiseLp,
+      noiseGain: noiseGain,
+      lfo: lfo,
+      lfoDepthGain: lfoDepthGain
+    };
+    return threatVibrationRig;
+  }
+
+  function applyThreatLowFreqVibration() {
+    var profile = computeThreatLowFreqVibration(threatLevel, currentScene);
+    threatVibrationState = profile;
+
+    if (!ctx) return profile;
+    var now = ctx.currentTime;
+    var rig = ensureThreatVibrationRig();
+
+    if (ambienceLowShelf) {
+      safeSetTarget(ambienceLowShelf.gain, profile.lowShelfGainDb, now, 0.24);
+    }
+
+    if (rig) {
+      var targetGain = profile.active ? Math.max(0.0001, profile.subDroneGain) : 0.0001;
+      safeSetTarget(rig.outGain.gain, targetGain, now, 0.24);
+      safeSetTarget(rig.lfo.frequency, profile.lfoRateHz, now, 0.22);
+      safeSetTarget(rig.lfoDepthGain.gain, profile.active ? profile.lfoDepthRatio : 0, now, 0.22);
+      safeSetTarget(rig.subOsc1.frequency, profile.subBaseFreqHz, now, 0.28);
+      safeSetTarget(rig.subOsc2.frequency, profile.subBaseFreqHz + 1.4 + profile.intensity * 1.1, now, 0.28);
+      safeSetTarget(rig.subLp.frequency, 95 + profile.intensity * 55, now, 0.25);
+      if (rig.noiseLp) {
+        safeSetTarget(rig.noiseLp.frequency, 72 + profile.intensity * 48, now, 0.25);
+      }
+    }
+
+    return profile;
+  }
+
+  function syncThreatFromHudElement(el) {
+    if (!el) return false;
+    var parsed = parseHudThreatLevel(el.textContent);
+    if (parsed == null) return false;
+    if (Math.abs(parsed - threatLevel) < 0.01) return false;
+    threatLevel = parsed;
+    applyThreatFilter();
+    applyExamStemMix();
+    applyThreatLowFreqVibration();
+    return true;
+  }
+
+  function attachHudThreatObserver() {
+    if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
+    var el = document.getElementById('hud25d-threat-val');
+    if (!el || el === hudThreatObservedEl) return;
+
+    if (hudThreatObserver) {
+      try { hudThreatObserver.disconnect(); } catch (_) {}
+      hudThreatObserver = null;
+    }
+
+    hudThreatObservedEl = el;
+    hudThreatObserver = new MutationObserver(function () {
+      if (currentScene && !isExamScene(currentScene)) return;
+      syncThreatFromHudElement(el);
+    });
+    hudThreatObserver.observe(el, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  }
+
   function buildScene(mode) {
     if (!ctx) return;
     var now = ctx.currentTime;
@@ -1122,6 +1378,7 @@
       } else {
         applyThreatFilter();
       }
+      applyThreatLowFreqVibration();
       return;
     }
 
@@ -1130,6 +1387,7 @@
     if (isExamScene(mode)) {
       buildExamSoundscape();
       syncExamSecondaryTimers();
+      attachHudThreatObserver();
       if (mode === 'crisis') {
         try {
           ambienceFilter.frequency.cancelScheduledValues(now);
@@ -1139,6 +1397,7 @@
       } else {
         applyThreatFilter();
       }
+      applyThreatLowFreqVibration();
       // Restore any pending spatial sources
       if (spatialPending.inspector && spatialPending.inspector.intensity > 0) {
         applySpatialUpdate('inspector', spatialPending.inspector.dx, spatialPending.inspector.dz, spatialPending.inspector.intensity);
@@ -1146,11 +1405,15 @@
       if (spatialPending.train && spatialPending.train.intensity > 0) {
         applySpatialUpdate('train', spatialPending.train.dx, spatialPending.train.dz, spatialPending.train.intensity);
       }
+      if (pendingZoneAmbience && pendingZoneAmbience.zoneId) {
+        startZoneAmbienceInternal(pendingZoneAmbience.zoneId, pendingZoneAmbience.profile);
+      }
       return;
     }
 
-    // Non-exam scenes silence spatial channels & mission closure ambience cleanly
+    // Non-exam scenes silence spatial channels, zone ambience & mission closure ambience cleanly
     silenceSpatialChannels();
+    stopZoneAmbienceInternal();
     stopMissionClosureAmbienceInternal();
 
     var sceneGain = ctx.createGain();
@@ -1202,6 +1465,7 @@
     }
 
     applyThreatFilter();
+    applyThreatLowFreqVibration();
   }
 
   // =========================================================================
@@ -1229,6 +1493,34 @@
     var now = ctx.currentTime;
 
     // ---- Existing SFX keys (100% preserved) ----
+
+    if (name === 'zone_enter') {
+      // Subtle spatial-acoustic chime/swell announcing entry into a new Station Zero sector
+      var zOsc = ctx.createOscillator();
+      var zSub = ctx.createOscillator();
+      var zLp = ctx.createBiquadFilter();
+      var zG = ctx.createGain();
+      zOsc.type = 'sine';
+      zSub.type = 'triangle';
+      zOsc.frequency.setValueAtTime(329.63, now);
+      zOsc.frequency.exponentialRampToValueAtTime(493.88, now + 0.24);
+      zSub.frequency.setValueAtTime(164.81, now);
+      zLp.type = 'lowpass';
+      zLp.frequency.setValueAtTime(1400, now);
+      zLp.frequency.exponentialRampToValueAtTime(520, now + 0.42);
+      zG.gain.setValueAtTime(0.0001, now);
+      zG.gain.linearRampToValueAtTime(0.048, now + 0.045);
+      zG.gain.exponentialRampToValueAtTime(0.0001, now + 0.46);
+      zOsc.connect(zLp);
+      zSub.connect(zLp);
+      zLp.connect(zG);
+      zG.connect(sfxBus);
+      zOsc.start(now);
+      zSub.start(now);
+      zOsc.stop(now + 0.48);
+      zSub.stop(now + 0.48);
+      return;
+    }
 
     if (name === 'ui_tick') {
       var osc = ctx.createOscillator();
@@ -2217,6 +2509,224 @@
   }
 
   // =========================================================================
+  // 4. DYNAMIC PER-ZONE ENVIRONMENTAL AMBIENCE LAYER (6 STATION ZERO SECTORS)
+  // =========================================================================
+
+  function stopZoneAmbienceInternal() {
+    if (activeZoneAmbienceTimer) {
+      clearTimeout(activeZoneAmbienceTimer);
+      activeZoneAmbienceTimer = null;
+    }
+    var oldGain = activeZoneAmbienceGain;
+    var oldNodes = activeZoneAmbienceNodes.slice();
+    activeZoneAmbienceGain = null;
+    activeZoneAmbienceNodes = [];
+    activeZoneAmbienceId = null;
+
+    if (!ctx || !oldGain) return;
+    var now = ctx.currentTime;
+    try {
+      oldGain.gain.cancelScheduledValues(now);
+      oldGain.gain.setValueAtTime(Math.max(oldGain.gain.value, 0.0001), now);
+      oldGain.gain.linearRampToValueAtTime(0.0001, now + 0.58);
+    } catch (_) {}
+
+    setTimeout(function () {
+      for (var i = 0; i < oldNodes.length; i++) {
+        try {
+          if (typeof oldNodes[i].stop === 'function') oldNodes[i].stop();
+        } catch (_) {}
+        try {
+          if (typeof oldNodes[i].disconnect === 'function') oldNodes[i].disconnect();
+        } catch (_) {}
+      }
+      try { oldGain.disconnect(); } catch (_) {}
+    }, 680);
+  }
+
+  function scheduleZoneDetailPulse(zoneId, destGain) {
+    if (!ctx || activeZoneAmbienceId !== zoneId || activeZoneAmbienceGain !== destGain) {
+      return;
+    }
+    var nextMs = 3600 + Math.random() * 4400;
+    if (!muted && ctx.state === 'running' && currentScene !== 'crisis') {
+      var now = ctx.currentTime;
+      if (zoneId === 'substation') {
+        // High-voltage ozone arc micro-crackle
+        var arc = ctx.createBufferSource();
+        arc.buffer = whiteBuffer;
+        var bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(3400 + Math.random() * 1400, now);
+        bp.Q.setValueAtTime(6.5, now);
+        var ag = ctx.createGain();
+        ag.gain.setValueAtTime(0.0001, now);
+        ag.gain.linearRampToValueAtTime(0.065, now + 0.006);
+        ag.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
+        arc.connect(bp);
+        bp.connect(ag);
+        ag.connect(destGain);
+        arc.start(now);
+        arc.stop(now + 0.11);
+        nextMs = 2100 + Math.random() * 3200;
+      } else if (zoneId === 'tunnel') {
+        // Echoing subterranean drainage water drip
+        var drip = ctx.createOscillator();
+        var dg = ctx.createGain();
+        var f0 = 980 + Math.random() * 380;
+        drip.type = 'sine';
+        drip.frequency.setValueAtTime(f0, now);
+        drip.frequency.exponentialRampToValueAtTime(f0 * 1.48, now + 0.075);
+        dg.gain.setValueAtTime(0.0001, now);
+        dg.gain.linearRampToValueAtTime(0.042, now + 0.005);
+        dg.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+        drip.connect(dg);
+        dg.connect(destGain);
+        drip.start(now);
+        drip.stop(now + 0.18);
+        nextMs = 1900 + Math.random() * 2900;
+      } else if (zoneId === 'dispatch') {
+        // Soft CRT relay / signal telegraph pulse
+        var rel = ctx.createOscillator();
+        var rg = ctx.createGain();
+        rel.type = 'square';
+        rel.frequency.setValueAtTime(1480 + (Math.random() > 0.5 ? 240 : 0), now);
+        var rbp = ctx.createBiquadFilter();
+        rbp.type = 'bandpass';
+        rbp.frequency.setValueAtTime(1600, now);
+        rbp.Q.setValueAtTime(8, now);
+        rg.gain.setValueAtTime(0.0001, now);
+        rg.gain.linearRampToValueAtTime(0.028, now + 0.003);
+        rg.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+        rel.connect(rbp);
+        rbp.connect(rg);
+        rg.connect(destGain);
+        rel.start(now);
+        rel.stop(now + 0.055);
+        nextMs = 1600 + Math.random() * 2600;
+      } else if (zoneId === 'platform0') {
+        // Distant hollow steel rail resonance ping
+        var rail = ctx.createOscillator();
+        var rlg = ctx.createGain();
+        rail.type = 'triangle';
+        rail.frequency.setValueAtTime(204 + Math.random() * 24, now);
+        rail.frequency.exponentialRampToValueAtTime(182, now + 0.9);
+        rlg.gain.setValueAtTime(0.0001, now);
+        rlg.gain.linearRampToValueAtTime(0.032, now + 0.18);
+        rlg.gain.exponentialRampToValueAtTime(0.0001, now + 1.05);
+        rail.connect(rlg);
+        rlg.connect(destGain);
+        rail.start(now);
+        rail.stop(now + 1.1);
+        nextMs = 4200 + Math.random() * 4800;
+      } else if (zoneId === 'concourse') {
+        // Distant turnstile magnetic solenoid click
+        var click = ctx.createBufferSource();
+        click.buffer = whiteBuffer;
+        var cbp = ctx.createBiquadFilter();
+        cbp.type = 'bandpass';
+        cbp.frequency.setValueAtTime(2400, now);
+        cbp.Q.setValueAtTime(5.0, now);
+        var cg = ctx.createGain();
+        cg.gain.setValueAtTime(0.0001, now);
+        cg.gain.linearRampToValueAtTime(0.025, now + 0.003);
+        cg.gain.exponentialRampToValueAtTime(0.0001, now + 0.032);
+        click.connect(cbp);
+        cbp.connect(cg);
+        cg.connect(destGain);
+        click.start(now);
+        click.stop(now + 0.04);
+        nextMs = 3800 + Math.random() * 4800;
+      }
+    }
+    activeZoneAmbienceTimer = setTimeout(function () {
+      scheduleZoneDetailPulse(zoneId, destGain);
+    }, nextMs);
+  }
+
+  function startZoneAmbienceInternal(zoneId, profile) {
+    if (!ctx || !ambienceBus || !pinkBuffer || !whiteBuffer) return;
+    if (activeZoneAmbienceId === zoneId && activeZoneAmbienceGain) return;
+
+    stopZoneAmbienceInternal();
+
+    var now = ctx.currentTime;
+    var zGain = ctx.createGain();
+    zGain.gain.setValueAtTime(0.0001, now);
+    zGain.gain.linearRampToValueAtTime(0.88, now + 0.65);
+    zGain.connect(ambienceBus);
+
+    var nodes = [];
+    activeZoneAmbienceId = zoneId;
+    activeZoneAmbienceProfile = profile || null;
+    activeZoneAmbienceGain = zGain;
+
+    if (zoneId === 'concourse') {
+      // Cold 100Hz fluorescent ballast hum + spacious tiled-hall ventilation air
+      makeOsc('sine', 100, 0.034, zGain, nodes);
+      makeOsc('triangle', 200, 0.011, zGain, nodes);
+      makeNoiseLoop(pinkBuffer, 'bandpass', 620, 0.9, 0.055, zGain, nodes);
+    } else if (zoneId === 'corridor') {
+      // Resonant corridor draft + warm sodium 120Hz hum with slow air sweep
+      var draft = makeNoiseLoop(pinkBuffer, 'bandpass', 240, 1.8, 0.095, zGain, nodes);
+      var lfoC = ctx.createOscillator();
+      var lfoCG = ctx.createGain();
+      lfoC.type = 'sine';
+      lfoC.frequency.setValueAtTime(0.14, now);
+      lfoCG.gain.setValueAtTime(70, now);
+      lfoC.connect(lfoCG);
+      lfoCG.connect(draft.filter.frequency);
+      lfoC.start();
+      nodes.push(lfoC, lfoCG);
+      makeOsc('sine', 120, 0.026, zGain, nodes);
+    } else if (zoneId === 'dispatch') {
+      // Server-rack fan airflow + eerie 43.2Hz Mimic Broadcast carrier undertone
+      makeNoiseLoop(pinkBuffer, 'bandpass', 980, 1.4, 0.052, zGain, nodes);
+      makeOsc('sine', 43.2, 0.055, zGain, nodes);
+      makeOsc('triangle', 86.4, 0.022, zGain, nodes);
+      makeOsc('sine', 432, 0.008, zGain, nodes);
+    } else if (zoneId === 'substation') {
+      // Heavy 50/100/150Hz high-voltage transformer mains hum
+      var subLp = ctx.createBiquadFilter();
+      subLp.type = 'lowpass';
+      subLp.frequency.setValueAtTime(260, now);
+      subLp.Q.setValueAtTime(2.2, now);
+      subLp.connect(zGain);
+      nodes.push(subLp);
+      makeOsc('sawtooth', 50, 0.048, subLp, nodes);
+      makeOsc('triangle', 100, 0.036, subLp, nodes);
+      makeOsc('sine', 150, 0.020, subLp, nodes);
+      makeNoiseLoop(whiteBuffer, 'bandpass', 3200, 4.5, 0.009, zGain, nodes);
+    } else if (zoneId === 'tunnel') {
+      // Pressurized steam pipe hiss + damp culvert bass resonance
+      makeNoiseLoop(whiteBuffer, 'bandpass', 1750, 2.6, 0.034, zGain, nodes);
+      makeNoiseLoop(pinkBuffer, 'lowpass', 190, 1.3, 0.085, zGain, nodes);
+      makeOsc('sine', 58, 0.048, zGain, nodes);
+    } else if (zoneId === 'platform0') {
+      // Open rail-trench gusting wind + metallic rail resonance harmonic
+      var wind = makeNoiseLoop(pinkBuffer, 'bandpass', 320, 1.2, 0.105, zGain, nodes);
+      var lfoP = ctx.createOscillator();
+      var lfoPG = ctx.createGain();
+      lfoP.type = 'sine';
+      lfoP.frequency.setValueAtTime(0.19, now);
+      lfoPG.gain.setValueAtTime(125, now);
+      lfoP.connect(lfoPG);
+      lfoPG.connect(wind.filter.frequency);
+      lfoP.start();
+      nodes.push(lfoP, lfoPG);
+      makeOsc('sine', 136, 0.018, zGain, nodes);
+      makeOsc('triangle', 204, 0.010, zGain, nodes);
+    } else {
+      makeNoiseLoop(pinkBuffer, 'bandpass', 420, 1.0, 0.05, zGain, nodes);
+    }
+
+    activeZoneAmbienceNodes = nodes;
+    activeZoneAmbienceTimer = setTimeout(function () {
+      scheduleZoneDetailPulse(zoneId, zGain);
+    }, 1500 + Math.random() * 1800);
+  }
+
+  // =========================================================================
   // PUBLIC API (window.INFINITY.Audio)
   // =========================================================================
 
@@ -2228,8 +2738,14 @@
         ctx.resume().catch(function () {});
       }
       applyBulletTimeFilter();
+      attachHudThreatObserver();
       if (currentScene && !activeSceneGain) {
         buildScene(currentScene);
+      } else {
+        applyThreatLowFreqVibration();
+      }
+      if (pendingZoneAmbience && pendingZoneAmbience.zoneId && activeZoneAmbienceId !== pendingZoneAmbience.zoneId) {
+        startZoneAmbienceInternal(pendingZoneAmbience.zoneId, pendingZoneAmbience.profile);
       }
       if (closureAmbiencePending && !closureAmbienceActive) {
         startMissionClosureAmbienceInternal();
@@ -2269,6 +2785,7 @@
       if (!mode) return;
       if (currentScene === mode && activeSceneGain) return;
       currentScene = mode;
+      applyThreatLowFreqVibration();
       if (!unlocked) return;
       if (!ensureContext()) return;
       if (ctx.state === 'suspended') {
@@ -2281,7 +2798,28 @@
       threatLevel = clamp(Number(level) || 0, 0, 100);
       applyThreatFilter();
       applyExamStemMix();
+      applyThreatLowFreqVibration();
     },
+
+    LOW_FREQ_VIBRATION_THRESHOLD: LOW_FREQ_VIBRATION_THRESHOLD,
+
+    getLowFreqVibrationState: function () {
+      return {
+        active: threatVibrationState.active,
+        threshold: threatVibrationState.threshold,
+        threatLevel: threatVibrationState.threatLevel,
+        intensity: threatVibrationState.intensity,
+        lowShelfGainDb: threatVibrationState.lowShelfGainDb,
+        subDroneGain: threatVibrationState.subDroneGain,
+        lfoRateHz: threatVibrationState.lfoRateHz,
+        lfoDepthRatio: threatVibrationState.lfoDepthRatio,
+        lfoDepth: threatVibrationState.lfoDepth,
+        subBaseFreqHz: threatVibrationState.subBaseFreqHz
+      };
+    },
+
+    computeThreatLowFreqVibration: computeThreatLowFreqVibration,
+    parseHudThreatLevel: parseHudThreatLevel,
 
     updateSpatialSource: function (id, dx, dz, intensity) {
       if (id !== 'inspector' && id !== 'train') return;
@@ -2318,6 +2856,30 @@
       return closureAmbienceActive;
     },
 
+    setZoneAmbience: function (zoneId, profile) {
+      if (!zoneId) return;
+      pendingZoneAmbience = { zoneId: String(zoneId), profile: profile || null };
+      if (!unlocked) return;
+      if (!ensureContext()) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(function () {});
+      }
+      startZoneAmbienceInternal(pendingZoneAmbience.zoneId, pendingZoneAmbience.profile);
+    },
+
+    stopZoneAmbience: function () {
+      pendingZoneAmbience = null;
+      stopZoneAmbienceInternal();
+    },
+
+    getZoneAmbience: function () {
+      return {
+        zoneId: activeZoneAmbienceId || (pendingZoneAmbience ? pendingZoneAmbience.zoneId : null),
+        active: !!activeZoneAmbienceGain,
+        profile: activeZoneAmbienceProfile || (pendingZoneAmbience ? pendingZoneAmbience.profile : null)
+      };
+    },
+
     playSfx: function (name) {
       if (!unlocked) {
         // Attempt graceful unlock if called inside user gesture
@@ -2327,4 +2889,12 @@
       playSfxInternal(name);
     }
   };
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', attachHudThreatObserver, { once: true });
+    } else {
+      attachHudThreatObserver();
+    }
+  }
 })();

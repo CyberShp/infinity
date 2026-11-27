@@ -40,6 +40,8 @@
     postFxEnabled: true,
     minimapBaseCanvas: null,
     hotbarSig: '',
+    lastEnvClueId: null,
+    envClueDismissedId: null,
     lastAudioThreat: -1,
     crisisTimerId: null,
     crisisActiveKey: null,
@@ -401,6 +403,7 @@
     var scene = getSceneName(state);
     var prev = uiState.currentScene;
     document.body.setAttribute('data-scene', scene);
+    document.body.setAttribute('data-state', scene === 'exam' ? 'playing' : (scene === 'settlement' ? 'gameover' : 'title'));
 
     ['hall', 'exam', 'settlement'].forEach(function (name) {
       var el = $('scene-' + name);
@@ -777,7 +780,7 @@
       if (curated) {
         previewHtml =
           '<div class="fusion-preview-card">' +
-            '<p class="eyebrow crimson">CURATED FUSION // 秘传血统融合</p>' +
+            '<p class="eyebrow crimson">CURATED FUSION · 秘传血统融合</p>' +
             '<h4>' + esc(curated.result.name) + ' <span class="tier-badge tier-' + esc(curated.result.tier) + '">' + esc(curated.result.tier) + '</span></h4>' +
             '<p class="item-desc" style="margin:6px 0;">' + esc(curated.result.desc) + '</p>' +
             '<div class="item-delta-line">' + esc(formatDeltaSummary(curated.result.powerDelta)) + '</div>' +
@@ -790,7 +793,7 @@
         var estCost = tierCosts[itemA.tier] || 30;
         previewHtml =
           '<div class="fusion-preview-card">' +
-            '<p class="eyebrow">PROCEDURAL FUSION // 自由同阶跨体系拼合</p>' +
+            '<p class="eyebrow">PROCEDURAL FUSION · 自由同阶跨体系拼合</p>' +
             '<h4>' + esc(itemA.name) + ' × ' + esc(itemB.name) + '</h4>' +
             (sameTier
               ? '<p class="item-desc" style="margin:6px 0;">未命中固定秘方，将通过主神基因熔炉合成高一阶定制复合血统（D+D→C需30分，C+C→B需90分）。</p>' +
@@ -838,7 +841,7 @@
     container.innerHTML =
       '<div class="fusion-layout">' +
         '<div class="fusion-panel">' +
-          '<p class="eyebrow crimson">GENE CRUCIBLE // 血统融合炉</p>' +
+          '<p class="eyebrow crimson">GENE CRUCIBLE · 血统融合炉</p>' +
           '<h3>双血统熔合槽</h3>' +
           '<div class="fusion-slots">' +
             '<div class="fusion-slot' + (itemA ? ' filled' : '') + '">' +
@@ -856,7 +859,7 @@
           '<div class="fusion-bloodline-list">' + ownedListHtml + '</div>' +
         '</div>' +
         '<div class="fusion-panel">' +
-          '<p class="eyebrow">CURATED ARCHIVE // 已知高阶融合配方 (' + recipes.length + ')</p>' +
+          '<p class="eyebrow">CURATED ARCHIVE · 已知高阶融合配方 (' + recipes.length + ')</p>' +
           '<h3>秘传血统图谱</h3>' +
           '<div class="recipe-list">' + recipesHtml + '</div>' +
         '</div>' +
@@ -1110,6 +1113,11 @@
     }, 360);
   }
 
+  function getMinimapScale(gridW) {
+    var w = Math.max(16, Number(gridW) || 224);
+    return Math.max(1.0, Math.min(4, 224 / w));
+  }
+
   function buildMinimapBase() {
     var mapMod = INFINITY.StationMap;
     if (!mapMod || typeof mapMod.getGrid !== 'function') return null;
@@ -1118,48 +1126,71 @@
 
     var W = mapMod.GRID_W || 56;
     var H = mapMod.GRID_H || 38;
-    var scale = 4;
+    var scale = getMinimapScale(W);
     var off = document.createElement('canvas');
-    off.width = W * scale;
-    off.height = H * scale;
+    off.width = Math.round(W * scale);
+    off.height = Math.round(H * scale);
     var ctx = off.getContext('2d');
 
     ctx.fillStyle = '#07080d';
     ctx.fillRect(0, 0, off.width, off.height);
 
+    var pMask = (typeof mapMod.getPillarMask === 'function') ? mapMod.getPillarMask() : null;
+    var hasZoneFn = typeof mapMod.getZoneAt === 'function';
+    var ZONE_MINI_FLOOR = {
+      concourse:  '#152230',
+      corridor:   '#241f18',
+      dispatch:   '#122624',
+      substation: '#161e30',
+      tunnel:     '#1d172a',
+      platform0:  '#222836'
+    };
+
     for (var z = 0; z < H; z++) {
       var row = grid[z];
       if (!row) continue;
+      var pRow = pMask ? pMask[z] : null;
       for (var x = 0; x < W; x++) {
         var tile = row[x];
         if (tile === 1) {
-          ctx.fillStyle = '#2d3344';
+          var pm = pRow ? pRow[x] : 0;
+          if (pm === 3) {
+            ctx.fillStyle = '#5da4bc';
+          } else if (pm === 2) {
+            ctx.fillStyle = '#4c576b';
+          } else if (pm === 1) {
+            ctx.fillStyle = '#434d63';
+          } else {
+            ctx.fillStyle = '#2a3040';
+          }
         } else if (tile === 2) {
-          ctx.fillStyle = '#212735';
+          ctx.fillStyle = '#232a38';
         } else if (tile === 3) {
-          ctx.fillStyle = '#6f5522';
+          ctx.fillStyle = '#806224';
         } else if (tile === 4) {
           ctx.fillStyle = '#140c10';
         } else {
-          ctx.fillStyle = '#131722';
+          var zid = hasZoneFn ? mapMod.getZoneAt(x + 0.5, z + 0.5) : 'concourse';
+          ctx.fillStyle = ZONE_MINI_FLOOR[zid] || '#131722';
         }
-        ctx.fillRect(x * scale, z * scale, scale, scale);
+        ctx.fillRect(x * scale, z * scale, Math.ceil(scale), Math.ceil(scale));
       }
     }
 
-    // Subtle zone center labels
+    // Subtle zone center labels with zone-coded tints
     if (mapMod.ZONES) {
       ctx.font = 'bold 8px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       Object.keys(mapMod.ZONES).forEach(function (zid) {
         var zn = mapMod.ZONES[zid];
-        ctx.fillStyle = 'rgba(226, 212, 188, 0.34)';
+        ctx.fillStyle = 'rgba(232, 224, 206, 0.54)';
         ctx.fillText(zn.code || zid, zn.cx * scale, zn.cz * scale);
       });
     }
 
     uiState.minimapBaseCanvas = off;
+    uiState.minimapScale = scale;
     return off;
   }
 
@@ -1170,7 +1201,8 @@
     if (!ctx) return;
 
     var base = uiState.minimapBaseCanvas || buildMinimapBase();
-    var scale = 4;
+    var mapMod = INFINITY.StationMap;
+    var scale = uiState.minimapScale || getMinimapScale((mapMod && mapMod.GRID_W) || 56);
     if (base) {
       if (canvas.width !== base.width || canvas.height !== base.height) {
         canvas.width = base.width;
@@ -1183,6 +1215,33 @@
     }
 
     var mm = snapshot.minimap;
+
+    // 0. Room Fog-of-War shroud on minimap when player lacks recon capability
+    if (!mm.hasRecon && mapMod && mapMod.ZONE_BOUNDS) {
+      var visitedList = Array.isArray(mm.visitedZones) ? mm.visitedZones : [];
+      var curZone = mm.currentZone || snapshot.zoneId || 'concourse';
+      var zKeys = Object.keys(mapMod.ZONE_BOUNDS);
+      for (var zk = 0; zk < zKeys.length; zk++) {
+        var zId = zKeys[zk];
+        if (zId === curZone) continue;
+        var zb = mapMod.ZONE_BOUNDS[zId];
+        if (!zb) continue;
+        var isVisited = visitedList.indexOf(zId) !== -1;
+        ctx.fillStyle = isVisited ? 'rgba(6, 8, 13, 0.56)' : 'rgba(4, 5, 9, 0.88)';
+        ctx.fillRect(
+          zb.x0 * scale,
+          zb.z0 * scale,
+          (zb.x1 - zb.x0) * scale,
+          (zb.z1 - zb.z0) * scale
+        );
+      }
+    } else if (mm.reconActive) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(88, 230, 216, 0.55)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+      ctx.restore();
+    }
 
     // 1. Active Wards
     if (Array.isArray(mm.wards)) {
@@ -1209,6 +1268,32 @@
         ctx.strokeStyle = '#090a0f';
         ctx.lineWidth = 1;
         ctx.strokeRect(cx - 3, cz - 3, 6, 6);
+      }
+    }
+
+    // 2b. Dynamic Interactive Points (destructible cover & scene triggers)
+    if (Array.isArray(mm.dynamicPoints)) {
+      for (var dp = 0; dp < mm.dynamicPoints.length; dp++) {
+        var pt = mm.dynamicPoints[dp];
+        var dx = pt.x * scale;
+        var dz = pt.z * scale;
+        if (pt.type === 'scene_trigger') {
+          ctx.save();
+          ctx.translate(dx, dz);
+          ctx.rotate(Math.PI / 4);
+          ctx.fillStyle = pt.done ? '#58c4a6' : '#53d2e8';
+          ctx.fillRect(-2.4, -2.4, 4.8, 4.8);
+          ctx.strokeStyle = '#090a0f';
+          ctx.lineWidth = 0.85;
+          ctx.strokeRect(-2.4, -2.4, 4.8, 4.8);
+          ctx.restore();
+        } else if (pt.type === 'destructible_cover' && !pt.done) {
+          ctx.fillStyle = '#e69852';
+          ctx.fillRect(dx - 2, dz - 2, 4, 4);
+          ctx.strokeStyle = '#090a0f';
+          ctx.lineWidth = 0.75;
+          ctx.strokeRect(dx - 2, dz - 2, 4, 4);
+        }
       }
     }
 
@@ -1674,8 +1759,8 @@
     var insp = snapshot && snapshot.inspector;
     var dist = insp && isFinite(Number(insp.distToPlayer)) ? Number(insp.distToPlayer) : 999;
     var isOffscreen = (insp && typeof insp.offscreen === 'boolean') ? insp.offscreen : (dist >= 5.5);
-    // Show off-screen edge indicator only when Inspector is alive, off-screen, and within 28m
-    if (inspDone || !insp || !isOffscreen || dist > 28) {
+    // Show off-screen edge indicator only when Inspector is alive, intel is known (visible or recon), off-screen, and within 44m
+    if (inspDone || !insp || insp.intelKnown === false || !isOffscreen || dist > 44) {
       el.classList.add('hidden');
       return;
     }
@@ -1699,9 +1784,9 @@
     var cx = 50 + Math.cos(angle) * rx;
     var cy = 50 + Math.sin(angle) * ry;
     var deg = (angle * 180) / Math.PI + 90;
-    var urgency = clamp(1 - (dist - 5.5) / 22.5, 0.2, 1.0);
+    var urgency = clamp(1 - (dist - 5.5) / 38.5, 0.2, 1.0);
     el.classList.remove('hidden');
-    el.classList.toggle('urgent', dist <= 13 || insp.state === 'chase');
+    el.classList.toggle('urgent', dist <= 16 || insp.state === 'chase');
     el.style.left = cx.toFixed(1) + '%';
     el.style.top = cy.toFixed(1) + '%';
     el.style.opacity = (0.45 + urgency * 0.55).toFixed(2);
@@ -1750,9 +1835,17 @@
       st.exam.cluesFound = snapshot.discoveredClueIds.slice();
     }
 
-    // 2. Top-Left Objective Tracker & Zone
+    // 2. Top-Left Objective Tracker & Zone / Sub-Zone Readout
     if ($('hud25d-zone-code')) $('hud25d-zone-code').textContent = snapshot.zoneCode || 'Z-01';
     if ($('hud25d-zone-name')) $('hud25d-zone-name').textContent = snapshot.zoneName || '零号回廊';
+    if ($('hud25d-subzone-code')) $('hud25d-subzone-code').textContent = snapshot.subZoneCode || snapshot.zoneCode || 'Z-01B';
+    if ($('hud25d-subzone-name')) $('hud25d-subzone-name').textContent = snapshot.subZoneName || snapshot.zoneName || '零号回廊';
+    var szBar = $('hud25d-subzone-bar');
+    if (szBar) {
+      var artTokens = window.INFINITY && window.INFINITY.ArtTokens;
+      var zTok = artTokens && artTokens.ZONES && artTokens.ZONES[snapshot.zoneId];
+      szBar.style.setProperty('--zone-accent', (zTok && zTok.color) ? zTok.color : '#68c8de');
+    }
     if ($('hud25d-clock-val')) $('hud25d-clock-val').textContent = formatClockMMSS(snapshot.timeRemainingSec);
 
     var trainEl = $('hud25d-train-val');
@@ -1770,19 +1863,23 @@
     if ($('hud25d-override-bar')) $('hud25d-override-bar').style.width = ovPct + '%';
     if ($('hud25d-obj-override')) $('hud25d-obj-override').classList.toggle('done', ovPct >= 100);
 
-    var insp = snapshot.inspector || { hp: 160, maxHp: 160, sealedPct: 0, state: 'patrol', distToPlayer: 30 };
+    var insp = snapshot.inspector || { hp: 520, maxHp: 520, sealedPct: 0, state: 'UNKNOWN', intelKnown: false, distToPlayer: 30 };
 
     // Auto-recede peripheral HUD panels during active combat or manual immersive mode (>= 80% clear viewport)
     syncHudRecedeUi(snapshot);
     var inspHp = Math.max(0, Math.round(Number(insp.hp || 0)));
-    var inspMaxHp = Math.max(1, Number(insp.maxHp || 160));
+    var inspMaxHp = Math.max(1, Number(insp.maxHp || 520));
     var sealedPct = clamp(Math.round(Number(insp.sealedPct || 0)), 0, 100);
     var inspDone = inspHp <= 0 || sealedPct >= 100;
 
     if ($('hud25d-inspector-metric')) {
+      var wpSec = Number(insp.weakpointRemainingSec || 0);
+      var statusTag = (!inspDone && insp.weakpointExposed && wpSec > 0)
+        ? (' · ⚡弱点暴露 ' + wpSec.toFixed(1) + 's')
+        : ((!inspDone && (insp.mutated || Number(insp.phase) >= 2)) ? ' · 二阶段变异' : '');
       $('hud25d-inspector-metric').textContent = inspHp <= 0
         ? '已击杀'
-        : (sealedPct >= 100 ? '已封印' : ('HP ' + inspHp + ' · 封 ' + sealedPct + '%'));
+        : (sealedPct >= 100 ? '已封印' : ('HP ' + inspHp + statusTag + ' · 封 ' + sealedPct + '%'));
     }
     if ($('hud25d-inspector-bar')) {
       $('hud25d-inspector-bar').style.width = (inspDone ? 0 : clamp((inspHp / inspMaxHp) * 100, 0, 100)) + '%';
@@ -1792,6 +1889,43 @@
     if ($('hud25d-clues-val')) {
       $('hud25d-clues-val').textContent = (snapshot.cluesFoundCount || 0) + '/' + (snapshot.cluesTotal || 6);
     }
+    if ($('hud25d-env-clues-val')) {
+      $('hud25d-env-clues-val').textContent = (snapshot.envCluesFoundCount || 0) + '/' + (snapshot.envCluesTotal || 22);
+    }
+
+    var envBanner = $('hud25d-env-clue-banner');
+    var latestEnv = snapshot.latestEnvironmentClue || null;
+    if (!latestEnv) {
+      uiState.lastEnvClueId = null;
+      uiState.envClueDismissedId = null;
+      if (envBanner) envBanner.classList.add('hidden');
+    } else {
+      if (latestEnv.id !== uiState.lastEnvClueId) {
+        uiState.lastEnvClueId = latestEnv.id;
+        if (uiState.envClueDismissedId === latestEnv.id) {
+          uiState.envClueDismissedId = null;
+        }
+      }
+      if (envBanner) {
+        var showEnvBanner = uiState.envClueDismissedId !== latestEnv.id;
+        envBanner.classList.toggle('hidden', !showEnvBanner);
+        envBanner.classList.toggle('source-cover', latestEnv.sourceType === 'destructible_cover');
+        if ($('hud25d-env-clue-tag')) $('hud25d-env-clue-tag').textContent = latestEnv.tag || '环境线索';
+        if ($('hud25d-env-clue-zone')) $('hud25d-env-clue-zone').textContent = latestEnv.zoneCode || 'Z-01';
+        if ($('hud25d-env-clue-title')) $('hud25d-env-clue-title').textContent = latestEnv.title || '';
+        if ($('hud25d-env-clue-body')) $('hud25d-env-clue-body').textContent = latestEnv.summary || '';
+        var envEffEl = $('hud25d-env-clue-effect');
+        if (envEffEl) {
+          if (latestEnv.effectText) {
+            envEffEl.textContent = latestEnv.effectText;
+            envEffEl.classList.remove('hidden');
+          } else {
+            envEffEl.textContent = '';
+            envEffEl.classList.add('hidden');
+          }
+        }
+      }
+    }
 
     var inspStatusEl = $('hud25d-inspector-status');
     if (inspStatusEl) {
@@ -1799,15 +1933,21 @@
         patrol: '巡逻中',
         investigate: '循声搜查',
         chase: '追猎锁定!',
+        hunt: '追猎锁定!',
         stunned: '僵直受制',
         sealed: '已封印',
         defeated: '已击杀'
       };
+      var stateKey = String(insp.state || 'unknown').toLowerCase();
+      var intelKnown = insp.intelKnown !== false && stateKey !== 'unknown';
       var distTxt = isFinite(Number(insp.distToPlayer)) ? (Math.round(Number(insp.distToPlayer)) + 'm') : '--m';
+      var wpHint = (!inspDone && intelKnown && insp.weakpointExposed) ? ' · ⚡核心弱点暴露!' : '';
       inspStatusEl.textContent = inspDone
         ? '检票员：已肃清'
-        : ('检票员：' + (stateLabels[insp.state] || insp.state || '巡逻中') + ' · ' + distTxt);
-      inspStatusEl.classList.toggle('danger', !inspDone && (insp.state === 'chase' || Number(insp.distToPlayer) <= 10));
+        : (!intelKnown
+          ? '检票员：行踪未知（需侦察）'
+          : ('检票员：' + (stateLabels[stateKey] || '巡逻中') + ' · ' + distTxt + wpHint));
+      inspStatusEl.classList.toggle('danger', !inspDone && intelKnown && (stateKey === 'chase' || stateKey === 'hunt' || Number(insp.distToPlayer) <= 10 || Boolean(insp.weakpointExposed)));
       inspStatusEl.classList.toggle('neutralized', inspDone);
     }
 
@@ -4110,10 +4250,17 @@
     var allClues = (scenario && scenario.clues) || [];
 
     var matched = allClues.filter(function (c) { return unlocked.indexOf(c.id) !== -1; });
+    var envClues = (uiState.lastSnapshot && Array.isArray(uiState.lastSnapshot.environmentClues))
+      ? uiState.lastSnapshot.environmentClues
+      : [];
+    var envTotal = (uiState.lastSnapshot && Number(uiState.lastSnapshot.envCluesTotal)) || 22;
+
+    var html = '';
+    html += '<div class="clues-section-title">主线考场物证 <span class="mono">' + matched.length + '/' + (allClues.length || 6) + '</span></div>';
     if (!matched.length) {
-      body.innerHTML = '<div class="muted small">尚未破译任何关键线索。在 2.5D 站台中靠近发光物证并按 E 即可破译收集。</div>';
+      html += '<div class="muted small" style="margin-bottom:10px;">尚未破译任何主线物证。靠近发光线索终端并按 E 即可破译收集。</div>';
     } else {
-      body.innerHTML = matched.map(function (c) {
+      html += matched.map(function (c) {
         return (
           '<div class="clue-card">' +
             '<div style="font-weight:600;margin-bottom:4px;">' + esc(c.title) + ' <span class="mono small muted">' + esc(c.id) + '</span></div>' +
@@ -4122,6 +4269,28 @@
         );
       }).join('');
     }
+
+    html += '<div class="clues-section-title">动态环境线索 · 掩体与场景触发器 <span class="mono">' + envClues.length + '/' + envTotal + '</span></div>';
+    if (!envClues.length) {
+      html += '<div class="muted small">尚未发现环境线索。破拆橙标可破坏掩体（攻击 / 按 E）或触发青标场景机关即可解锁区域战术档案。</div>';
+    } else {
+      html += envClues.slice().reverse().map(function (ec) {
+        var isCover = ec.sourceType === 'destructible_cover';
+        return (
+          '<div class="clue-card clue-card-env' + (isCover ? ' source-cover' : '') + '">' +
+            '<div class="clue-card-env-head">' +
+              '<span class="clue-badge-inline' + (isCover ? ' cover' : '') + '">' + esc(ec.tag || (isCover ? '掩体破拆' : '场景触发器')) + '</span>' +
+              '<span class="mono small muted">' + esc(ec.zoneCode || '') + ' · ' + esc(ec.id || '') + '</span>' +
+            '</div>' +
+            '<div style="font-weight:600;margin-bottom:4px;">' + esc(ec.title) + '</div>' +
+            '<div class="small" style="color:var(--text-secondary);">' + esc(ec.summary) + '</div>' +
+            (ec.effectText ? ('<div class="small" style="margin-top:5px;color:#84f5d5;">' + esc(ec.effectText) + '</div>') : '') +
+          '</div>'
+        );
+      }).join('');
+    }
+
+    body.innerHTML = html;
     modal.classList.remove('hidden');
     syncModalPause25D();
   }
@@ -4521,6 +4690,31 @@
         }
       });
     }
+    if ($('hud25d-clues-pill')) {
+      $('hud25d-clues-pill').addEventListener('click', function () {
+        playSfx('ui_tick');
+        openCluesModal();
+      });
+    }
+    if ($('hud25d-env-clues-pill')) {
+      $('hud25d-env-clues-pill').addEventListener('click', function () {
+        playSfx('ui_tick');
+        openCluesModal();
+      });
+    }
+    if ($('btn-env-clue-dossier')) {
+      $('btn-env-clue-dossier').addEventListener('click', function () {
+        playSfx('ui_tick');
+        openCluesModal();
+      });
+    }
+    if ($('btn-env-clue-close')) {
+      $('btn-env-clue-close').addEventListener('click', function () {
+        playSfx('ui_tick');
+        uiState.envClueDismissedId = uiState.lastEnvClueId;
+        if ($('hud25d-env-clue-banner')) $('hud25d-env-clue-banner').classList.add('hidden');
+      });
+    }
 
     // 2.5D Live Radio focus/blur (slow-mo while typing) & submit
     var radioForm = $('hud25d-radio-form');
@@ -4763,6 +4957,18 @@
     }
 
     syncFxToggleUi();
+
+    var shouldAutostart = false;
+    try {
+      var params = new URLSearchParams(global.location && global.location.search ? global.location.search : '');
+      shouldAutostart = params.get('autostart') === '1';
+    } catch (_) {}
+
+    if (shouldAutostart && INFINITY.Engine && typeof INFINITY.Engine.enterScenario === 'function') {
+      uiState.lastFeedCount = 0;
+      INFINITY.Engine.enterScenario('station_zero');
+    }
+
     renderAll(getStateSafe());
   }
 

@@ -45,20 +45,15 @@
   };
 
   /*
-   * Optional ComfyUI / Midjourney / Aseprite seamless pixel-art tile overrides.
-   * Kept empty by default so PixelSprites uses procedural HD-2D canvas textures
-   * with ZERO 404 console errors. Drop seamless 128x128 or 256x256 .webp/.png
-   * files into sim/assets/tiles/ and uncomment the matching canonical entries:
-   *
-   *   floor_slate:    'assets/tiles/floor_slate.webp',
-   *   floor_platform: 'assets/tiles/floor_platform.webp',
-   *   floor_hazard:   'assets/tiles/floor_hazard.webp',
-   *   floor_rail:     'assets/tiles/floor_rail.webp',
-   *   wall_concrete:  'assets/tiles/wall_concrete.webp',
-   *   wall_neon:      'assets/tiles/wall_neon.webp',
-   *   train_hull:     'assets/tiles/train_hull.webp'
+   * Style-1 Heavy-Ink seamless tile overrides (Limbus Company x Hades).
+   * Remaining canonical tiles (floor_hazard, floor_rail, wall_neon, train_hull)
+   * render from synchronized Style-1 heavy-ink procedural canvases with zero 404s.
    */
-  var TILES = {};
+  var TILES = {
+    floor_slate: 'assets/tiles/floor_slate.webp',
+    floor_platform: 'assets/tiles/floor_platform.webp',
+    wall_concrete: 'assets/tiles/wall_concrete.webp'
+  };
 
   // Optional external icon overrides (zero-404 fallback to procedural synth)
   var ICONS = {};

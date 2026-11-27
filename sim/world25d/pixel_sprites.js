@@ -43,6 +43,16 @@
     };
   }
 
+  function getCtx2D(canvas, readFreq) {
+    if (!canvas || typeof canvas.getContext !== 'function') return null;
+    if (readFreq) {
+      try {
+        return canvas.getContext('2d', { willReadFrequently: true });
+      } catch (_) {}
+    }
+    return canvas.getContext('2d');
+  }
+
   function toTexture(canvas, repeat, opts) {
     var THREE = global.THREE;
     if (!THREE) return null;
@@ -101,134 +111,142 @@
   function buildTileCanvas(name) {
     var S = 256;
     var c = makeCanvas(S, S);
-    var ctx = c.getContext('2d');
+    var ctx = getCtx2D(c, false);
     if (!ctx) return c;
     ctx.imageSmoothingEnabled = true;
 
     if (name === 'floor_slate') {
       var rng = createRng(1041);
-      // Base weathered dark architectural terrazzo / slate
-      var bg = ctx.createLinearGradient(0, 0, S, S);
-      bg.addColorStop(0, '#272f3d');
-      bg.addColorStop(0.5, '#222a36');
-      bg.addColorStop(1, '#1e2530');
-      ctx.fillStyle = bg;
+      // Style-1 Heavy-Ink dark charcoal-slate concourse stone slabs
+      ctx.fillStyle = '#1e2530';
       ctx.fillRect(0, 0, S, S);
 
-      // 2x2 large beveled stone slabs with subtle per-slab tone shift
       var half = S / 2;
-      var slabTints = ['#2a3342', '#252d3b', '#232b38', '#283140'];
+      var slabTints = ['#2a3340', '#232c38', '#252e3b', '#28313e'];
       for (var sy = 0; sy < 2; sy++) {
         for (var sx = 0; sx < 2; sx++) {
           var ox = sx * half;
           var oy = sy * half;
           ctx.fillStyle = slabTints[sy * 2 + sx];
-          ctx.fillRect(ox + 3, oy + 3, half - 6, half - 6);
+          ctx.fillRect(ox + 4, oy + 4, half - 8, half - 8);
 
-          // Soft internal stone clouding
-          var sg = ctx.createRadialGradient(ox + half * 0.45, oy + half * 0.4, 8, ox + half * 0.5, oy + half * 0.5, half * 0.72);
-          sg.addColorStop(0, 'rgba(130, 160, 195, 0.055)');
-          sg.addColorStop(1, 'rgba(8, 12, 18, 0.14)');
-          ctx.fillStyle = sg;
-          ctx.fillRect(ox + 3, oy + 3, half - 6, half - 6);
+          // Stepped cel-shaded grime block inside slab (Limbus/Hades graphic style)
+          ctx.fillStyle = 'rgba(12, 16, 23, 0.24)';
+          ctx.beginPath();
+          ctx.moveTo(ox + 10, oy + half - 22);
+          ctx.lineTo(ox + half - 18, oy + half - 32);
+          ctx.lineTo(ox + half - 6, oy + half - 6);
+          ctx.lineTo(ox + 6, oy + half - 6);
+          ctx.closePath();
+          ctx.fill();
 
-          // Top-left bevel highlight & bottom-right shadow
-          ctx.fillStyle = 'rgba(165, 195, 228, 0.09)';
-          ctx.fillRect(ox + 3, oy + 3, half - 6, 2);
-          ctx.fillRect(ox + 3, oy + 3, 2, half - 6);
-          ctx.fillStyle = 'rgba(5, 8, 12, 0.34)';
-          ctx.fillRect(ox + 3, oy + half - 5, half - 6, 2);
-          ctx.fillRect(ox + half - 5, oy + 3, 2, half - 6);
+          // Subtle dry rim edge
+          ctx.fillStyle = 'rgba(148, 176, 206, 0.08)';
+          ctx.fillRect(ox + 5, oy + 5, half - 10, 2);
+          ctx.fillRect(ox + 5, oy + 5, 2, half - 10);
+
+          // Inner thin ink chamfer line
+          ctx.strokeStyle = 'rgba(7, 10, 15, 0.65)';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(ox + 5, oy + 5, half - 10, half - 10);
         }
       }
 
-      // Recessed mortar grout seams
-      ctx.fillStyle = '#121720';
-      ctx.fillRect(0, 0, S, 3);
-      ctx.fillRect(0, half - 2, S, 4);
-      ctx.fillRect(0, S - 3, S, 3);
-      ctx.fillRect(0, 0, 3, S);
-      ctx.fillRect(half - 2, 0, 4, S);
-      ctx.fillRect(S - 3, 0, 3, S);
+      // Bold heavy-ink mortar channels (#070a0f)
+      ctx.fillStyle = '#070a0f';
+      ctx.fillRect(0, 0, S, 4);
+      ctx.fillRect(0, half - 3, S, 6);
+      ctx.fillRect(0, S - 4, S, 4);
+      ctx.fillRect(0, 0, 4, S);
+      ctx.fillRect(half - 3, 0, 6, S);
+      ctx.fillRect(S - 4, 0, 4, S);
 
-      // Subtle mineral aggregate flecks & hairline scuff
-      addMicroGrain(ctx, S, S, rng, 420, 1.0);
-      ctx.strokeStyle = 'rgba(10, 14, 20, 0.28)';
-      ctx.lineWidth = 1.2;
+      // Hand-inked branching fracture cracks
+      ctx.strokeStyle = '#070a0f';
+      ctx.lineWidth = 2.0;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(42, 74);
-      ctx.lineTo(68, 86);
-      ctx.lineTo(95, 81);
+      ctx.moveTo(16, 48); ctx.lineTo(44, 62); ctx.lineTo(66, 92); ctx.lineTo(82, 104);
+      ctx.moveTo(44, 62); ctx.lineTo(64, 54);
+      ctx.moveTo(154, 176); ctx.lineTo(186, 164); ctx.lineTo(222, 182);
+      ctx.moveTo(186, 164); ctx.lineTo(194, 144);
       ctx.stroke();
+
+      addMicroGrain(ctx, S, S, rng, 280, 0.8);
       return c;
     }
 
     if (name === 'floor_platform') {
       var rngP = createRng(2083);
-      ctx.fillStyle = '#2d333f';
+      // Style-1 Heavy-Ink weathered Platform 0 cast concrete blocks
+      ctx.fillStyle = '#252e3a';
       ctx.fillRect(0, 0, S, S);
 
-      // Cast ribbed station platform concrete slabs
-      var grad = ctx.createLinearGradient(0, 0, S, 0);
-      grad.addColorStop(0, '#323946');
-      grad.addColorStop(0.5, '#2b313d');
-      grad.addColorStop(1, '#262c37');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, S, S);
+      // Subtle cel wear patches
+      ctx.fillStyle = '#2d3745';
+      ctx.fillRect(6, 6, 116, 114);
+      ctx.fillRect(134, 134, 116, 114);
+      ctx.fillStyle = 'rgba(10, 14, 20, 0.22)';
+      ctx.fillRect(134, 6, 116, 114);
 
-      // Horizontal expansion joints
-      ctx.fillStyle = '#161a22';
+      // Bold heavy-ink expansion joints
+      ctx.fillStyle = '#070a0f';
       ctx.fillRect(0, 0, S, 4);
-      ctx.fillRect(0, 126, S, 4);
-      ctx.fillStyle = 'rgba(180, 200, 224, 0.08)';
-      ctx.fillRect(0, 4, S, 2);
-      ctx.fillRect(0, 130, S, 2);
+      ctx.fillRect(0, 125, S, 5);
+      ctx.fillRect(125, 0, 5, S);
+      ctx.fillRect(S - 4, 0, 4, S);
 
-      // Subtle anti-slip micro grooves
-      for (var gy = 16; gy < S; gy += 16) {
-        if (gy === 128) continue;
-        ctx.fillStyle = 'rgba(12, 16, 22, 0.16)';
-        ctx.fillRect(0, gy, S, 1.5);
-        ctx.fillStyle = 'rgba(195, 212, 232, 0.05)';
-        ctx.fillRect(0, gy + 1.5, S, 1);
+      // Twin inked drainage groove bands
+      for (var band = 0; band < 2; band++) {
+        var by0 = band === 0 ? 44 : 176;
+        for (var g = 0; g < 3; g++) {
+          ctx.fillStyle = '#0a0e15';
+          ctx.fillRect(0, by0 + g * 7, S, 2.5);
+          ctx.fillStyle = 'rgba(155, 182, 210, 0.07)';
+          ctx.fillRect(0, by0 + g * 7 + 2.5, S, 1);
+        }
       }
 
-      // Vertical seam
-      ctx.fillStyle = 'rgba(12, 15, 20, 0.45)';
-      ctx.fillRect(S - 3, 0, 3, S);
-      addMicroGrain(ctx, S, S, rngP, 380, 1.1);
+      // Inked concrete chips & hairline fractures
+      ctx.strokeStyle = '#080b10';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(22, 92); ctx.lineTo(48, 86); ctx.lineTo(66, 98);
+      ctx.moveTo(158, 214); ctx.lineTo(192, 224); ctx.lineTo(212, 210);
+      ctx.stroke();
+
+      addMicroGrain(ctx, S, S, rngP, 260, 0.85);
       return c;
     }
 
     if (name === 'floor_hazard') {
       var rngH = createRng(3019);
-      ctx.fillStyle = '#1c2028';
+      // Style-1 Heavy-Ink worn ochre-amber & obsidian subway warning line
+      ctx.fillStyle = '#151922';
       ctx.fillRect(0, 0, S, S);
 
-      // Crisp metallic frame rails left & right
-      ctx.fillStyle = '#38404e';
-      ctx.fillRect(0, 0, 16, S);
-      ctx.fillRect(S - 16, 0, 16, S);
-      ctx.fillStyle = '#12151b';
-      ctx.fillRect(16, 0, 4, S);
-      ctx.fillRect(S - 20, 0, 4, S);
+      // Heavy-inked iron curb rails left & right
+      ctx.fillStyle = '#2d3544';
+      ctx.fillRect(0, 0, 20, S);
+      ctx.fillRect(S - 20, 0, 20, S);
+      ctx.fillStyle = '#070a0f';
+      ctx.fillRect(0, 0, 4, S);
+      ctx.fillRect(18, 0, 5, S);
+      ctx.fillRect(S - 23, 0, 5, S);
+      ctx.fillRect(S - 4, 0, 4, S);
 
-      // Diagonal safety stripes clipped to center strip
+      // Diagonal weathered ochre-amber & ink-black safety stripes
       ctx.save();
       ctx.beginPath();
-      ctx.rect(20, 0, S - 40, S);
+      ctx.rect(23, 0, S - 46, S);
       ctx.clip();
 
-      ctx.fillStyle = '#191d24';
-      ctx.fillRect(20, 0, S - 40, S);
+      ctx.fillStyle = '#141820';
+      ctx.fillRect(23, 0, S - 46, S);
 
-      var stripeW = 36;
+      var stripeW = 34;
       for (var d = -S; d < S * 2; d += stripeW * 2) {
-        var yGrad = ctx.createLinearGradient(0, d, S, d + S);
-        yGrad.addColorStop(0, '#d8a634');
-        yGrad.addColorStop(0.5, '#e8bc4a');
-        yGrad.addColorStop(1, '#c49028');
-        ctx.fillStyle = yGrad;
+        ctx.fillStyle = '#b48732';
         ctx.beginPath();
         ctx.moveTo(d, 0);
         ctx.lineTo(d + stripeW, 0);
@@ -236,228 +254,271 @@
         ctx.lineTo(d - S, S);
         ctx.closePath();
         ctx.fill();
+
+        // Stepped darker ochre cel shadow along lower half of each stripe
+        ctx.fillStyle = '#89621e';
+        ctx.beginPath();
+        ctx.moveTo(d + stripeW * 0.62, 0);
+        ctx.lineTo(d + stripeW, 0);
+        ctx.lineTo(d + stripeW - S, S);
+        ctx.lineTo(d + stripeW * 0.62 - S, S);
+        ctx.closePath();
+        ctx.fill();
+
+        // Bold black ink outline along stripe edges
+        ctx.strokeStyle = '#070a0f';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(d, 0); ctx.lineTo(d - S, S);
+        ctx.moveTo(d + stripeW, 0); ctx.lineTo(d + stripeW - S, S);
+        ctx.stroke();
+      }
+
+      // Worn ink scuff marks & chipped concrete patches across warning line
+      for (var sc = 0; sc < 24; sc++) {
+        var sx = 24 + rngH() * (S - 56);
+        var sy = rngH() * S;
+        ctx.fillStyle = sc % 3 === 0 ? 'rgba(26, 35, 44, 0.72)' : 'rgba(7, 10, 15, 0.54)';
+        ctx.fillRect(sx, sy, 10 + rngH() * 22, 4 + rngH() * 9);
       }
       ctx.restore();
 
-      // Tactile warning dots along inner edge & industrial scuffing
+      // Tactile ink-rimmed warning studs along rails
       for (var ty = 16; ty < S; ty += 32) {
-        ctx.fillStyle = 'rgba(255, 232, 152, 0.28)';
+        ctx.fillStyle = '#070a0f';
         ctx.beginPath();
-        ctx.arc(8, ty, 3, 0, Math.PI * 2);
-        ctx.arc(S - 8, ty, 3, 0, Math.PI * 2);
+        ctx.arc(10, ty, 5.2, 0, Math.PI * 2);
+        ctx.arc(S - 10, ty, 5.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#a47c32';
+        ctx.beginPath();
+        ctx.arc(10, ty, 3.0, 0, Math.PI * 2);
+        ctx.arc(S - 10, ty, 3.0, 0, Math.PI * 2);
         ctx.fill();
       }
-      addMicroGrain(ctx, S, S, rngH, 460, 1.35);
+
+      // Horizontal ink expansion seam
+      ctx.fillStyle = '#070a0f';
+      ctx.fillRect(0, 126, S, 4);
+      addMicroGrain(ctx, S, S, rngH, 280, 0.95);
       return c;
     }
 
     if (name === 'floor_rail') {
       var rngR = createRng(4099);
-      ctx.fillStyle = '#13161d';
+      // Style-1 Heavy-Ink dark sunken rail trench ballast
+      ctx.fillStyle = '#0f131a';
       ctx.fillRect(0, 0, S, S);
 
-      // Crushed basalt gravel ballast pebbles
-      var pebbleCols = ['#1b2029', '#222834', '#161a22', '#282f3c', '#12151b'];
-      for (var p = 0; p < 520; p++) {
+      // Ink-outlined angular crushed basalt stones (cel-shaded graphic gravel)
+      var pebbleCols = ['#1b212c', '#242b38', '#151a24', '#2a3242', '#12161f'];
+      for (var p = 0; p < 340; p++) {
         var px = rngR() * S;
         var py = rngR() * S;
-        var prx = 2.5 + rngR() * 5.5;
-        var pry = 2.0 + rngR() * 4.2;
+        var prx = 3.2 + rngR() * 6.2;
+        var pry = 2.4 + rngR() * 4.8;
+        var ang = rngR() * Math.PI;
         ctx.fillStyle = pebbleCols[Math.floor(rngR() * pebbleCols.length)];
         ctx.beginPath();
-        ctx.ellipse(px, py, prx, pry, rngR() * Math.PI, 0, Math.PI * 2);
+        ctx.ellipse(px, py, prx, pry, ang, 0, Math.PI * 2);
         ctx.fill();
+        if (p % 2 === 0) {
+          ctx.strokeStyle = 'rgba(5, 7, 11, 0.82)';
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+        }
       }
 
-      // Oil sheen dark band down center
-      var oil = ctx.createLinearGradient(0, 0, S, 0);
-      oil.addColorStop(0, 'rgba(6, 8, 12, 0.35)');
-      oil.addColorStop(0.5, 'rgba(18, 24, 34, 0.55)');
-      oil.addColorStop(1, 'rgba(6, 8, 12, 0.35)');
-      ctx.fillStyle = oil;
-      ctx.fillRect(0, 0, S, S);
+      // Center dark oil-stained channel with crisp cel edge
+      ctx.fillStyle = 'rgba(5, 7, 12, 0.52)';
+      ctx.fillRect(68, 0, S - 136, S);
+      ctx.fillStyle = 'rgba(30, 42, 58, 0.24)';
+      ctx.fillRect(96, 0, S - 192, S);
 
-      // Subtle rusted metallic flecks
-      for (var rf = 0; rf < 70; rf++) {
-        ctx.fillStyle = 'rgba(110, 62, 42, 0.22)';
-        ctx.fillRect(rngR() * S, rngR() * S, 3, 2);
+      // Rusted iron flecks & ink grit
+      for (var rf = 0; rf < 55; rf++) {
+        ctx.fillStyle = 'rgba(116, 58, 36, 0.34)';
+        ctx.fillRect(rngR() * S, rngR() * S, 4, 2.5);
       }
       return c;
     }
 
     if (name === 'wall_concrete') {
       var rngW = createRng(5107);
-      // Upper architectural cast concrete (y: 0..118)
-      var topGrad = ctx.createLinearGradient(0, 0, 0, 118);
-      topGrad.addColorStop(0, '#2a3342');
-      topGrad.addColorStop(0.6, '#333e50');
-      topGrad.addColorStop(1, '#2a3444');
-      ctx.fillStyle = topGrad;
-      ctx.fillRect(0, 0, S, 118);
+      // Style-1 Heavy-Ink cast concrete + glazed dark subway brick wainscot
+      ctx.fillStyle = '#2a3342';
+      ctx.fillRect(0, 0, S, 120);
 
-      // Cast concrete form-tie holes & vertical joint
-      ctx.fillStyle = '#181e28';
-      ctx.fillRect(0, 0, S, 10); // top shadow lip
-      ctx.fillRect(126, 10, 3, 108);
+      // Bold black ink formwork seams & tie-rod holes
+      ctx.fillStyle = '#070a0f';
+      ctx.fillRect(0, 0, S, 8);
+      ctx.fillRect(125, 8, 5, 112);
+      ctx.fillRect(0, 8, 3, 112);
       for (var fh = 0; fh < 4; fh++) {
         var fhx = 32 + fh * 64;
-        ctx.fillStyle = '#19202b';
+        ctx.fillStyle = '#080b10';
         ctx.beginPath();
-        ctx.arc(fhx, 42, 4, 0, Math.PI * 2);
-        ctx.arc(fhx, 92, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(170, 195, 224, 0.14)';
-        ctx.beginPath();
-        ctx.arc(fhx, 43.5, 3, 0, Math.PI);
+        ctx.arc(fhx, 42, 4.5, 0, Math.PI * 2);
+        ctx.arc(fhx, 90, 4.5, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Steel chair-rail molding divider (y: 118..134)
-      var railGrad = ctx.createLinearGradient(0, 118, 0, 134);
-      railGrad.addColorStop(0, '#506078');
-      railGrad.addColorStop(0.35, '#2b3545');
-      railGrad.addColorStop(1, '#141922');
-      ctx.fillStyle = railGrad;
-      ctx.fillRect(0, 118, S, 16);
+      // Inked steel molding rail
+      ctx.fillStyle = '#070a0f';
+      ctx.fillRect(0, 116, S, 20);
+      ctx.fillStyle = '#3b485c';
+      ctx.fillRect(0, 119, S, 6);
+      ctx.fillStyle = '#202836';
+      ctx.fillRect(0, 125, S, 7);
 
-      // Classic subterranean subway glazed ceramic brick wainscot (y: 134..228)
-      ctx.fillStyle = '#1d2531';
-      ctx.fillRect(0, 134, S, 94);
+      // Heavy-ink glazed subway bricks
+      ctx.fillStyle = '#070a0f';
+      ctx.fillRect(0, 136, S, 92);
       var brickH = 18;
       var brickW = 42;
       for (var row = 0; row < 5; row++) {
-        var by = 136 + row * brickH;
+        var by = 138 + row * brickH;
         var shift = (row % 2) * (brickW * 0.5);
         for (var bx = -brickW; bx < S + brickW; bx += brickW) {
-          var shade = 36 + Math.floor(rngW() * 14);
-          ctx.fillStyle = 'rgb(' + shade + ',' + (shade + 9) + ',' + (shade + 22) + ')';
-          ctx.fillRect(bx + shift + 1.5, by + 1.5, brickW - 3, brickH - 3);
-          ctx.fillStyle = 'rgba(180, 212, 240, 0.08)';
-          ctx.fillRect(bx + shift + 1.5, by + 1.5, brickW - 3, 2);
+          var shade = 30 + Math.floor(rngW() * 14);
+          ctx.fillStyle = 'rgb(' + shade + ',' + (shade + 8) + ',' + (shade + 20) + ')';
+          ctx.fillRect(bx + shift + 2.5, by + 2.5, brickW - 5, brickH - 5);
+          ctx.fillStyle = 'rgba(155, 190, 224, 0.08)';
+          ctx.fillRect(bx + shift + 2.5, by + 2.5, brickW - 5, 2);
         }
       }
 
-      // Heavy steel kickplate baseboard (y: 228..256)
-      var baseGrad = ctx.createLinearGradient(0, 228, 0, S);
-      baseGrad.addColorStop(0, '#3a4556');
-      baseGrad.addColorStop(0.25, '#212834');
-      baseGrad.addColorStop(1, '#10141c');
-      ctx.fillStyle = baseGrad;
-      ctx.fillRect(0, 228, S, 28);
+      // Dark iron baseboard
+      ctx.fillStyle = '#070a0f';
+      ctx.fillRect(0, 226, S, 30);
+      ctx.fillStyle = '#1f2734';
+      ctx.fillRect(0, 230, S, 22);
 
-      // Subtle vertical damp streaks
-      for (var ds = 0; ds < 7; ds++) {
+      // Stepped vertical damp ink streaks
+      for (var ds = 0; ds < 6; ds++) {
         var sx2 = rngW() * S;
-        var stg = ctx.createLinearGradient(sx2, 10, sx2, 220);
-        stg.addColorStop(0, 'rgba(6, 10, 16, 0.28)');
-        stg.addColorStop(0.7, 'rgba(6, 10, 16, 0.08)');
-        stg.addColorStop(1, 'rgba(6, 10, 16, 0)');
-        ctx.fillStyle = stg;
-        ctx.fillRect(sx2, 10, 4 + rngW() * 9, 210);
+        ctx.fillStyle = 'rgba(7, 10, 15, 0.34)';
+        ctx.fillRect(sx2, 8, 3 + rngW() * 7, 65 + rngW() * 45);
       }
 
-      addMicroGrain(ctx, S, S, rngW, 380, 0.9);
+      addMicroGrain(ctx, S, S, rngW, 240, 0.75);
       return c;
     }
 
     if (name === 'wall_neon') {
       var rngN = createRng(6203);
-      // Dark architectural metallic transit wall
-      var nBg = ctx.createLinearGradient(0, 0, 0, S);
-      nBg.addColorStop(0, '#1e2838');
-      nBg.addColorStop(0.45, '#243245');
-      nBg.addColorStop(0.55, '#1b2636');
-      nBg.addColorStop(1, '#121822');
-      ctx.fillStyle = nBg;
+      // Style-1 Heavy-Ink dark armored transit wall + framed narrow cyan fluorescent bar
+      ctx.fillStyle = '#151d28';
       ctx.fillRect(0, 0, S, S);
 
-      // Brushed cladding panel seams
-      ctx.fillStyle = '#0e141e';
+      // Stepped cel-shaded dark slate panels (matching wall_concrete.webp mood)
+      ctx.fillStyle = '#1d2734';
+      ctx.fillRect(4, 12, 78, 94);
+      ctx.fillRect(88, 12, 80, 94);
+      ctx.fillRect(174, 12, 78, 94);
+      ctx.fillStyle = '#131b26';
+      ctx.fillRect(4, 144, 78, 78);
+      ctx.fillRect(88, 144, 80, 78);
+      ctx.fillRect(174, 144, 78, 78);
+
+      // Bold heavy-ink panel seams
+      ctx.fillStyle = '#06090e';
       ctx.fillRect(0, 0, S, 10);
-      ctx.fillRect(84, 10, 3, S - 36);
-      ctx.fillRect(170, 10, 3, S - 36);
-      ctx.fillStyle = 'rgba(130, 200, 235, 0.09)';
-      ctx.fillRect(87, 10, 2, S - 36);
-      ctx.fillRect(173, 10, 2, S - 36);
+      ctx.fillRect(82, 10, 5, S - 36);
+      ctx.fillRect(168, 10, 5, S - 36);
+      ctx.fillRect(0, 10, 4, S - 36);
+      ctx.fillRect(S - 4, 10, 4, S - 36);
 
-      // Recessed light trough + glowing cyan transit guide bar (y: 108..134)
-      ctx.fillStyle = '#0b1119';
-      ctx.fillRect(0, 106, S, 30);
+      // Recessed heavy-ink light housing trough
+      ctx.fillStyle = '#06090e';
+      ctx.fillRect(0, 108, S, 28);
+      ctx.fillStyle = '#0f1c28';
+      ctx.fillRect(0, 112, S, 20);
 
-      // Soft neon bloom spill onto adjacent wall panels
-      var spill = ctx.createLinearGradient(0, 68, 0, 174);
-      spill.addColorStop(0, 'rgba(72, 214, 240, 0)');
-      spill.addColorStop(0.38, 'rgba(72, 214, 240, 0.22)');
-      spill.addColorStop(0.5, 'rgba(175, 248, 255, 0.55)');
-      spill.addColorStop(0.62, 'rgba(72, 214, 240, 0.22)');
-      spill.addColorStop(1, 'rgba(72, 214, 240, 0)');
-      ctx.fillStyle = spill;
-      ctx.fillRect(0, 68, S, 106);
+      // Crisp narrow cel-stepped cyan fluorescent tube
+      ctx.fillStyle = 'rgba(64, 198, 224, 0.16)';
+      ctx.fillRect(0, 102, S, 6);
+      ctx.fillRect(0, 136, S, 6);
+      ctx.fillStyle = '#3ec6e2';
+      ctx.fillRect(0, 117, S, 10);
+      ctx.fillStyle = '#b8f0fa';
+      ctx.fillRect(0, 120, S, 4);
+      // Ink housing cross-brackets over fluorescent tube
+      ctx.fillStyle = '#06090e';
+      ctx.fillRect(82, 110, 6, 24);
+      ctx.fillRect(168, 110, 6, 24);
 
-      // Crisp bright fluorescent core bar
-      ctx.fillStyle = '#56e2fa';
-      ctx.fillRect(0, 114, S, 14);
-      ctx.fillStyle = '#dcfbff';
-      ctx.fillRect(0, 118, S, 6);
+      // Muted ochre transit guide hairline
+      ctx.fillStyle = '#06090e';
+      ctx.fillRect(0, 138, S, 8);
+      ctx.fillStyle = '#9e7830';
+      ctx.fillRect(0, 140, S, 4);
 
-      // Subtle golden transit line sub-stripe & station markings
-      ctx.fillStyle = '#d4a348';
-      ctx.fillRect(0, 142, S, 4);
-      ctx.fillStyle = 'rgba(220, 244, 255, 0.35)';
-      ctx.fillRect(18, 48, 48, 4);
-      ctx.fillRect(18, 58, 30, 3);
-      ctx.fillRect(104, 48, 52, 4);
-      ctx.fillRect(188, 48, 44, 4);
+      ctx.fillStyle = 'rgba(148, 186, 208, 0.24)';
+      ctx.fillRect(16, 44, 48, 4);
+      ctx.fillRect(16, 54, 30, 3);
+      ctx.fillRect(102, 44, 52, 4);
+      ctx.fillRect(188, 44, 44, 4);
 
-      // Lower kickplate
-      ctx.fillStyle = '#141a24';
-      ctx.fillRect(0, 224, S, 32);
-      ctx.fillStyle = '#2d3a4d';
-      ctx.fillRect(0, 224, S, 3);
+      // Heavy-inked iron kickplate
+      ctx.fillStyle = '#06090e';
+      ctx.fillRect(0, 222, S, 34);
+      ctx.fillStyle = '#171f2a';
+      ctx.fillRect(0, 226, S, 26);
 
-      addMicroGrain(ctx, S, S, rngN, 260, 0.8);
+      addMicroGrain(ctx, S, S, rngN, 200, 0.65);
       return c;
     }
 
     if (name === 'train_hull') {
       var rngT = createRng(7321);
-      var tGrad = ctx.createLinearGradient(0, 0, 0, S);
-      tGrad.addColorStop(0, '#272c38');
-      tGrad.addColorStop(0.5, '#1d222c');
-      tGrad.addColorStop(1, '#14171f');
-      ctx.fillStyle = tGrad;
+      // Style-1 Heavy-Ink scorched steel Ghost Train No.0 hull
+      ctx.fillStyle = '#1d222c';
       ctx.fillRect(0, 0, S, S);
+      ctx.fillStyle = '#252b37';
+      ctx.fillRect(0, 12, S, 116);
 
-      // Corrugated steel carriage ribs
-      for (var ry = 20; ry < S - 24; ry += 14) {
-        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      // Heavy-ink corrugated carriage ribs
+      for (var ry = 22; ry < S - 26; ry += 16) {
+        ctx.fillStyle = 'rgba(175, 198, 224, 0.07)';
         ctx.fillRect(0, ry, S, 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.34)';
-        ctx.fillRect(0, ry + 5, S, 3);
+        ctx.fillStyle = '#070a0f';
+        ctx.fillRect(0, ry + 6, S, 4);
       }
 
-      // Crimson spectral transit livery stripe
-      ctx.fillStyle = '#781d2a';
+      // Crimson spectral livery band with bold black ink borders
+      ctx.fillStyle = '#070a0f';
+      ctx.fillRect(0, 132, S, 36);
+      ctx.fillStyle = '#841b2a';
       ctx.fillRect(0, 136, S, 24);
-      ctx.fillStyle = '#c43245';
-      ctx.fillRect(0, 143, S, 6);
-      ctx.fillStyle = '#e8c47a';
+      ctx.fillStyle = '#cc2e44';
+      ctx.fillRect(0, 141, S, 8);
+      ctx.fillStyle = '#d8b468';
       ctx.fillRect(0, 162, S, 3);
 
-      // Vertical carriage panel seams & rivets
-      ctx.fillStyle = '#0d1016';
-      ctx.fillRect(64, 0, 3, S);
-      ctx.fillRect(192, 0, 3, S);
-      for (var rv = 14; rv < S; rv += 24) {
-        ctx.fillStyle = '#3d4556';
+      // Heavy vertical panel seams & ink-outlined rivets
+      ctx.fillStyle = '#06080d';
+      ctx.fillRect(62, 0, 5, S);
+      ctx.fillRect(190, 0, 5, S);
+      ctx.fillRect(0, 0, S, 6);
+      ctx.fillRect(0, S - 6, S, 6);
+      for (var rv = 16; rv < S; rv += 24) {
+        ctx.fillStyle = '#06080d';
         ctx.beginPath();
-        ctx.arc(58, rv, 2.2, 0, Math.PI * 2);
-        ctx.arc(72, rv, 2.2, 0, Math.PI * 2);
-        ctx.arc(186, rv, 2.2, 0, Math.PI * 2);
-        ctx.arc(200, rv, 2.2, 0, Math.PI * 2);
+        ctx.arc(54, rv, 3.4, 0, Math.PI * 2);
+        ctx.arc(74, rv, 3.4, 0, Math.PI * 2);
+        ctx.arc(182, rv, 3.4, 0, Math.PI * 2);
+        ctx.arc(202, rv, 3.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#485266';
+        ctx.beginPath();
+        ctx.arc(54, rv, 1.8, 0, Math.PI * 2);
+        ctx.arc(74, rv, 1.8, 0, Math.PI * 2);
+        ctx.arc(182, rv, 1.8, 0, Math.PI * 2);
+        ctx.arc(202, rv, 1.8, 0, Math.PI * 2);
         ctx.fill();
       }
-      addMicroGrain(ctx, S, S, rngT, 320, 1.0);
+      addMicroGrain(ctx, S, S, rngT, 240, 0.85);
       return c;
     }
 
@@ -468,7 +529,7 @@
   function buildTileBumpCanvas(name) {
     var S = 256;
     var c = makeCanvas(S, S);
-    var ctx = c.getContext('2d');
+    var ctx = getCtx2D(c, true);
     if (!ctx) return c;
     var rng = createRng(name === 'wall_concrete' ? 911 : (name === 'floor_slate' ? 922 : (name === 'floor_hazard' ? 944 : 933)));
 
@@ -633,8 +694,8 @@
     var w = heightCanvas.width || 256;
     var h = heightCanvas.height || 256;
     var out = makeCanvas(w, h);
-    var srcCtx = heightCanvas.getContext ? heightCanvas.getContext('2d') : null;
-    var dstCtx = out.getContext ? out.getContext('2d') : null;
+    var srcCtx = getCtx2D(heightCanvas, true);
+    var dstCtx = getCtx2D(out, false);
     if (!srcCtx || !dstCtx || typeof srcCtx.getImageData !== 'function') return out;
 
     var src = srcCtx.getImageData(0, 0, w, h).data;
@@ -698,78 +759,75 @@
   function buildTileRoughnessCanvas(name) {
     var S = 256;
     var c = makeCanvas(S, S);
-    var ctx = c.getContext('2d');
+    var ctx = getCtx2D(c, false);
     if (!ctx) return c;
     var rng = createRng(name === 'wall_concrete' ? 7711 : (name === 'floor_slate' ? 7722 : 7733));
 
-    if (name === 'floor_slate') {
-      // Polished damp terrazzo slab interiors (0.42..0.58) vs matte dusty grout joints (0.92)
-      ctx.fillStyle = '#848484';
+    if (name === 'floor_slate' || name === 'floor_platform') {
+      // Matte heavy-ink comic stone/concrete (0.76..0.94) so dry tiles never gleam like plastic;
+      // damp reflective contrast is reserved for hard-edge puddles and metallic tracks.
+      ctx.fillStyle = '#c8c8c8';
       ctx.fillRect(0, 0, S, S);
       var half = S / 2;
       for (var sy = 0; sy < 2; sy++) {
         for (var sx = 0; sx < 2; sx++) {
           var ox = sx * half;
           var oy = sy * half;
-          var g = ctx.createRadialGradient(ox + half * 0.5, oy + half * 0.5, 8, ox + half * 0.5, oy + half * 0.5, half * 0.65);
-          g.addColorStop(0, '#6a6a6a'); // smoother worn foot-traffic center catches subtle specular!
-          g.addColorStop(1, '#989898');
-          ctx.fillStyle = g;
-          ctx.fillRect(ox + 4, oy + 4, half - 8, half - 8);
+          ctx.fillStyle = ((sx + sy) % 2 === 0) ? '#bdbdbd' : '#c6c6c6';
+          ctx.fillRect(ox + 5, oy + 5, half - 10, half - 10);
         }
       }
-      ctx.fillStyle = '#e8e8e8'; // rough grout seams
+      ctx.fillStyle = '#f0f0f0'; // dead-matte dark ink grout seams
       ctx.fillRect(0, 0, S, 4);
-      ctx.fillRect(0, half - 2, S, 4);
+      ctx.fillRect(0, half - 3, S, 6);
       ctx.fillRect(0, S - 4, S, 4);
       ctx.fillRect(0, 0, 4, S);
-      ctx.fillRect(half - 2, 0, 4, S);
+      ctx.fillRect(half - 3, 0, 6, S);
       ctx.fillRect(S - 4, 0, 4, S);
-      addMicroGrain(ctx, S, S, rng, 420, 1.5, 'rgba(240,240,240,0.16)', 'rgba(60,60,60,0.18)');
+      addMicroGrain(ctx, S, S, rng, 340, 1.1, 'rgba(245,245,245,0.14)', 'rgba(130,130,130,0.12)');
     } else if (name === 'wall_concrete') {
-      // Upper matte poured concrete (0.84) + glossy glazed ceramic subway tile wainscot (0.36) + brushed steel kickplate (0.45)
-      ctx.fillStyle = '#d6d6d6';
+      // Matte poured concrete (0.88) + subtle satin dark subway bricks (0.64) + brushed iron baseboard (0.58)
+      ctx.fillStyle = '#e0e0e0';
       ctx.fillRect(0, 0, S, 118);
-      ctx.fillStyle = '#6c6c6c'; // metallic dado rail
-      ctx.fillRect(0, 118, S, 16);
-      ctx.fillStyle = '#5c5c5c'; // glossy ceramic subway tiles!
-      ctx.fillRect(0, 134, S, 94);
-      ctx.fillStyle = '#dcdcdc'; // matte mortar lines between glossy bricks
+      ctx.fillStyle = '#929292'; // inked dado rail
+      ctx.fillRect(0, 118, S, 18);
+      ctx.fillStyle = '#a4a4a4'; // subdued satin glazed bricks (no specular glare)
+      ctx.fillRect(0, 136, S, 92);
+      ctx.fillStyle = '#ededed'; // dead-matte ink mortar lines
       for (var r = 0; r < 5; r++) {
-        var by = 136 + r * 18;
-        ctx.fillRect(0, by, S, 2.5);
+        var by = 138 + r * 18;
+        ctx.fillRect(0, by, S, 3);
         var sh = (r % 2) * 21;
         for (var bx = -42; bx < S + 42; bx += 42) {
-          ctx.fillRect(bx + sh, by, 2.5, 18);
+          ctx.fillRect(bx + sh, by, 3, 18);
         }
       }
-      ctx.fillStyle = '#747474';
+      ctx.fillStyle = '#969696';
       ctx.fillRect(0, 228, S, 28);
-      addMicroGrain(ctx, S, S, rng, 300, 1.2, 'rgba(235,235,235,0.14)', 'rgba(60,60,60,0.14)');
+      addMicroGrain(ctx, S, S, rng, 260, 1.0, 'rgba(240,240,240,0.12)', 'rgba(110,110,110,0.10)');
     } else if (name === 'wall_neon') {
-      // Brushed metal panels (0.52) + glossy glass light diffuser (0.18)
-      ctx.fillStyle = '#828282';
+      ctx.fillStyle = '#a8a8a8';
       ctx.fillRect(0, 0, S, S);
-      ctx.fillStyle = '#2e2e2e';
-      ctx.fillRect(0, 110, S, 22);
-      addMicroGrain(ctx, S, S, rng, 240, 1.1, 'rgba(220,220,220,0.1)', 'rgba(40,40,40,0.12)');
+      ctx.fillStyle = '#484848';
+      ctx.fillRect(0, 110, S, 24);
+      addMicroGrain(ctx, S, S, rng, 220, 0.9, 'rgba(225,225,225,0.10)', 'rgba(90,90,90,0.10)');
     } else if (name === 'floor_hazard') {
-      ctx.fillStyle = '#9a9a9a';
+      ctx.fillStyle = '#bcbcbc';
       ctx.fillRect(0, 0, S, S);
-      ctx.fillStyle = '#686868';
-      ctx.fillRect(0, 0, 16, S);
-      ctx.fillRect(S - 16, 0, 16, S);
-      addMicroGrain(ctx, S, S, rng, 340, 1.6, 'rgba(240,240,240,0.18)', 'rgba(60,60,60,0.18)');
+      ctx.fillStyle = '#888888';
+      ctx.fillRect(0, 0, 20, S);
+      ctx.fillRect(S - 20, 0, 20, S);
+      addMicroGrain(ctx, S, S, rng, 300, 1.2, 'rgba(240,240,240,0.14)', 'rgba(100,100,100,0.12)');
     } else if (name === 'train_hull') {
-      ctx.fillStyle = '#707070';
+      ctx.fillStyle = '#8e8e8e';
       ctx.fillRect(0, 0, S, S);
-      ctx.fillStyle = '#4e4e4e';
-      ctx.fillRect(0, 136, S, 26);
-      addMicroGrain(ctx, S, S, rng, 280, 1.4, 'rgba(220,220,220,0.14)', 'rgba(40,40,40,0.16)');
+      ctx.fillStyle = '#6c6c6c';
+      ctx.fillRect(0, 134, S, 30);
+      addMicroGrain(ctx, S, S, rng, 260, 1.1, 'rgba(225,225,225,0.12)', 'rgba(70,70,70,0.12)');
     } else {
-      ctx.fillStyle = '#b4b4b4';
+      ctx.fillStyle = '#d4d4d4';
       ctx.fillRect(0, 0, S, S);
-      addMicroGrain(ctx, S, S, rng, 360, 1.5, 'rgba(240,240,240,0.16)', 'rgba(80,80,80,0.16)');
+      addMicroGrain(ctx, S, S, rng, 320, 1.2, 'rgba(245,245,245,0.14)', 'rgba(110,110,110,0.12)');
     }
     return c;
   }
@@ -899,7 +957,7 @@
 
     var S = 128;
     var c = makeCanvas(S, S);
-    var ctx = c.getContext('2d');
+    var ctx = getCtx2D(c, true);
     if (!ctx) return c;
     ctx.imageSmoothingEnabled = true;
 
@@ -1395,7 +1453,7 @@
     var W = 160;
     var H = 192;
     var c = makeCanvas(W, H);
-    var ctx = c.getContext('2d');
+    var ctx = getCtx2D(c, true);
     if (!ctx) return c;
     ctx.imageSmoothingEnabled = true;
 
@@ -1648,8 +1706,8 @@
     var w = srcCanvas.width || 128;
     var h = srcCanvas.height || 128;
     var out = makeCanvas(w, h);
-    var srcCtx = srcCanvas.getContext ? srcCanvas.getContext('2d') : null;
-    var dstCtx = out.getContext ? out.getContext('2d') : null;
+    var srcCtx = getCtx2D(srcCanvas, true);
+    var dstCtx = getCtx2D(out, false);
     if (!srcCtx || !dstCtx || typeof srcCtx.getImageData !== 'function') return out;
 
     var src = srcCtx.getImageData(0, 0, w, h).data;
@@ -1740,8 +1798,8 @@
     var w = srcCanvas.width || 128;
     var h = srcCanvas.height || 128;
     var out = makeCanvas(w, h);
-    var srcCtx = srcCanvas.getContext ? srcCanvas.getContext('2d') : null;
-    var dstCtx = out.getContext ? out.getContext('2d') : null;
+    var srcCtx = getCtx2D(srcCanvas, true);
+    var dstCtx = getCtx2D(out, false);
     if (!srcCtx || !dstCtx || typeof srcCtx.getImageData !== 'function') return out;
 
     var src = srcCtx.getImageData(0, 0, w, h).data;
@@ -2338,15 +2396,20 @@
     if (!entry || !entry.canvas || !entry.tex) return;
     var url = resolveExternalTileUrl(entry.name);
 
+    var TILE_TEX_SIZE = 512;
+
     if (!url) {
       if (entry.loadedUrl) {
         var fallback = buildTileCanvas(entry.name);
-        entry.canvas.width = fallback.width;
-        entry.canvas.height = fallback.height;
-        var fctx = entry.canvas.getContext('2d');
-        fctx.imageSmoothingEnabled = true;
-        fctx.clearRect(0, 0, entry.canvas.width, entry.canvas.height);
-        fctx.drawImage(fallback, 0, 0);
+        var dstW0 = entry.canvas.width || TILE_TEX_SIZE;
+        var dstH0 = entry.canvas.height || TILE_TEX_SIZE;
+        var fctx = getCtx2D(entry.canvas, false);
+        if (fctx) {
+          fctx.imageSmoothingEnabled = true;
+          if ('imageSmoothingQuality' in fctx) fctx.imageSmoothingQuality = 'high';
+          fctx.clearRect(0, 0, dstW0, dstH0);
+          fctx.drawImage(fallback, 0, 0, dstW0, dstH0);
+        }
         entry.loadedUrl = null;
         if (entry.tex && typeof entry.tex === 'object') {
           entry.tex.needsUpdate = true;
@@ -2364,17 +2427,15 @@
     }
     img.onload = function () {
       try {
-        var nw = img.naturalWidth || img.width || 256;
-        var nh = img.naturalHeight || img.height || 256;
-        var targetSize = (nw >= 256 && nh >= 256) ? 256 : ((nw >= 128 && nh >= 128) ? 128 : 64);
-        if (entry.canvas.width !== targetSize || entry.canvas.height !== targetSize) {
-          entry.canvas.width = targetSize;
-          entry.canvas.height = targetSize;
-        }
-        var ctx = entry.canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = false;
-        ctx.clearRect(0, 0, targetSize, targetSize);
-        ctx.drawImage(img, 0, 0, targetSize, targetSize);
+        // Never resize entry.canvas after creation (WebGL2 texStorage2D immutable storage)
+        var dstW = entry.canvas.width || TILE_TEX_SIZE;
+        var dstH = entry.canvas.height || TILE_TEX_SIZE;
+        var ctx = getCtx2D(entry.canvas, false);
+        if (!ctx) return;
+        ctx.imageSmoothingEnabled = true;
+        if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
+        ctx.clearRect(0, 0, dstW, dstH);
+        ctx.drawImage(img, 0, 0, dstW, dstH);
         entry.loadedUrl = url;
         if (entry.tex && typeof entry.tex === 'object') {
           entry.tex.needsUpdate = true;
@@ -2388,12 +2449,15 @@
   /* --------------------------------------------------------------------------
    * Public API (Cached High-Res LinearFilter THREE.CanvasTexture)
    * -------------------------------------------------------------------------- */
+  var FIXED_TILE_TEX_SIZE = 512;
+
   function getTileTexture(name) {
     var tileName = String(name || 'floor_slate');
     var key = 'tile:' + tileName;
     if (textureCache[key]) return textureCache[key];
-    var canvas = buildTileCanvas(tileName);
-    var tex = toTexture(canvas, true, { srgb: true, mipmaps: true, anisotropy: 4, nearest: true });
+    var fallback = buildTileCanvas(tileName);
+    var canvas = cloneCanvasToFixedSize(fallback, FIXED_TILE_TEX_SIZE, FIXED_TILE_TEX_SIZE);
+    var tex = toTexture(canvas, true, { srgb: true, mipmaps: true, anisotropy: 4, nearest: false });
     textureCache[key] = tex;
     var entry = { name: tileName, canvas: canvas, tex: tex, loadedUrl: null };
     tileEntries[tileName] = entry;
@@ -2406,7 +2470,7 @@
     var key = 'tileBump:' + tileName;
     if (textureCache[key]) return textureCache[key];
     var canvas = buildTileBumpCanvas(tileName);
-    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4, nearest: true });
+    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4, nearest: false });
     textureCache[key] = tex;
     return tex;
   }
@@ -2416,7 +2480,7 @@
     var key = 'tileNormal:' + tileName;
     if (textureCache[key]) return textureCache[key];
     var canvas = buildTileNormalCanvas(tileName);
-    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4, nearest: true });
+    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4, nearest: false });
     textureCache[key] = tex;
     return tex;
   }
@@ -2426,7 +2490,7 @@
     var key = 'tileRough:' + tileName;
     if (textureCache[key]) return textureCache[key];
     var canvas = buildTileRoughnessCanvas(tileName);
-    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4, nearest: true });
+    var tex = toTexture(canvas, true, { srgb: false, mipmaps: true, anisotropy: 4, nearest: false });
     textureCache[key] = tex;
     return tex;
   }
@@ -2499,7 +2563,7 @@
     var w = Math.max(16, Number(targetW) || (src && src.width) || 256);
     var h = Math.max(16, Number(targetH) || (src && src.height) || 256);
     var c = makeCanvas(w, h);
-    var ctx = c.getContext ? c.getContext('2d') : null;
+    var ctx = getCtx2D(c, true);
     if (ctx && src && typeof ctx.drawImage === 'function') {
       try {
         ctx.imageSmoothingEnabled = true;
@@ -2575,7 +2639,7 @@
     var dstH = entry.canvas.height || 256;
     var frameW = Math.floor(nw / 4);
     var frameH = nh;
-    var ctx = entry.canvas.getContext ? entry.canvas.getContext('2d') : null;
+    var ctx = getCtx2D(entry.canvas, true);
     if (!ctx) return false;
     ctx.imageSmoothingEnabled = true;
     if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
@@ -2596,9 +2660,9 @@
     var srcWork = (albedoCanvas.width === w && albedoCanvas.height === h)
       ? albedoCanvas
       : cloneCanvasToFixedSize(albedoCanvas, w, h);
-    var srcCtx = srcWork.getContext ? srcWork.getContext('2d') : null;
+    var srcCtx = getCtx2D(srcWork, true);
     if (!srcCtx || typeof srcCtx.getImageData !== 'function') return false;
-    var dstCtx = targetCanvas.getContext ? targetCanvas.getContext('2d') : null;
+    var dstCtx = getCtx2D(targetCanvas, false);
     if (!dstCtx) return false;
 
     var src = srcCtx.getImageData(0, 0, w, h).data;
@@ -2666,9 +2730,9 @@
     var srcWork = (albedoCanvas.width === w && albedoCanvas.height === h)
       ? albedoCanvas
       : cloneCanvasToFixedSize(albedoCanvas, w, h);
-    var srcCtx = srcWork.getContext ? srcWork.getContext('2d') : null;
+    var srcCtx = getCtx2D(srcWork, true);
     if (!srcCtx || typeof srcCtx.getImageData !== 'function') return false;
-    var dstCtx = targetCanvas.getContext ? targetCanvas.getContext('2d') : null;
+    var dstCtx = getCtx2D(targetCanvas, false);
     if (!dstCtx) return false;
 
     var src = srcCtx.getImageData(0, 0, w, h).data;

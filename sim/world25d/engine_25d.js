@@ -16,7 +16,7 @@
   var FLOOR_Y = 0.0;
   var PLATFORM_Y = 0.04;
   var HAZARD_Y = 0.05;
-  var TRAIN_X = 51.5;
+  var TRAIN_X = 213.5;
   var TRAIN_CYCLE_SEC = 55;
   var TRAIN_DWELL_SEC = 10;
   var EXAM_DURATION_SEC = 540; // 9 minutes real-time compressed exam clock
@@ -50,6 +50,106 @@
   // Station fixtures within this radius of an EMP detonation black out.
   var EMP_BLACKOUT_RADIUS = 22.0;
 
+  // Death Exam Boss ("零号检票员") authoritative tuning & counterplay parameters
+  var BOSS_DEATH_EXAM_CONFIG = {
+    maxHp: 520,
+    phase2Threshold: 0.55,
+    ruleArmorMult: 0.58,
+    ruleArmorOverride50Mult: 0.75,
+    armorBrokenMult: 1.45,
+    armorBreakDuration: 4.5,
+    stunImmuneDuration: 2.2,
+    lungeDamageP1: 56,
+    lungeDamageP2: 68,
+    lungeSanityP2: 14,
+    lungeAllyDamageP1: 42,
+    lungeAllyDamageP2: 52,
+    cleaveDamageP1: 40,
+    cleaveDamageP2: 48,
+    cleaveSanityP2: 8,
+    gazeDamage: 34,
+    gazeSanityLoss: 18,
+    gazeBindSec: 1.4,
+    slamDamage: 46,
+    slamSanityLoss: 16,
+    slamRadius: 7.8
+  };
+
+  function computePlayerOrbiterCount(ownedItems, charVis) {
+    if (!Array.isArray(ownedItems) || ownedItems.length === 0) {
+      return 0;
+    }
+    var raw = Number(charVis && charVis.orbiterCount);
+    if (!isFinite(raw)) raw = 1;
+    return Math.max(0, Math.min(4, Math.round(raw)));
+  }
+
+  function hasPassiveReconItem(ownedItems) {
+    if (!Array.isArray(ownedItems) || ownedItems.length === 0) return false;
+    var reconTagSet = {
+      '侦察': true, '洞察': true, '雷达': true, '热成像': true, '阴阳眼': true,
+      '声呐': true, '透视': true, '预知': true, '神识': true, '天眼': true,
+      '望气': true, '灵视': true, '探测': true, '扫描': true, '全知': true
+    };
+    var reconNameRx = /(侦察|声呐|雷达|热成像|阴阳眼|天眼|灵视|透视|洞察|望气|预知|扫描|探测|写轮眼|白眼|直死|千里眼|心眼)/;
+    for (var i = 0; i < ownedItems.length; i++) {
+      var it = ownedItems[i];
+      if (!it) continue;
+      if (it.activeSkill && it.activeSkill.role === 'recon') return true;
+      if (it.archetype === 'recon_pulse') return true;
+      if (Array.isArray(it.tags)) {
+        for (var t = 0; t < it.tags.length; t++) {
+          if (reconTagSet[String(it.tags[t])]) return true;
+        }
+      }
+      if (typeof it.name === 'string' && reconNameRx.test(it.name)) return true;
+    }
+    return false;
+  }
+
+  function evaluatePointVisibility(params) {
+    if (!params) return false;
+    var dx = (Number(params.tx) || 0) - (Number(params.px) || 0);
+    var dz = (Number(params.tz) || 0) - (Number(params.pz) || 0);
+    var dist = Math.sqrt(dx * dx + dz * dz);
+    if (params.reconActive) {
+      return dist <= 40.0;
+    }
+    if (params.hasPassiveRecon) {
+      return dist <= 26.0;
+    }
+    var sameZone = !params.playerZone || !params.targetZone || (params.playerZone === params.targetZone);
+    if (!sameZone) {
+      // Strictly block seeing into next rooms unless literally peering through an open doorway right in front
+      return dist <= 6.2 && !!params.hasLineOfSight;
+    }
+    return dist <= 22.0 && !!params.hasLineOfSight;
+  }
+
+  function computeBossDamageTaken(rawAmount, state) {
+    var base = Math.max(1, Number(rawAmount) || 1);
+    var st = state || {};
+    if (st.ignoreRuleArmor) {
+      return { damage: Math.max(1, Math.round(base)), armorMitigated: false, armorVulnerable: false };
+    }
+    var broken = (Number(st.armorBrokenTimer) || 0) > 0 || (Number(st.stunTimer) || 0) > 0;
+    if (broken) {
+      return {
+        damage: Math.max(1, Math.round(base * BOSS_DEATH_EXAM_CONFIG.armorBrokenMult)),
+        armorMitigated: false,
+        armorVulnerable: true
+      };
+    }
+    var mult = (Number(st.overridePct) || 0) >= 50
+      ? BOSS_DEATH_EXAM_CONFIG.ruleArmorOverride50Mult
+      : BOSS_DEATH_EXAM_CONFIG.ruleArmorMult;
+    return {
+      damage: Math.max(1, Math.round(base * mult)),
+      armorMitigated: true,
+      armorVulnerable: false
+    };
+  }
+
   // Sub-stepped swept collision against StationMap walls (grid=1) and rail_trench (grid=4).
   // Prevents fast dashes, lunges or knockback from tunneling across walls or vaulting onto tracks.
   function resolveSweptMovement(mapApi, fromX, fromZ, toX, toZ, radius) {
@@ -58,8 +158,8 @@
       return { x: toX, z: toZ, hit: false, hitWall: false, hitRailEdge: false, normalX: 0, normalZ: 0 };
     }
     var grid = (typeof mapApi.getGrid === 'function') ? mapApi.getGrid() : null;
-    var gridW = mapApi.GRID_W || 56;
-    var gridH = mapApi.GRID_H || 38;
+    var gridW = mapApi.GRID_W || 224;
+    var gridH = mapApi.GRID_H || 152;
 
     function cellTypeAt(gx, gz) {
       var ix = Math.floor(gx);
@@ -187,6 +287,192 @@
     platform0:  { id: 'platform0',  name: '0号站台铁轨',   code: 'Z-06', cx: 47, cz: 18, color: '#e69c3c' }
   };
 
+  // Per-zone dynamic scene asset, lighting, fog, atmospheric particle, and audio configurations.
+  // Driven by StationMap.ZONES / ArtTokens.ZONES so crossing any zone boundary transforms
+  // the rendered atmosphere, active scene asset rig, background ambience, and HUD live.
+  var ZONE_SCENE_CONFIGS = {
+    concourse: {
+      id: 'concourse',
+      accentHex: 0x68c8de,
+      bgColor: 0x060b12,
+      fogColor: 0x070f18,
+      fogDensity: 0.0195,
+      ambientColor: 0x3b5876,
+      ambientIntensity: 0.28,
+      hemiSky: 0x76badc,
+      hemiGround: 0x132230,
+      hemiIntensity: 0.36,
+      keyColor: 0xd8f4ff,
+      keyIntensity: 0.42,
+      rimColor: 0x68c8de,
+      rimIntensity: 0.24,
+      exposure: 1.16,
+      flashColor: 0xdcf5ff,
+      playerGlowColor: 0x7cc8e8,
+      vignetteRgba: 'rgba(6, 16, 26, 0.70)',
+      dust: { color: 0x8cd8f0, size: 0.11, opacity: 0.34, driftX: 0.14, driftY: 0.07, driftZ: 0.03 },
+      ambientFx: 'fluorescent_motes',
+      assetSet: { key: 'concourse_atrium_rig', groundHazeOpacity: 0.15, shaftOpacity: 0.16, pulseHz: 1.35 },
+      audio: { id: 'concourse_fluorescent', sceneMode: 'station_tense', label: '日光灯镇流器 · 检票厅混响' }
+    },
+    corridor: {
+      id: 'corridor',
+      accentHex: 0xd6b274,
+      bgColor: 0x0c0906,
+      fogColor: 0x15100a,
+      fogDensity: 0.0225,
+      ambientColor: 0x5f4c34,
+      ambientIntensity: 0.27,
+      hemiSky: 0xdeb87c,
+      hemiGround: 0x241a10,
+      hemiIntensity: 0.35,
+      keyColor: 0xffe5be,
+      keyIntensity: 0.40,
+      rimColor: 0xd69852,
+      rimIntensity: 0.28,
+      exposure: 1.14,
+      flashColor: 0xfff0d8,
+      playerGlowColor: 0xd6b274,
+      vignetteRgba: 'rgba(20, 13, 6, 0.74)',
+      dust: { color: 0xe6c288, size: 0.125, opacity: 0.40, driftX: 0.28, driftY: 0.05, driftZ: 0.02 },
+      ambientFx: 'sodium_haze',
+      assetSet: { key: 'corridor_sodium_rig', groundHazeOpacity: 0.18, shaftOpacity: 0.18, pulseHz: 1.05 },
+      audio: { id: 'corridor_draft', sceneMode: 'station_tense', label: '钠灯穿堂风 · 通道回声' }
+    },
+    dispatch: {
+      id: 'dispatch',
+      accentHex: 0x52c4a2,
+      bgColor: 0x040e0c,
+      fogColor: 0x061713,
+      fogDensity: 0.0205,
+      ambientColor: 0x2b5e51,
+      ambientIntensity: 0.29,
+      hemiSky: 0x62cfa9,
+      hemiGround: 0x0e231d,
+      hemiIntensity: 0.37,
+      keyColor: 0xc8ffec,
+      keyIntensity: 0.41,
+      rimColor: 0x52c4a2,
+      rimIntensity: 0.29,
+      exposure: 1.17,
+      flashColor: 0xd4fff2,
+      playerGlowColor: 0x52c4a2,
+      vignetteRgba: 'rgba(4, 20, 15, 0.72)',
+      dust: { color: 0x64e8be, size: 0.105, opacity: 0.38, driftX: 0.06, driftY: 0.12, driftZ: -0.04 },
+      ambientFx: 'crt_scan_motes',
+      assetSet: { key: 'dispatch_crt_rig', groundHazeOpacity: 0.17, shaftOpacity: 0.19, pulseHz: 2.15 },
+      audio: { id: 'dispatch_crt_43hz', sceneMode: 'station_tense', label: '机柜散热 · 43.2Hz 载波滴答' }
+    },
+    substation: {
+      id: 'substation',
+      accentHex: 0x6e9eff,
+      bgColor: 0x050915,
+      fogColor: 0x070e21,
+      fogDensity: 0.022,
+      ambientColor: 0x324d82,
+      ambientIntensity: 0.28,
+      hemiSky: 0x74a8ff,
+      hemiGround: 0x101833,
+      hemiIntensity: 0.36,
+      keyColor: 0xd4e7ff,
+      keyIntensity: 0.40,
+      rimColor: 0x6e9eff,
+      rimIntensity: 0.31,
+      exposure: 1.16,
+      flashColor: 0xd8ecff,
+      playerGlowColor: 0x6e9eff,
+      vignetteRgba: 'rgba(6, 12, 28, 0.74)',
+      dust: { color: 0x82b6ff, size: 0.12, opacity: 0.42, driftX: 0.09, driftY: 0.17, driftZ: 0.05 },
+      ambientFx: 'ozone_sparks',
+      assetSet: { key: 'substation_arc_rig', groundHazeOpacity: 0.18, shaftOpacity: 0.20, pulseHz: 3.1 },
+      audio: { id: 'substation_hv_hum', sceneMode: 'station_tense', label: '50Hz 变压器嗡鸣 · 臭氧电弧' }
+    },
+    tunnel: {
+      id: 'tunnel',
+      accentHex: 0xa884e0,
+      bgColor: 0x090612,
+      fogColor: 0x110a1f,
+      fogDensity: 0.0245,
+      ambientColor: 0x4e3970,
+      ambientIntensity: 0.26,
+      hemiSky: 0xac88e4,
+      hemiGround: 0x181026,
+      hemiIntensity: 0.34,
+      keyColor: 0xe6d6ff,
+      keyIntensity: 0.37,
+      rimColor: 0xa884e0,
+      rimIntensity: 0.29,
+      exposure: 1.13,
+      flashColor: 0xeee4ff,
+      playerGlowColor: 0xa884e0,
+      vignetteRgba: 'rgba(15, 8, 26, 0.78)',
+      dust: { color: 0xc29ef2, size: 0.135, opacity: 0.45, driftX: -0.10, driftY: -0.09, driftZ: 0.08 },
+      ambientFx: 'steam_drip',
+      assetSet: { key: 'tunnel_mist_rig', groundHazeOpacity: 0.22, shaftOpacity: 0.18, pulseHz: 0.88 },
+      audio: { id: 'tunnel_steam_drip', sceneMode: 'station_tense', label: '蒸汽管嘶鸣 · 暗渠滴水回响' }
+    },
+    platform0: {
+      id: 'platform0',
+      accentHex: 0xe69c3c,
+      bgColor: 0x0c0805,
+      fogColor: 0x181008,
+      fogDensity: 0.0185,
+      ambientColor: 0x684a28,
+      ambientIntensity: 0.30,
+      hemiSky: 0xefb45a,
+      hemiGround: 0x26160a,
+      hemiIntensity: 0.38,
+      keyColor: 0xffe2b4,
+      keyIntensity: 0.44,
+      rimColor: 0xe69c3c,
+      rimIntensity: 0.33,
+      exposure: 1.19,
+      flashColor: 0xfff0d4,
+      playerGlowColor: 0xe69c3c,
+      vignetteRgba: 'rgba(22, 12, 4, 0.72)',
+      dust: { color: 0xf4ba64, size: 0.125, opacity: 0.42, driftX: 0.04, driftY: 0.10, driftZ: 0.40 },
+      ambientFx: 'rail_wind',
+      assetSet: { key: 'platform0_rail_rig', groundHazeOpacity: 0.17, shaftOpacity: 0.20, pulseHz: 1.75 },
+      audio: { id: 'platform0_rail_wind', sceneMode: 'station_tense', label: '轨道穿堂风 · 钢轨低频共鸣' }
+    }
+  };
+
+  function resolveZoneSceneConfig(zoneId, mapApi) {
+    var zid = ZONE_SCENE_CONFIGS[zoneId] ? zoneId : 'concourse';
+    var base = ZONE_SCENE_CONFIGS[zid];
+    var zInfo = getZoneInfo(mapApi, zid);
+    var accentCss = (INFINITY.ArtTokens && typeof INFINITY.ArtTokens.getZoneColor === 'function')
+      ? INFINITY.ArtTokens.getZoneColor(zid, zInfo.color)
+      : (zInfo.color || '#68c8de');
+    return {
+      id: zid,
+      code: zInfo.code,
+      name: zInfo.name,
+      accentCss: accentCss,
+      accentHex: hexToInt(accentCss, base.accentHex),
+      bgColor: base.bgColor,
+      fogColor: base.fogColor,
+      fogDensity: base.fogDensity,
+      ambientColor: base.ambientColor,
+      ambientIntensity: base.ambientIntensity,
+      hemiSky: base.hemiSky,
+      hemiGround: base.hemiGround,
+      hemiIntensity: base.hemiIntensity,
+      keyColor: base.keyColor,
+      keyIntensity: base.keyIntensity,
+      rimColor: base.rimColor,
+      rimIntensity: base.rimIntensity,
+      exposure: base.exposure,
+      flashColor: base.flashColor,
+      playerGlowColor: base.playerGlowColor,
+      vignetteRgba: base.vignetteRgba,
+      dust: base.dust,
+      ambientFx: base.ambientFx,
+      assetSet: base.assetSet,
+      audio: base.audio
+    };
+  }
+
   var DEFAULT_SLOTS = [
     { archetype: 'sword_arc',   name: '宵练剑弧',   color: '#6fd8ea', cooldown: 3.2, energyCost: 14, power: 34, radius: 3.8, duration: 0.35, icon: '⚔' },
     { archetype: 'ward_circle', name: '画地界',     color: '#f0c46c', cooldown: 11,  energyCost: 22, power: 0,  radius: 3.4, duration: 7.0,  icon: '◎' },
@@ -256,12 +542,17 @@
     if (INFINITY.StationMap) return INFINITY.StationMap;
     // Ultra-safe minimal fallback if StationMap failed to load
     return {
-      GRID_W: 56,
-      GRID_H: 38,
+      GRID_W: 224,
+      GRID_H: 152,
+      PLATFORM_START_X: 168,
+      HAZARD_X: 207,
+      RAIL_MIN_X: 208,
+      RAIL_MAX_X: 219,
+      TRAIN_X: 213.5,
       ZONES: DEFAULT_ZONES,
-      isWalkable: function (gx, gz) { return gx > 0 && gx < 55 && gz > 0 && gz < 37; },
+      isWalkable: function (gx, gz) { return gx > 0 && gx < 223 && gz > 0 && gz < 151; },
       resolveCircleWallCollision: function (x, z, r) {
-        return { x: clamp(x, 1 + r, 55 - r), z: clamp(z, 1 + r, 37 - r), hit: false };
+        return { x: clamp(x, 1 + r, 223 - r), z: clamp(z, 1 + r, 151 - r), hit: false };
       },
       hasLineOfSight: function () { return true; },
       findPath: function (x0, z0, x1, z1) { return [{ x: x1, z: z1 }]; },
@@ -272,10 +563,10 @@
       },
       getGrid: function () {
         var g = [];
-        for (var r = 0; r < 38; r++) {
+        for (var r = 0; r < 152; r++) {
           var row = [];
-          for (var c = 0; c < 56; c++) {
-            row.push(r === 0 || r === 37 || c === 0 || c === 55 ? 1 : (c >= 50 ? 4 : 0));
+          for (var c = 0; c < 224; c++) {
+            row.push(r === 0 || r === 151 || c === 0 || c === 223 ? 1 : (c >= 208 ? 4 : 0));
           }
           g.push(row);
         }
@@ -411,6 +702,10 @@
     this.shakeTimer = 0;
 
     // Station & lighting pools
+    this.ambientLight = null;
+    this.hemiLight = null;
+    this.dirKeyLight = null;
+    this.dirRimLight = null;
     this.stationLightDefs = [];
     this.stationLightPool = [];
     this.stationBulbMat = null;
@@ -420,6 +715,19 @@
     this.inspectorLantern = null;
     this.inspectorLanternOrb = null;
     this.dustPoints = null;
+    this.dustDrift = { x: 0.14, y: 0.07, z: 0.03 };
+
+    // Dynamic zone atmosphere, asset-rig & ambient audio state
+    this.activeZoneId = null;
+    this.activeSubZoneId = null;
+    this.activeZoneConfig = null;
+    this.activeZoneAudioId = null;
+    this.zoneAssetRigs = Object.create(null);
+    this.zoneFxTimer = 0;
+    this.zoneBannerEl = null;
+    this.zoneBannerTimer = 0;
+    this._tmpColor = null;
+    this._tmpClearColor = null;
 
     // EMP blackout, Fog-of-War LOS shadow & 2-pass WebGL PostFX
     this.empBlackoutTimer = 0;
@@ -449,7 +757,12 @@
     this.squadById = Object.create(null);
     this.interactables = [];
     this.interactablesById = Object.create(null);
+    this.destructibleCovers = [];
+    this.sceneTriggers = [];
     this.discoveredClueIds = [];
+    this.environmentClues = [];
+    this.environmentCluesById = Object.create(null);
+    this.latestEnvironmentClue = null;
     this.overridePct = 0;
     this.soundLevel = 8;
     this.threatLevel = 12;
@@ -493,6 +806,8 @@
       parries: 0,
       skillsCast: 0,
       cluesFound: 0,
+      coversDestroyed: 0,
+      triggersActivated: 0,
       fakeBroadcastsCancelled: 0,
       inspectorDefeated: false,
       inspectorSealed: false,
@@ -832,15 +1147,17 @@
     // Build HTML overlay (speech bubbles, damage numbers, world HP tags, vignette, interact prompt)
     this.buildHtmlOverlay();
 
-    // Scene & Atmospheric Depth Fog
+    // Scene & Atmospheric Depth Fog (calibrated for grand 4x mega-station sightlines with noir depth)
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x04060b);
-    this.scene.fog = new THREE.FogExp2(0x04060b, 0.035);
+    this.scene.fog = new THREE.FogExp2(0x04060b, 0.023);
 
-    // Elevated angled 2.5D camera
-    this.camera = new THREE.PerspectiveCamera(38, width / height, 0.5, 120);
+    // Elevated angled 2.5D camera (deep far plane for 224x152 mega-station scrolling)
+    this.camera = new THREE.PerspectiveCamera(38, width / height, 0.5, 190);
 
     // Build combat loadout & entities
+    this._tmpColor = new THREE.Color();
+    this._tmpClearColor = new THREE.Color(0x070a10);
     this.initLoadout();
     this.buildLighting();
     this.buildStationGeometry();
@@ -849,6 +1166,7 @@
     this.buildActors();
     this.buildReticle();
     this.buildAtmosphericDust();
+    this.buildZoneSceneAssetRigs();
     this.buildFogOfWar();
     this.buildPostFx(width, height);
 
@@ -869,10 +1187,11 @@
     this.mounted = true;
     this.lastFrameTs = performance.now();
 
-    // Opening radio atmosphere & HUD push
+    // Opening radio atmosphere, initial zone scene assets/ambience & HUD push
     if (INFINITY.Audio && typeof INFINITY.Audio.setScene === 'function') {
       try { INFINITY.Audio.setScene('station_tense'); } catch (_) {}
     }
+    this.updateZoneEnvironment(0.016, true);
     this.recordMissionEvent(
       'progress',
       '接入《零号回廊 · 停摆站台》',
@@ -952,6 +1271,18 @@
     cutIn.innerHTML = '<div class="w25d-cutin-sub"></div><div class="w25d-cutin-title"></div>';
     root.appendChild(cutIn);
 
+    // Non-blocking top-center Zone Transition Banner (zero backdrop-filter over WebGL!)
+    var zoneBanner = document.createElement('div');
+    zoneBanner.className = 'w25d-zone-banner';
+    zoneBanner.setAttribute('aria-live', 'polite');
+    zoneBanner.style.cssText =
+      'position:absolute;top:18px;left:50%;transform:translate(-50%,-10px);opacity:0;' +
+      'display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 20px 8px;' +
+      'background:rgba(8,12,19,0.88);border:1px solid rgba(104,200,222,0.42);' +
+      'border-top:2px solid #68c8de;border-radius:4px;pointer-events:none;white-space:nowrap;' +
+      'box-shadow:0 8px 24px rgba(0,0,0,0.55);transition:opacity 0.35s ease,transform 0.35s ease;';
+    root.appendChild(zoneBanner);
+
     this.containerEl.appendChild(root);
     this.overlayRoot = root;
     this.vignetteEl = vignette;
@@ -960,6 +1291,7 @@
     this.floatersLayer = floaters;
     this.promptEl = prompt;
     this.cutInBannerEl = cutIn;
+    this.zoneBannerEl = zoneBanner;
   };
 
   EngineSession.prototype.triggerSkillCutIn = function (title, subtitle, accentCss) {
@@ -1116,20 +1448,24 @@
     var THREE = this.THREE;
 
     // Mignola high-contrast noir lighting: crush global ambient fill near pitch black
-    // so motivated light pools (overhead fluorescents, flashlight, crimson lantern) sculpt the scene.
+    // so motivated light pools sculpt the scene (crossfades per zone in updateZoneEnvironment).
     var amb = new THREE.AmbientLight(0x101828, 0.08);
     this.scene.add(amb);
+    this.ambientLight = amb;
 
     var hemi = new THREE.HemisphereLight(0x243854, 0x04060b, 0.11);
     this.scene.add(hemi);
+    this.hemiLight = hemi;
 
     var dirKey = new THREE.DirectionalLight(0xc2e6ff, 0.15);
     dirKey.position.set(14, 18, 16);
     this.scene.add(dirKey);
+    this.dirKeyLight = dirKey;
 
     var dirRim = new THREE.DirectionalLight(0xff9858, 0.12);
     dirRim.position.set(-18, 10, -14);
     this.scene.add(dirRim);
+    this.dirRimLight = dirRim;
 
     // Player directional flashlight (SpotLight) + tight personal rim glow
     var flashTarget = new THREE.Object3D();
@@ -1189,6 +1525,7 @@
   // Station 2.5D Geometry Builder (Instanced Crisp Pixel Floors & Extruded Walls)
   // ---------------------------------------------------------------------------
   EngineSession.prototype.buildStationGeometry = function () {
+    var trainX = (this.mapApi && this.mapApi.TRAIN_X) || TRAIN_X;
     if (INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.buildStation === 'function') {
       INFINITY.SceneArchitect.buildStation(this, {
         WALL_HEIGHT: WALL_HEIGHT,
@@ -1196,7 +1533,7 @@
         PLATFORM_Y: PLATFORM_Y,
         HAZARD_Y: HAZARD_Y,
         RAIL_Y: RAIL_Y,
-        TRAIN_X: TRAIN_X
+        TRAIN_X: trainX
       });
       return;
     }
@@ -1423,10 +1760,11 @@
   // Ghost Train No.0 (4-Car Articulated Specter Train sliding down x = 51.5)
   // ---------------------------------------------------------------------------
   EngineSession.prototype.buildGhostTrain = function () {
+    var trainX = (this.mapApi && this.mapApi.TRAIN_X) || TRAIN_X;
     if (INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.buildGhostTrain === 'function') {
       this.train = INFINITY.SceneArchitect.buildGhostTrain(this, {
         RAIL_Y: RAIL_Y,
-        TRAIN_X: TRAIN_X
+        TRAIN_X: trainX
       });
       return;
     }
@@ -1646,16 +1984,16 @@
     var group = new THREE.Group();
 
     // Dual-Layer Grounding Shadow (Art Bible Iron Rule 2):
-    // Layer 1: Tight high-density pure-black Contact Shadow directly under boots (eliminates float)
-    var shW = isBoss ? 1.48 : 0.96;
-    var shD = isBoss ? 0.98 : 0.62;
+    // Layer 1: Tight high-density heavy-ink Contact Shadow directly under boots (eliminates float)
+    var shW = isBoss ? 1.56 : 1.02;
+    var shD = isBoss ? 1.04 : 0.68;
     var shGeo = this.trackGeo(new THREE.PlaneGeometry(shW, shD));
     shGeo.rotateX(-Math.PI / 2);
     var shMat = this.trackMat(new THREE.MeshBasicMaterial({
       map: this.getContactShadowTex(),
       color: 0x000000,
       transparent: true,
-      opacity: isBoss ? 0.92 : 0.88,
+      opacity: isBoss ? 0.96 : 0.92,
       depthWrite: false
     }));
     var shadow = new THREE.Mesh(shGeo, shMat);
@@ -1665,8 +2003,8 @@
 
     // Layer 2: Dynamic Directional Cast Shadow pivoted at feet (rotates & elongates away from
     // player flashlight, Inspector crimson lantern, and nearest overhead station lamps!)
-    var castW = isBoss ? 1.38 : 0.88;
-    var castLen = isBoss ? 2.45 : 1.65;
+    var castW = isBoss ? 1.44 : 0.92;
+    var castLen = isBoss ? 2.55 : 1.72;
     var castGeo = this.trackGeo(new THREE.PlaneGeometry(castW, castLen));
     castGeo.rotateX(-Math.PI / 2);
     castGeo.translate(0, 0, castLen * 0.44);
@@ -1674,7 +2012,7 @@
       map: this.getCastShadowTex(),
       color: 0x020408,
       transparent: true,
-      opacity: isBoss ? 0.56 : 0.46,
+      opacity: isBoss ? 0.62 : 0.52,
       depthWrite: false
     }));
     var castShadow = new THREE.Mesh(castGeo, castMat);
@@ -1682,18 +2020,18 @@
     castShadow.rotation.y = 0.45;
     group.add(castShadow);
 
-    // Subtle role accent base ring
-    var bGeo = this.trackGeo(new THREE.RingGeometry(isBoss ? 0.58 : 0.36, isBoss ? 0.69 : 0.44, 24));
+    // Restrained tactical footing anchor (low-glare, lets boots & contact shadow lead)
+    var bGeo = this.trackGeo(new THREE.RingGeometry(isBoss ? 0.60 : 0.39, isBoss ? 0.66 : 0.43, 24));
     bGeo.rotateX(-Math.PI / 2);
     var bMat = this.trackMat(new THREE.MeshBasicMaterial({
       color: hexToInt(accentHex, 0x6fd8ea),
       transparent: true,
-      opacity: isBoss ? 0.56 : 0.34,
+      opacity: isBoss ? 0.44 : 0.20,
       side: THREE.DoubleSide,
       depthWrite: false
     }));
     var baseRing = new THREE.Mesh(bGeo, bMat);
-    baseRing.position.y = 0.065;
+    baseRing.position.y = 0.063;
     group.add(baseRing);
 
     // Angled 2.5D PBR billboard sprite plane with tangent-space Normal Map + Selective Emissive Map
@@ -1741,7 +2079,7 @@
       shadow: shadow,
       castShadow: castShadow,
       castShadowMat: castMat,
-      baseCastOpacity: isBoss ? 0.56 : 0.46
+      baseCastOpacity: isBoss ? 0.62 : 0.52
     };
   };
 
@@ -1981,6 +2319,7 @@
       dashVz: 0,
       dashColor: semanticInt('dashTrailInt', 0x52e5ff),
       channelTimer: 0,
+      ruleBindTimer: 0,
       lowHpPulseCd: 0,
       footstepAccum: 0,
       stepRippleAccum: 0,
@@ -1996,12 +2335,12 @@
       vis: pVis
     };
 
-    // Build 4 Autonomous Squad NPCs
+    // Build 4 Autonomous Squad NPCs (paced smoothly for 224x152 mega-station traversal)
     var npcSpawns = [
-      { id: 'yanci',   zone: 'concourse', dx: -2.0, dz: 1.5,  hp: 110, speed: 4.5 },
-      { id: 'lujin',   zone: 'corridor',  dx: -2.5, dz: 0.0,  hp: 135, speed: 5.0 },
-      { id: 'xutan',   zone: 'concourse', dx: 2.2,  dz: -1.4, hp: 95,  speed: 4.7 },
-      { id: 'shenyan', zone: 'concourse', dx: 3.4,  dz: 2.6,  hp: 115, speed: 4.6 }
+      { id: 'yanci',   zone: 'concourse', dx: -2.8, dz: 1.8,  hp: 110, speed: 6.6 },
+      { id: 'lujin',   zone: 'corridor',  dx: -3.2, dz: 0.0,  hp: 135, speed: 7.4 },
+      { id: 'xutan',   zone: 'concourse', dx: 2.8,  dz: -1.8, hp: 95,  speed: 6.9 },
+      { id: 'shenyan', zone: 'concourse', dx: 4.2,  dz: 3.0,  hp: 115, speed: 6.7 }
     ];
 
     for (var i = 0; i < npcSpawns.length; i++) {
@@ -2162,6 +2501,60 @@
     sealGroup.add(sealBand);
     bossVis.group.add(sealGroup);
 
+    // Close Shear Cleave crimson floor arc telegraph
+    var cleaveGeo = this.trackGeo(new THREE.RingGeometry(0.9, 3.85, 24, 1, -Math.PI * 0.45, Math.PI * 0.9));
+    cleaveGeo.rotateX(-Math.PI / 2);
+    var cleaveMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xff2238,
+      transparent: true,
+      opacity: 0.48,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var cleaveMesh = new THREE.Mesh(cleaveGeo, cleaveMat);
+    cleaveMesh.position.y = 0.12;
+    cleaveMesh.visible = false;
+    bossVis.group.add(cleaveMesh);
+
+    // Ticket Audit Gaze lock-on beam (world-space positioned from Inspector to target)
+    var gazeBeamGeo = this.trackGeo(new THREE.PlaneGeometry(0.24, 1.0));
+    gazeBeamGeo.rotateX(-Math.PI / 2);
+    gazeBeamGeo.translate(0, 0, 0.5);
+    var gazeBeamMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xffd2d8,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var gazeBeam = new THREE.Mesh(gazeBeamGeo, gazeBeamMat);
+    gazeBeam.position.y = 1.32;
+    gazeBeam.visible = false;
+    this.scene.add(gazeBeam);
+
+    // Rule Shockwave Slam expanding ring telegraph
+    var slamRingGeo = this.trackGeo(new THREE.RingGeometry(0.86, 1.0, 36));
+    slamRingGeo.rotateX(-Math.PI / 2);
+    var slamRingMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xff2640,
+      transparent: true,
+      opacity: 0.75,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var slamRing = new THREE.Mesh(slamRingGeo, slamRingMat);
+    slamRing.position.y = 0.13;
+    slamRing.visible = false;
+    bossVis.group.add(slamRing);
+
+    // Phase-2 / Vulnerability Exposed Core Weakpoint Reticle
+    var weakpointVis = (INFINITY.CombatFeel && typeof INFINITY.CombatFeel.buildBossWeakpointVisual === 'function')
+      ? INFINITY.CombatFeel.buildBossWeakpointVisual(THREE, bossVis.group, this.trackGeo.bind(this), this.trackMat.bind(this))
+      : null;
+
     this.inspector = {
       id: 'inspector',
       name: '零号检票员',
@@ -2170,8 +2563,13 @@
       vx: 0,
       vz: 0,
       radius: 0.56,
-      hp: 260,
-      maxHp: 260,
+      hp: BOSS_DEATH_EXAM_CONFIG.maxHp,
+      maxHp: BOSS_DEATH_EXAM_CONFIG.maxHp,
+      phase: 1,
+      mutated: false,
+      mutationTier: 'dormant',
+      threatTier: 'low',
+      skillCycleIndex: 0,
       sealedPct: 0,
       alive: true,
       state: 'PATROL', // 'PATROL' | 'INVESTIGATE' | 'HUNT'
@@ -2185,19 +2583,49 @@
       pathIndex: 0,
       repathTimer: 0.3,
       stunTimer: 0,
+      stunImmuneTimer: 0,
+      armorBrokenTimer: 0,
+      armorMsgCd: 0,
+      weakpointTimer: 0,
+      weakpointMaxTimer: 0,
+      weakpointReason: null,
+      pendingWeakpoint: null,
+      weakpointVis: weakpointVis,
       chainTimer: 0,
       chainMeshes: [],
+      blinkCd: 4.5,
+      blinkTelegraph: 0,
+      blinkTelegraphMax: 0.48,
+      blinkTargetX: bossPos.x,
+      blinkTargetZ: bossPos.z,
       lungeCd: 2.0,
       lungeTelegraph: 0,
+      lungeTelegraphMax: 0.85,
       lungeWindup: 0,
       lungeActive: 0,
       lungeDirX: 0,
       lungeDirZ: 1,
       lungeHitDone: false,
+      cleaveCd: 1.4,
+      cleaveTelegraph: 0,
+      cleaveDirX: 0,
+      cleaveDirZ: 1,
+      gazeCd: 5.5,
+      gazeTelegraph: 0,
+      gazeTargetId: 'player',
+      slamCd: 9.5,
+      slamTelegraph: 0,
+      kiteTimer: 0,
       teleMesh: teleMesh,
       teleFill: teleFill,
       teleParryGlint: teleParryGlint,
       teleParryGlintMat: glintMat,
+      cleaveMesh: cleaveMesh,
+      cleaveMat: cleaveMat,
+      gazeBeam: gazeBeam,
+      gazeBeamMat: gazeBeamMat,
+      slamRing: slamRing,
+      slamRingMat: slamRingMat,
       lanternCone: lanternCone,
       lanternConeMat: lConeMat,
       sealGroup: sealGroup,
@@ -2231,27 +2659,30 @@
     var accentHex = hexToInt(charVis && charVis.accentColor, 0xf0c46c);
     var sigilKey = 'sigil_' + ((charVis && charVis.sigilStyle) || 'bagua');
     var orbiterType = (charVis && charVis.orbiterType) || 'sword';
-    var orbiterCount = clamp(Number(charVis && charVis.orbiterCount) || 2, 1, 4);
+    var ownedItems = (this.state && this.state.player && Array.isArray(this.state.player.ownedItems))
+      ? this.state.player.ownedItems
+      : [];
+    var orbiterCount = computePlayerOrbiterCount(ownedItems, charVis);
 
-    // Subtle under-foot build sigil
-    var sigilGeo = this.trackGeo(new THREE.PlaneGeometry(1.52, 1.52));
+    // Subtle etched under-foot build sigil (restrained idle presence, flares on cast pulse)
+    var sigilGeo = this.trackGeo(new THREE.PlaneGeometry(1.28, 1.28));
     sigilGeo.rotateX(-Math.PI / 2);
     var sigilMat = this.trackMat(new THREE.MeshBasicMaterial({
       map: this.getPropTex(sigilKey, '#6fd8ea'),
       color: primaryHex,
       transparent: true,
-      opacity: 0.28 + Math.min(0.18, (Number(charVis && charVis.tierRank) || 0) * 0.04),
+      opacity: ownedItems.length === 0 ? 0.06 : (0.12 + Math.min(0.08, (Number(charVis && charVis.tierRank) || 0) * 0.02)),
       depthWrite: false,
       blending: THREE.AdditiveBlending
     }));
     var sigilMesh = new THREE.Mesh(sigilGeo, sigilMat);
-    sigilMesh.position.y = 0.08;
+    sigilMesh.position.y = 0.066;
     auraGroup.add(sigilMesh);
 
     // Optional S-tier / A-tier / Fused harmonic tilted halo ring
     var haloMesh = null;
     var haloMat = null;
-    if ((charVis && charVis.tierRank >= 3) || (charVis && charVis.hasFused)) {
+    if (ownedItems.length > 0 && ((charVis && charVis.tierRank >= 3) || (charVis && charVis.hasFused))) {
       var haloGeo = this.trackGeo(new THREE.TorusGeometry(0.84, 0.024, 6, 32));
       haloMat = this.trackMat(new THREE.MeshBasicMaterial({
         color: charVis.hasFused ? accentHex : primaryHex,
@@ -2266,7 +2697,7 @@
       auraGroup.add(haloMesh);
     }
 
-    // Orbiting relics (flying swords, golden talismans, cyber drone bits, blood shards, void prisms, etc.)
+    // Orbiting relics (only manifested once the player actually equips items/bloodlines)
     var orbiters = [];
     for (var i = 0; i < orbiterCount; i++) {
       var orbColor = (i % 2 === 1 && (charVis && charVis.hasFused)) ? accentHex : primaryHex;
@@ -2274,12 +2705,12 @@
       var mat;
       if (orbiterType === 'sword' || orbiterType === 'talisman' || orbiterType === 'drone_bit') {
         var spriteKey = orbiterType === 'sword' ? 'vfx_sword_bit' : (orbiterType === 'talisman' ? 'vfx_talisman' : 'vfx_drone_bit');
-        var oGeo = this.trackGeo(new THREE.PlaneGeometry(0.46, 0.46));
+        var oGeo = this.trackGeo(new THREE.PlaneGeometry(0.42, 0.42));
         mat = this.trackMat(new THREE.MeshBasicMaterial({
           map: this.getPropTex(spriteKey, '#ffffff'),
           color: orbiterType === 'talisman' ? 0xffffff : orbColor,
           transparent: true,
-          opacity: 0.85,
+          opacity: 0.78,
           depthWrite: false,
           side: THREE.DoubleSide,
           blending: THREE.AdditiveBlending
@@ -2287,44 +2718,47 @@
         mesh = new THREE.Mesh(oGeo, mat);
         mesh.rotation.x = -0.28;
       } else if (orbiterType === 'blood_shard' || orbiterType === 'void_prism') {
-        var cGeo = this.trackGeo(new THREE.OctahedronGeometry(0.15, 0));
+        var cGeo = this.trackGeo(new THREE.OctahedronGeometry(0.13, 0));
         mat = this.trackMat(new THREE.MeshBasicMaterial({
           color: orbColor,
           wireframe: orbiterType === 'void_prism',
           transparent: true,
-          opacity: 0.85,
+          opacity: 0.78,
           blending: THREE.AdditiveBlending
         }));
         mesh = new THREE.Mesh(cGeo, mat);
-        mesh.scale.set(0.85, 1.5, 0.85);
+        mesh.scale.set(0.85, 1.4, 0.85);
       } else if (orbiterType === 'bio_helix') {
-        var bGeo = this.trackGeo(new THREE.PlaneGeometry(0.36, 0.36));
+        var bGeo = this.trackGeo(new THREE.PlaneGeometry(0.34, 0.34));
         mat = this.trackMat(new THREE.MeshBasicMaterial({
           map: this.getPropTex('vfx_heal_cross', '#58e89a'),
           color: orbColor,
           transparent: true,
-          opacity: 0.82,
+          opacity: 0.76,
           depthWrite: false,
           side: THREE.DoubleSide,
           blending: THREE.AdditiveBlending
         }));
         mesh = new THREE.Mesh(bGeo, mat);
       } else if (orbiterType === 'kinetic_plate') {
-        var kGeo = this.trackGeo(new THREE.BoxGeometry(0.24, 0.32, 0.06));
+        // Sleek translucent hex-glyph ring instead of a raw floating white box
+        var kGeo = this.trackGeo(new THREE.RingGeometry(0.10, 0.16, 6));
         mat = this.trackMat(new THREE.MeshBasicMaterial({
           color: orbColor,
           transparent: true,
-          opacity: 0.78,
+          opacity: 0.48,
+          side: THREE.DoubleSide,
+          depthWrite: false,
           blending: THREE.AdditiveBlending
         }));
         mesh = new THREE.Mesh(kGeo, mat);
       } else {
         // rune_orb
-        var rGeo = this.trackGeo(new THREE.SphereGeometry(0.12, 8, 8));
+        var rGeo = this.trackGeo(new THREE.SphereGeometry(0.10, 8, 8));
         mat = this.trackMat(new THREE.MeshBasicMaterial({
           color: orbColor,
           transparent: true,
-          opacity: 0.88,
+          opacity: 0.78,
           blending: THREE.AdditiveBlending
         }));
         mesh = new THREE.Mesh(rGeo, mat);
@@ -2521,10 +2955,10 @@
 
   EngineSession.prototype.buildAtmosphericDust = function () {
     var THREE = this.THREE;
-    var count = 180;
+    var w = this.mapApi.GRID_W || 224;
+    var h = this.mapApi.GRID_H || 152;
+    var count = w > 160 ? 560 : (w > 80 ? 420 : 180);
     var positions = new Float32Array(count * 3);
-    var w = this.mapApi.GRID_W || 56;
-    var h = this.mapApi.GRID_H || 38;
     for (var i = 0; i < count; i++) {
       positions[i * 3] = Math.random() * w;
       positions[i * 3 + 1] = 0.35 + Math.random() * 2.8;
@@ -2545,13 +2979,344 @@
   };
 
   // ---------------------------------------------------------------------------
+  // Dynamic Per-Zone Scene Asset Rigs, Atmosphere & Ambience Controller
+  // ---------------------------------------------------------------------------
+  EngineSession.prototype.buildZoneSceneAssetRigs = function () {
+    var THREE = this.THREE;
+    if (!this.scene || !this.mapApi) return;
+
+    this.zoneAssetRigs = Object.create(null);
+
+    // Shared soft radial mist/glow CanvasTexture for zone-scoped ground haze & light shafts
+    var hazeCanvas = document.createElement('canvas');
+    hazeCanvas.width = 256;
+    hazeCanvas.height = 256;
+    var hCtx = hazeCanvas.getContext('2d');
+    var grad = hCtx.createRadialGradient(128, 128, 10, 128, 128, 126);
+    grad.addColorStop(0, 'rgba(255,255,255,0.68)');
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.28)');
+    grad.addColorStop(1, 'rgba(255,255,255,0.0)');
+    hCtx.fillStyle = grad;
+    hCtx.fillRect(0, 0, 256, 256);
+    var hazeTex = this.trackTex(new THREE.CanvasTexture(hazeCanvas));
+    if (THREE.sRGBEncoding !== undefined) hazeTex.encoding = THREE.sRGBEncoding;
+
+    var shaftCanvas = document.createElement('canvas');
+    shaftCanvas.width = 128;
+    shaftCanvas.height = 256;
+    var sCtx = shaftCanvas.getContext('2d');
+    var sGrad = sCtx.createLinearGradient(0, 0, 0, 256);
+    sGrad.addColorStop(0, 'rgba(255,255,255,0.42)');
+    sGrad.addColorStop(0.55, 'rgba(255,255,255,0.14)');
+    sGrad.addColorStop(1, 'rgba(255,255,255,0.0)');
+    sCtx.fillStyle = sGrad;
+    sCtx.fillRect(0, 0, 128, 256);
+    var shaftTex = this.trackTex(new THREE.CanvasTexture(shaftCanvas));
+    if (THREE.sRGBEncoding !== undefined) shaftTex.encoding = THREE.sRGBEncoding;
+
+    var hazeGeo = this.trackGeo(new THREE.PlaneGeometry(1, 1));
+    hazeGeo.rotateX(-Math.PI / 2);
+    var shaftGeo = this.trackGeo(new THREE.PlaneGeometry(4.2, 3.1));
+
+    var boundsMap = (this.mapApi && this.mapApi.ZONE_BOUNDS) || null;
+    var zoneIds = Object.keys(ZONE_SCENE_CONFIGS);
+    var subZones = (this.mapApi && typeof this.mapApi.getSubZones === 'function')
+      ? (this.mapApi.getSubZones() || [])
+      : [];
+
+    for (var i = 0; i < zoneIds.length; i++) {
+      var zid = zoneIds[i];
+      var cfg = resolveZoneSceneConfig(zid, this.mapApi);
+      var b = boundsMap && boundsMap[zid];
+      var zCenter = (this.mapApi && typeof this.mapApi.getZoneCenter === 'function')
+        ? this.mapApi.getZoneCenter(zid)
+        : { x: 41.5, z: 37.5 };
+      var cx = b ? ((b.x0 + b.x1) * 0.5) : zCenter.x;
+      var cz = b ? ((b.z0 + b.z1) * 0.5) : zCenter.z;
+      var spanX = b ? Math.max(16, (b.x1 - b.x0) * 0.92) : 28;
+      var spanZ = b ? Math.max(16, (b.z1 - b.z0) * 0.92) : 24;
+
+      var group = new THREE.Group();
+      group.name = 'zone_asset_rig_' + zid;
+      group.visible = false;
+
+      var hazeMat = this.trackMat(new THREE.MeshBasicMaterial({
+        map: hazeTex,
+        color: cfg.accentHex,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      }));
+      var hazeMesh = new THREE.Mesh(hazeGeo, hazeMat);
+      hazeMesh.position.set(cx, FLOOR_Y + 0.055, cz);
+      hazeMesh.scale.set(spanX, 1, spanZ);
+      group.add(hazeMesh);
+
+      var shaftMat = this.trackMat(new THREE.MeshBasicMaterial({
+        map: shaftTex,
+        color: cfg.accentHex,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      }));
+
+      // Place volumetric accent light-shafts at each sub-zone focal anchor inside this zone
+      var anchors = [];
+      for (var si = 0; si < subZones.length; si++) {
+        if (subZones[si] && subZones[si].zoneId === zid) {
+          anchors.push({ x: subZones[si].cx, z: subZones[si].cz });
+        }
+      }
+      if (anchors.length === 0) anchors.push({ x: cx, z: cz });
+
+      var shafts = [];
+      for (var ai = 0; ai < anchors.length; ai++) {
+        var sh = new THREE.Mesh(shaftGeo, shaftMat);
+        sh.position.set(anchors[ai].x, 1.75, anchors[ai].z);
+        sh.rotation.y = (ai % 2 === 0 ? 0.18 : -0.18);
+        group.add(sh);
+        shafts.push(sh);
+      }
+
+      this.scene.add(group);
+      this.zoneAssetRigs[zid] = {
+        zoneId: zid,
+        key: cfg.assetSet.key,
+        group: group,
+        hazeMat: hazeMat,
+        shaftMat: shaftMat,
+        shafts: shafts,
+        weight: 0,
+        targetHazeOpacity: cfg.assetSet.groundHazeOpacity,
+        targetShaftOpacity: cfg.assetSet.shaftOpacity,
+        pulseHz: cfg.assetSet.pulseHz
+      };
+    }
+  };
+
+  EngineSession.prototype.showZoneBanner = function (zoneInfo, subZoneInfo, cfg) {
+    if (!this.zoneBannerEl || !zoneInfo) return;
+    var accent = (cfg && cfg.accentCss) || zoneInfo.color || '#68c8de';
+    var code = (subZoneInfo && subZoneInfo.code) || zoneInfo.code || 'Z-01';
+    var title = zoneInfo.name || '零号回廊';
+    var subText = (subZoneInfo && subZoneInfo.name) ? subZoneInfo.name : '';
+    var audioLabel = (cfg && cfg.audio && cfg.audio.label) ? ('♪ ' + cfg.audio.label) : '';
+
+    this.zoneBannerEl.style.borderColor = accent;
+    this.zoneBannerEl.style.borderTopColor = accent;
+    this.zoneBannerEl.innerHTML = '';
+
+    var topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+    var codeSpan = document.createElement('span');
+    codeSpan.style.cssText =
+      'font-size:10.5px;font-weight:700;letter-spacing:0.08em;padding:1px 6px;border-radius:3px;' +
+      'background:rgba(255,255,255,0.08);color:' + accent + ';';
+    codeSpan.textContent = code;
+    topRow.appendChild(codeSpan);
+
+    var titleSpan = document.createElement('strong');
+    titleSpan.style.cssText = 'font-size:14.5px;letter-spacing:0.1em;color:#f0f6fc;font-weight:700;';
+    titleSpan.textContent = title;
+    topRow.appendChild(titleSpan);
+    this.zoneBannerEl.appendChild(topRow);
+
+    if (subText || audioLabel) {
+      var subRow = document.createElement('div');
+      subRow.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:11px;color:#b8cade;letter-spacing:0.04em;';
+      if (subText) {
+        var s1 = document.createElement('span');
+        s1.textContent = subText;
+        subRow.appendChild(s1);
+      }
+      if (audioLabel) {
+        var s2 = document.createElement('span');
+        s2.style.color = accent;
+        s2.style.opacity = '0.9';
+        s2.textContent = audioLabel;
+        subRow.appendChild(s2);
+      }
+      this.zoneBannerEl.appendChild(subRow);
+    }
+
+    this.zoneBannerEl.style.opacity = '1';
+    this.zoneBannerEl.style.transform = 'translate(-50%,0px)';
+    this.zoneBannerTimer = 2.6;
+  };
+
+  EngineSession.prototype.updateZoneEnvironment = function (realDt, forceSnap) {
+    if (!this.mapApi || !this.player) return;
+    var p = this.player;
+    var curZoneId = this.mapApi.getZoneAt(p.x, p.z) || 'concourse';
+    var curSubZone = (typeof this.mapApi.getSubZoneAt === 'function')
+      ? this.mapApi.getSubZoneAt(p.x, p.z)
+      : null;
+    var curSubZoneId = curSubZone ? curSubZone.id : null;
+
+    var zoneChanged = (curZoneId !== this.activeZoneId);
+    var subZoneChanged = (curSubZoneId !== this.activeSubZoneId);
+
+    if (zoneChanged) {
+      var prevZoneId = this.activeZoneId;
+      var cfg = resolveZoneSceneConfig(curZoneId, this.mapApi);
+      var zInfo = getZoneInfo(this.mapApi, curZoneId);
+      this.activeZoneId = curZoneId;
+      this.activeSubZoneId = curSubZoneId;
+      this.activeZoneConfig = cfg;
+      this.activeZoneAudioId = cfg.audio ? cfg.audio.id : null;
+
+      // Update particle drift profile for the newly entered zone
+      if (cfg.dust) {
+        this.dustDrift.x = cfg.dust.driftX;
+        this.dustDrift.y = cfg.dust.driftY;
+        this.dustDrift.z = cfg.dust.driftZ;
+      }
+
+      // Dynamically switch background environmental soundscape for this zone
+      safeAudio('setZoneAmbience', curZoneId, cfg.audio);
+      if (prevZoneId) {
+        playSfxSafe('zone_enter');
+        this.showZoneBanner(zInfo, curSubZone, cfg);
+      }
+
+      // Immediately push updated zone name & asset/audio state to the HUD
+      this.emitHudSnapshot();
+    } else if (subZoneChanged) {
+      this.activeSubZoneId = curSubZoneId;
+      if (this.activeZoneConfig) {
+        this.showZoneBanner(getZoneInfo(this.mapApi, curZoneId), curSubZone, this.activeZoneConfig);
+      }
+      this.emitHudSnapshot();
+    }
+
+    var activeCfg = this.activeZoneConfig || resolveZoneSceneConfig(curZoneId, this.mapApi);
+    if (!activeCfg || !this.THREE) return;
+
+    var dt = Math.max(0.001, realDt || 0.016);
+    var blend = forceSnap ? 1.0 : (1 - Math.exp(-3.2 * dt));
+    var tmpC = this._tmpColor || (this._tmpColor = new this.THREE.Color());
+
+    // 1. Smoothly transition global lighting rig (Ambient, Hemisphere, Key, Rim)
+    if (this.ambientLight) {
+      tmpC.setHex(activeCfg.ambientColor);
+      this.ambientLight.color.lerp(tmpC, blend);
+      this.ambientLight.intensity = lerp(this.ambientLight.intensity, activeCfg.ambientIntensity, blend);
+    }
+    if (this.hemiLight) {
+      tmpC.setHex(activeCfg.hemiSky);
+      this.hemiLight.color.lerp(tmpC, blend);
+      tmpC.setHex(activeCfg.hemiGround);
+      this.hemiLight.groundColor.lerp(tmpC, blend);
+      this.hemiLight.intensity = lerp(this.hemiLight.intensity, activeCfg.hemiIntensity, blend);
+    }
+    if (this.dirKeyLight) {
+      tmpC.setHex(activeCfg.keyColor);
+      this.dirKeyLight.color.lerp(tmpC, blend);
+      this.dirKeyLight.intensity = lerp(this.dirKeyLight.intensity, activeCfg.keyIntensity, blend);
+    }
+    if (this.dirRimLight) {
+      tmpC.setHex(activeCfg.rimColor);
+      this.dirRimLight.color.lerp(tmpC, blend);
+      this.dirRimLight.intensity = lerp(this.dirRimLight.intensity, activeCfg.rimIntensity, blend);
+    }
+    if (this.flashLight) {
+      tmpC.setHex(activeCfg.flashColor);
+      this.flashLight.color.lerp(tmpC, blend);
+    }
+
+    // 2. Smoothly transition scene fog, background, clear color & exposure
+    if (this.scene && this.scene.fog) {
+      tmpC.setHex(activeCfg.fogColor);
+      this.scene.fog.color.lerp(tmpC, blend);
+      if (typeof this.scene.fog.density === 'number') {
+        this.scene.fog.density = lerp(this.scene.fog.density, activeCfg.fogDensity, blend);
+      }
+    }
+    if (this.scene && this.scene.background && this.scene.background.isColor) {
+      tmpC.setHex(activeCfg.bgColor);
+      this.scene.background.lerp(tmpC, blend);
+      if (this.renderer && typeof this.renderer.setClearColor === 'function') {
+        this.renderer.setClearColor(this.scene.background, 1);
+      }
+    }
+    if (this.renderer && typeof this.renderer.toneMappingExposure === 'number') {
+      this.renderer.toneMappingExposure = lerp(this.renderer.toneMappingExposure, activeCfg.exposure, blend);
+    }
+
+    // 3. Smoothly transition atmospheric dust material profile
+    if (this.dustPoints && this.dustPoints.material && activeCfg.dust) {
+      var dMat = this.dustPoints.material;
+      tmpC.setHex(activeCfg.dust.color);
+      dMat.color.lerp(tmpC, blend);
+      dMat.size = lerp(dMat.size, activeCfg.dust.size, blend);
+      dMat.opacity = lerp(dMat.opacity, activeCfg.dust.opacity, blend);
+    }
+
+    // 4. Dynamically activate & crossfade the current zone's scene asset rig
+    if (this.zoneAssetRigs) {
+      var rigKeys = Object.keys(this.zoneAssetRigs);
+      for (var rk = 0; rk < rigKeys.length; rk++) {
+        var rig = this.zoneAssetRigs[rigKeys[rk]];
+        if (!rig) continue;
+        var targetW = (rig.zoneId === curZoneId) ? 1.0 : 0.0;
+        rig.weight = forceSnap ? targetW : lerp(rig.weight, targetW, blend);
+        var active = rig.weight > 0.008;
+        rig.group.visible = active;
+        if (active) {
+          var pulse = 0.86 + 0.14 * Math.sin(this.elapsedReal * rig.pulseHz * Math.PI * 2);
+          rig.hazeMat.opacity = rig.targetHazeOpacity * rig.weight * pulse;
+          rig.shaftMat.opacity = rig.targetShaftOpacity * rig.weight * (0.88 + 0.12 * Math.cos(this.elapsedReal * rig.pulseHz * 2.1));
+        }
+      }
+    }
+
+    // 5. Subtle per-zone ambient environmental micro-VFX near the player
+    if (!forceSnap && !this.ended && this.scene) {
+      this.zoneFxTimer += dt;
+      if (this.zoneFxTimer >= 2.2) {
+        this.zoneFxTimer = 0;
+        var fxKind = activeCfg.ambientFx;
+        if (fxKind === 'ozone_sparks' && typeof this.spawnSparkBurst === 'function') {
+          this.spawnSparkBurst(
+            p.x + (Math.random() - 0.5) * 9.0,
+            2.15 + Math.random() * 0.7,
+            p.z + (Math.random() - 0.5) * 7.0,
+            0x78b4ff,
+            4
+          );
+        } else if (fxKind === 'steam_drip' && typeof this.spawnRingPulse === 'function') {
+          this.spawnRingPulse(
+            p.x + (Math.random() - 0.5) * 8.0,
+            p.z + (Math.random() - 0.5) * 6.0,
+            0.75,
+            0xa884e0,
+            0.55
+          );
+        } else if (fxKind === 'rail_wind' && typeof this.spawnSparkBurst === 'function') {
+          this.spawnSparkBurst(
+            Math.min(207.0, p.x + 3.5 + Math.random() * 3.0),
+            0.6 + Math.random() * 1.4,
+            p.z + (Math.random() - 0.5) * 8.0,
+            0xf0b258,
+            3
+          );
+        }
+      }
+    }
+  };
+
+  // ---------------------------------------------------------------------------
   // True Wall-Occluded Line-of-Sight Shadow / Fog-of-War (72-Ray 2D DDA)
   // ---------------------------------------------------------------------------
   EngineSession.prototype.buildFogOfWar = function () {
     var THREE = this.THREE;
-    var gridW = this.mapApi.GRID_W || 56;
-    var gridH = this.mapApi.GRID_H || 38;
-    var scale = 4; // 224x152 offscreen canvas (4x station grid)
+    var gridW = this.mapApi.GRID_W || 224;
+    var gridH = this.mapApi.GRID_H || 152;
+    var scale = gridW > 160 ? 2 : (gridW > 80 ? 3 : 4); // crisp 448x304 canvas on 224x152 mega-station
     var cw = gridW * scale;
     var ch = gridH * scale;
 
@@ -2603,23 +3368,60 @@
     };
   };
 
+  EngineSession.prototype.hasPassiveReconCapability = function () {
+    var owned = (this.state && this.state.player && Array.isArray(this.state.player.ownedItems))
+      ? this.state.player.ownedItems
+      : [];
+    return hasPassiveReconItem(owned);
+  };
+
+  EngineSession.prototype.hasActiveReconVision = function () {
+    return (this.reconRevealTimer || 0) > 0;
+  };
+
+  EngineSession.prototype.canSeeWorldPoint = function (x, z) {
+    var p = this.player;
+    var mapApi = this.mapApi;
+    if (!p || !mapApi) return true;
+    var pZone = mapApi.getZoneAt(p.x, p.z) || null;
+    var tZone = mapApi.getZoneAt(x, z) || null;
+    var hasLos = typeof mapApi.hasLineOfSight === 'function'
+      ? mapApi.hasLineOfSight(p.x, p.z, x, z)
+      : true;
+    return evaluatePointVisibility({
+      px: p.x,
+      pz: p.z,
+      tx: x,
+      tz: z,
+      playerZone: pZone,
+      targetZone: tZone,
+      hasLineOfSight: hasLos,
+      reconActive: this.hasActiveReconVision(),
+      hasPassiveRecon: this.hasPassiveReconCapability()
+    });
+  };
+
   EngineSession.prototype.updateFogOfWar = function (realDt) {
     var fog = this.fogOfWar;
     var p = this.player;
     if (!fog || !p) return;
+
+    var hasRecon = this.hasActiveReconVision() || this.hasPassiveReconCapability();
+    var reconChanged = (fog.lastHasRecon !== hasRecon);
 
     fog.accum += realDt;
     var aimAngle = Math.atan2(this.aimWorld.z - p.z, this.aimWorld.x - p.x);
     var movedSq = (p.x - fog.lastX) * (p.x - fog.lastX) + (p.z - fog.lastZ) * (p.z - fog.lastZ);
     var aimDiff = Math.abs(Math.atan2(Math.sin(aimAngle - fog.lastAimAngle), Math.cos(aimAngle - fog.lastAimAngle)));
 
-    var shouldUpdate = (fog.accum >= 0.06) || (movedSq > 0.04) || (aimDiff > 0.14 && fog.accum >= 0.032);
+    var shouldUpdate = reconChanged || (fog.accum >= 0.06) || (movedSq > 0.04) || (aimDiff > 0.14 && fog.accum >= 0.032);
     if (!shouldUpdate) return;
 
     fog.accum = 0;
     fog.lastX = p.x;
     fog.lastZ = p.z;
     fog.lastAimAngle = aimAngle;
+    fog.lastHasRecon = hasRecon;
 
     var ctx = fog.ctx;
     var sc = fog.scale;
@@ -2627,25 +3429,27 @@
     var gridH = fog.gridH;
     var grid = this.fogGrid;
     var pts = this.fogRayPts;
+    var mapApi = this.mapApi;
+    var playerZone = (mapApi && typeof mapApi.getZoneAt === 'function') ? mapApi.getZoneAt(p.x, p.z) : null;
     var rayCount = 72;
     var coneHalf = 0.61086524; // +-35 deg flashlight cone
     var coneOuter = 0.76794487; // smooth outer feather to ~44 deg
 
-    // 1. Fill deep obsidian shadow veil
+    // 1. Fill deep obsidian shadow veil (strictly opaque for unrevealed next rooms unless recon active)
     ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, fog.w, fog.h);
-    ctx.fillStyle = 'rgba(6, 7, 11, 0.78)';
+    ctx.fillStyle = hasRecon ? 'rgba(6, 7, 11, 0.80)' : 'rgba(3, 4, 7, 0.99)';
     ctx.fillRect(0, 0, fog.w, fog.h);
 
-    // 2. Cast 72 true 2D DDA rays from player position against StationMap walls
+    // 2. Cast 72 true 2D DDA rays from player position against StationMap walls & room boundaries
     for (var i = 0; i < rayCount; i++) {
       var angle = (i / rayCount) * Math.PI * 2;
       var diff = Math.abs(Math.atan2(Math.sin(angle - aimAngle), Math.cos(angle - aimAngle)));
-      var maxDist = 15.0;
+      var maxDist = hasRecon ? 24.0 : 18.5;
       if (diff <= coneHalf) {
-        maxDist = 20.0;
+        maxDist = hasRecon ? 30.0 : 23.0;
       } else if (diff < coneOuter) {
-        maxDist = lerp(20.0, 15.0, (diff - coneHalf) / (coneOuter - coneHalf));
+        maxDist = lerp(hasRecon ? 30.0 : 23.0, hasRecon ? 24.0 : 18.5, (diff - coneHalf) / (coneOuter - coneHalf));
       }
 
       var rdx = Math.cos(angle);
@@ -2673,7 +3477,7 @@
 
       var hitDist = maxDist;
       var steps = 0;
-      while (steps < 48) {
+      while (steps < 56) {
         steps++;
         var currDist;
         if (sideDistX < sideDistZ) {
@@ -2694,9 +3498,17 @@
           break;
         }
         if (readGridCell(grid, mapX, mapZ, gridW, gridH) === 1) {
-          // Reveal front lit face of visible wall while keeping behind-wall spaces dark
-          hitDist = Math.min(maxDist, currDist + 0.35);
+          // Reveal front lit face of visible wall while keeping behind-wall spaces completely dark
+          hitDist = Math.min(maxDist, currDist + 0.30);
           break;
+        }
+        // Without recon skills, do not let vision spill deep into the next room/zone
+        if (!hasRecon && playerZone && currDist > 5.0 && mapApi && typeof mapApi.getZoneAt === 'function') {
+          var cellZone = mapApi.getZoneAt(mapX + 0.5, mapZ + 0.5);
+          if (cellZone && cellZone !== playerZone) {
+            hitDist = Math.min(maxDist, currDist);
+            break;
+          }
         }
       }
 
@@ -2709,7 +3521,7 @@
     var pz = p.z * sc;
     ctx.globalCompositeOperation = 'destination-out';
 
-    var visGrad = ctx.createRadialGradient(px, pz, 1.5 * sc, px, pz, 20.5 * sc);
+    var visGrad = ctx.createRadialGradient(px, pz, 1.5 * sc, px, pz, (hasRecon ? 26.0 : 21.0) * sc);
     visGrad.addColorStop(0.0, 'rgba(0, 0, 0, 1.0)');
     visGrad.addColorStop(0.55, 'rgba(0, 0, 0, 0.96)');
     visGrad.addColorStop(0.80, 'rgba(0, 0, 0, 0.72)');
@@ -2725,33 +3537,30 @@
     ctx.fill();
 
     // Guaranteed personal visibility halo around player silhouette
-    var haloGrad = ctx.createRadialGradient(px, pz, 0.5 * sc, px, pz, 3.2 * sc);
+    var haloGrad = ctx.createRadialGradient(px, pz, 0.5 * sc, px, pz, 3.0 * sc);
     haloGrad.addColorStop(0.0, 'rgba(0, 0, 0, 1.0)');
     haloGrad.addColorStop(0.7, 'rgba(0, 0, 0, 0.85)');
     haloGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
     ctx.beginPath();
-    ctx.arc(px, pz, 3.2 * sc, 0, Math.PI * 2);
+    ctx.arc(px, pz, 3.0 * sc, 0, Math.PI * 2);
     ctx.fillStyle = haloGrad;
     ctx.fill();
 
-    // 4. Ominous crimson lantern dim cutout around Inspector ONLY when within 16 tiles
+    // 4. Crimson lantern cutout around Inspector ONLY when player can actually see/sense Inspector!
     var ins = this.inspector;
-    if (ins && ins.alive) {
-      var dIns = dist2D(p.x, p.z, ins.x, ins.z);
-      if (dIns <= 16.0) {
-        var ix = ins.x * sc;
-        var iz = ins.z * sc;
-        var ir = 3.5 * sc;
-        var lanternAlpha = ins.stunTimer > 0 ? 0.18 : 0.45;
-        var lanGrad = ctx.createRadialGradient(ix, iz, 0.2 * sc, ix, iz, ir);
-        lanGrad.addColorStop(0.0, 'rgba(0, 0, 0, ' + lanternAlpha + ')');
-        lanGrad.addColorStop(0.55, 'rgba(0, 0, 0, ' + (lanternAlpha * 0.48).toFixed(3) + ')');
-        lanGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
-        ctx.beginPath();
-        ctx.arc(ix, iz, ir, 0, Math.PI * 2);
-        ctx.fillStyle = lanGrad;
-        ctx.fill();
-      }
+    if (ins && ins.alive && this.canSeeWorldPoint(ins.x, ins.z)) {
+      var ix = ins.x * sc;
+      var iz = ins.z * sc;
+      var ir = 3.5 * sc;
+      var lanternAlpha = ins.stunTimer > 0 ? 0.18 : 0.45;
+      var lanGrad = ctx.createRadialGradient(ix, iz, 0.2 * sc, ix, iz, ir);
+      lanGrad.addColorStop(0.0, 'rgba(0, 0, 0, ' + lanternAlpha + ')');
+      lanGrad.addColorStop(0.55, 'rgba(0, 0, 0, ' + (lanternAlpha * 0.48).toFixed(3) + ')');
+      lanGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+      ctx.beginPath();
+      ctx.arc(ix, iz, ir, 0, Math.PI * 2);
+      ctx.fillStyle = lanGrad;
+      ctx.fill();
     }
 
     ctx.globalCompositeOperation = 'source-over';
@@ -3013,24 +3822,27 @@
       if (u.uInkEdge) u.uInkEdge.value = clamp(dirSt.inkEdge || 0, 0, 1);
 
       // three r147 applies fog after output encoding and writes clear/background colors raw,
-      // so all three are display-space values. Swap in their linear equivalents while
-      // rendering into the linear RT so the post pass's sRGB encode does not lift them.
+      // so all three are display-space values. Sync live zone-transitioned display colors into
+      // pre-allocated linear Color buffers so PostFX tracks dynamic zone fog/background transitions!
       var fog = this.scene.fog;
       var bg = this.scene.background;
       var bgIsColor = bg && typeof bg.isColor === 'boolean' && bg.isColor;
-      if (!fx.fogDisplay && fog && fog.color) {
-        fx.fogDisplay = fog.color.clone();
-        fx.fogLinear = fog.color.clone().convertSRGBToLinear();
+      if (fog && fog.color) {
+        if (!fx.fogDisplay) fx.fogDisplay = new this.THREE.Color();
+        if (!fx.fogLinear) fx.fogLinear = new this.THREE.Color();
+        fx.fogDisplay.copy(fog.color);
+        fx.fogLinear.copy(fog.color).convertSRGBToLinear();
       }
-      if (!fx.bgDisplay && bgIsColor) {
-        fx.bgDisplay = bg.clone();
-        fx.bgLinear = bg.clone().convertSRGBToLinear();
+      if (bgIsColor) {
+        if (!fx.bgDisplay) fx.bgDisplay = new this.THREE.Color();
+        if (!fx.bgLinear) fx.bgLinear = new this.THREE.Color();
+        fx.bgDisplay.copy(bg);
+        fx.bgLinear.copy(bg).convertSRGBToLinear();
       }
-      if (!fx.clearDisplay) {
-        fx.clearDisplay = new this.THREE.Color();
-        this.renderer.getClearColor(fx.clearDisplay);
-        fx.clearLinear = fx.clearDisplay.clone().convertSRGBToLinear();
-      }
+      if (!fx.clearDisplay) fx.clearDisplay = new this.THREE.Color();
+      if (!fx.clearLinear) fx.clearLinear = new this.THREE.Color();
+      this.renderer.getClearColor(fx.clearDisplay);
+      fx.clearLinear.copy(fx.clearDisplay).convertSRGBToLinear();
 
       try {
         if (fog && fx.fogLinear) fog.color.copy(fx.fogLinear);
@@ -3270,6 +4082,7 @@
 
     this.updateVfx(simDt, realDt);
     this.updateSoundRipples(simDt);
+    this.updateZoneEnvironment(realDt, false);
     this.updateLights(realDt);
     if (INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.updateAmbientDynamics === 'function') {
       INFINITY.SceneArchitect.updateAmbientDynamics(this, realDt);
@@ -3305,8 +4118,8 @@
     this._v2ndc.set(this.mouseNdc.x, this.mouseNdc.y);
     this._raycaster.setFromCamera(this._v2ndc, this.camera);
     if (this._raycaster.ray.intersectPlane(this._groundPlane, this._v3a)) {
-      this.aimWorld.x = clamp(this._v3a.x, 0.5, (this.mapApi.GRID_W || 56) - 0.5);
-      this.aimWorld.z = clamp(this._v3a.z, 0.5, (this.mapApi.GRID_H || 38) - 0.5);
+      this.aimWorld.x = clamp(this._v3a.x, 0.5, (this.mapApi.GRID_W || 224) - 0.5);
+      this.aimWorld.z = clamp(this._v3a.z, 0.5, (this.mapApi.GRID_H || 152) - 0.5);
     }
     if (this.reticle) {
       this.reticle.group.position.set(this.aimWorld.x, 0.09, this.aimWorld.z);
@@ -3429,17 +4242,64 @@
     this.camKickZ = clamp(this.camKickZ + (kz || 0), -1.2, 1.2);
   };
 
+  function computeCameraScrollBounds(mapApi) {
+    var gridW = (mapApi && mapApi.GRID_W) || 224;
+    var gridH = (mapApi && mapApi.GRID_H) || 152;
+    var padX = Math.min(4.0, gridW * 0.12);
+    var padZ = Math.min(4.0, gridH * 0.12);
+    return {
+      minX: padX,
+      maxX: Math.max(padX, gridW - padX),
+      minZ: padZ,
+      maxZ: Math.max(padZ, gridH - padZ),
+      gridW: gridW,
+      gridH: gridH
+    };
+  }
+
+  EngineSession.prototype.getCameraBounds = function () {
+    return computeCameraScrollBounds(this.mapApi);
+  };
+
+  EngineSession.prototype.scrollCameraTo = function (worldX, worldZ, snap) {
+    var b = this.getCameraBounds();
+    var tx = clamp(Number(worldX) || 0, b.minX, b.maxX);
+    var tz = clamp(Number(worldZ) || 0, b.minZ, b.maxZ);
+    if (snap) {
+      this.camPos.x = tx;
+      this.camPos.z = tz;
+      this.camLook.x = tx;
+      this.camLook.z = tz;
+    } else {
+      this.camPos.x = lerp(this.camPos.x, tx, 0.35);
+      this.camPos.z = lerp(this.camPos.z, tz, 0.35);
+      this.camLook.x = lerp(this.camLook.x, tx, 0.35);
+      this.camLook.z = lerp(this.camLook.z, tz, 0.35);
+    }
+    if (this.camera) {
+      this.camera.position.set(this.camPos.x, CAMERA_25D_SPEC.offsetY, this.camPos.z + CAMERA_25D_SPEC.offsetZ);
+      this.camera.lookAt(this.camLook.x, CAMERA_25D_SPEC.lookAtY, this.camLook.z);
+    }
+    return { x: this.camPos.x, z: this.camPos.z, bounds: b };
+  };
+
   EngineSession.prototype.updateCamera = function (realDt) {
     if (!this.camera || !this.player) return;
     var p = this.player;
-    var leadX = clamp((this.aimWorld.x - p.x) * 0.22, -2.2, 2.2);
-    var leadZ = clamp((this.aimWorld.z - p.z) * 0.18, -1.8, 1.8);
+    var b = this.getCameraBounds();
+    var leadX = clamp((this.aimWorld.x - p.x) * 0.22, -2.4, 2.4);
+    var leadZ = clamp((this.aimWorld.z - p.z) * 0.18, -2.0, 2.0);
 
-    var smooth = 1 - Math.exp(-7.5 * realDt);
-    this.camPos.x = lerp(this.camPos.x, p.x + leadX * 0.65, smooth);
-    this.camPos.z = lerp(this.camPos.z, p.z + leadZ * 0.65, smooth);
-    this.camLook.x = lerp(this.camLook.x, p.x + leadX, smooth);
-    this.camLook.z = lerp(this.camLook.z, p.z + leadZ, smooth);
+    var targetPosX = clamp(p.x + leadX * 0.65, b.minX, b.maxX);
+    var targetPosZ = clamp(p.z + leadZ * 0.65, b.minZ, b.maxZ);
+    var targetLookX = clamp(p.x + leadX, b.minX, b.maxX);
+    var targetLookZ = clamp(p.z + leadZ, b.minZ, b.maxZ);
+
+    var smooth = 1 - Math.exp(-7.8 * realDt);
+    this.camPos.x = clamp(lerp(this.camPos.x, targetPosX, smooth), b.minX, b.maxX);
+    this.camPos.z = clamp(lerp(this.camPos.z, targetPosZ, smooth), b.minZ, b.maxZ);
+    this.camLook.x = clamp(lerp(this.camLook.x, targetLookX, smooth), b.minX, b.maxX);
+    this.camLook.z = clamp(lerp(this.camLook.z, targetLookZ, smooth), b.minZ, b.maxZ);
 
     var kickDecay = Math.exp(-14.0 * realDt);
     this.camKickX *= kickDecay;
@@ -3506,7 +4366,38 @@
   };
 
   EngineSession.prototype.moveEntityWithCollision = function (fromX, fromZ, toX, toZ, radius) {
-    return resolveSweptMovement(this.mapApi, fromX, fromZ, toX, toZ, radius);
+    var res = resolveSweptMovement(this.mapApi, fromX, fromZ, toX, toZ, radius);
+    var covers = this.destructibleCovers;
+    if (covers && covers.length > 0) {
+      var r = (typeof radius === 'number' && radius > 0) ? radius : 0.4;
+      for (var i = 0; i < covers.length; i++) {
+        var c = covers[i];
+        if (!c || c.destroyed) continue;
+        var minDist = r + (c.radius || 0.72);
+        var dx = res.x - c.x;
+        var dz = res.z - c.z;
+        var d2 = dx * dx + dz * dz;
+        if (d2 < minDist * minDist) {
+          var dist = Math.sqrt(d2);
+          var nx = dist > 1e-4 ? (dx / dist) : 1;
+          var nz = dist > 1e-4 ? (dz / dist) : 0;
+          var pushX = c.x + nx * minDist;
+          var pushZ = c.z + nz * minDist;
+          if (!this.mapApi || typeof this.mapApi.isWalkable !== 'function' || this.mapApi.isWalkable(Math.floor(pushX), Math.floor(pushZ))) {
+            res.x = pushX;
+            res.z = pushZ;
+          } else {
+            res.x = fromX;
+            res.z = fromZ;
+          }
+          res.hit = true;
+          res.hitWall = true;
+          res.normalX = nx;
+          res.normalZ = nz;
+        }
+      }
+    }
+    return res;
   };
 
   EngineSession.prototype.isPointInPuddle = function (x, z) {
@@ -3672,7 +4563,12 @@
       this.spawnWallImpactDebris(impactX, impactZ, res.normalX, res.normalZ);
       this.addCameraShake(0.16, 0.14);
       if (opts && opts.announceWallSlam) {
-        this.spawnFloatingText(actor.x, actor.id === 'inspector' ? 2.75 : 2.15, actor.z, '撞墙震荡!', '#ffbe6b');
+        if (actor.id === 'inspector') {
+          actor.armorBrokenTimer = Math.max(actor.armorBrokenTimer || 0, 3.8);
+          this.exposeInspectorWeakpoint('wall_crash', 3.6);
+        } else {
+          this.spawnFloatingText(actor.x, 2.15, actor.z, '撞墙震荡!', '#ffbe6b');
+        }
       }
     }
     return res;
@@ -3796,6 +4692,7 @@
     if (p.invulnTimer > 0) p.invulnTimer = Math.max(0, p.invulnTimer - simDt);
     if (p.actionTimer > 0) p.actionTimer = Math.max(0, p.actionTimer - simDt);
     if (p.channelTimer > 0) p.channelTimer = Math.max(0, p.channelTimer - simDt);
+    if (p.ruleBindTimer > 0) p.ruleBindTimer = Math.max(0, p.ruleBindTimer - simDt);
     if (p.hitFlash > 0) p.hitFlash = Math.max(0, p.hitFlash - realDt);
     if (p.whiteFlash > 0) p.whiteFlash = Math.max(0, p.whiteFlash - realDt);
     if (this.exitWarnTimer > 0) this.exitWarnTimer = Math.max(0, this.exitWarnTimer - realDt);
@@ -3919,7 +4816,8 @@
       if (this.keys['d'] || this.keys['KeyD'] || this.keys['ArrowRight']) mx += 1;
     }
 
-    var speed = 6.2 * this.passives.moveSpeedMult * (isOverclock ? 1.65 : 1.0);
+    var bindMult = (p.ruleBindTimer > 0) ? 0.45 : 1.0;
+    var speed = 8.8 * this.passives.moveSpeedMult * (isOverclock ? 1.65 : 1.0) * bindMult;
     if (p.dashTimer > 0) {
       p.dashTimer = Math.max(0, p.dashTimer - simDt);
       p.vx = p.dashVx;
@@ -3977,7 +4875,8 @@
         if (inPuddle) {
           this.spawnPuddleSplash(p.x, p.z, false);
         } else {
-          var rippleCol = isOverclock ? (p.overclockColor || 0x4df8ff) : (p.x >= 41 ? 0x8a9eb6 : 0x5eaec4);
+          var platStartX = (this.mapApi && this.mapApi.PLATFORM_START_X) || 84;
+          var rippleCol = isOverclock ? (p.overclockColor || 0x4df8ff) : (p.x >= platStartX - 1 ? 0x8a9eb6 : 0x5eaec4);
           this.spawnFootstepRipple(p.x, p.z, rippleCol, isOverclock ? 0.62 : 0.42, p.vx, p.vz);
         }
       }
@@ -4023,7 +4922,8 @@
     }
 
     // Yellow line rule check (entering hazard/rail strip before overridePct >= 100)
-    if (p.x >= 49.0 && this.overridePct < 100 && this.inspector.alive && this.inspector.state !== 'HUNT') {
+    var hazardX = (this.mapApi && this.mapApi.HAZARD_X) || 103;
+    if (p.x >= hazardX && this.overridePct < 100 && this.inspector.alive && this.inspector.state !== 'HUNT') {
       this.inspector.state = 'HUNT';
       this.inspector.huntTargetId = 'player';
       this.inspector.huntLoseTimer = 10;
@@ -4248,6 +5148,9 @@
         });
         this.addCameraShake(0.16, 0.15);
       }
+
+      // Hit check against intact destructible covers
+      this.damageDestructibleCoversInArc(p.x, p.z, dir.x, dir.z, range + 0.55, 0.25, Math.max(22, dmg));
     }
   };
 
@@ -4411,24 +5314,34 @@
         playSfxSafe('sword_slash');
         this.emitSoundRipple(p.x, p.z, 46 * this.passives.noiseMult, 'skill');
 
-        // Check PERFECT PARRY during Inspector red lunge telegraph (lungeWindup > 0) or active lunge!
+        // Check PERFECT PARRY during Inspector red lunge or close shear cleave telegraph!
         var dIns = dist2D(p.x, p.z, ins.x, ins.z);
-        if (ins.alive && (ins.lungeWindup > 0 || ins.lungeTelegraph > 0 || ins.lungeActive > 0) && dIns <= arcRange + 1.1) {
+        var parryableWindow = (ins.lungeWindup > 0 || ins.lungeTelegraph > 0 || ins.lungeActive > 0 || ins.cleaveTelegraph > 0);
+        if (ins.alive && parryableWindow && dIns <= arcRange + 1.2) {
           ins.lungeTelegraph = 0;
           ins.lungeWindup = 0;
           ins.lungeActive = 0;
+          ins.cleaveTelegraph = 0;
+          ins.blinkTelegraph = 0;
+          ins.pendingWeakpoint = null;
           ins.teleMesh.visible = false;
           ins.teleFill.visible = false;
+          if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
           if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
-          ins.stunTimer = Math.max(ins.stunTimer, 2.8);
+          ins.stunTimer = Math.max(ins.stunTimer, 2.6);
+          ins.armorBrokenTimer = Math.max(ins.armorBrokenTimer || 0, BOSS_DEATH_EXAM_CONFIG.armorBreakDuration);
           p.energy = Math.min(p.maxEnergy, p.energy + 25);
           this.stats.parries += 1;
-          var parryDmg = Math.round(power * 1.8);
+          var parryDmg = Math.round(power * 1.9);
           this.damageInspector(parryDmg, dir.x * 6.5, dir.z * 6.5, true, {
             playerImpact: true,
             hitStop: 0.08,
-            impactColor: 0xffe484
+            impactColor: 0xffe484,
+            ignoreRuleArmor: true
           });
+          if (ins.alive) {
+            this.exposeInspectorWeakpoint('parry_shatter', 4.5);
+          }
           this.hitStopTimer = 0.08;
           this.parryFlashTimer = 0.24;
           this.triggerImpactFrame(0.085);
@@ -4447,11 +5360,11 @@
           this.spawnShockRing(ins.x, ins.z, 2.8, 0xffffff, 0.28);
           this.spawnSparkBurst(ins.x, 1.35, ins.z, 0xffe07d, 26);
           playSfxSafe('parry_clang');
-          this.spawnFloatingText(ins.x, 3.0, ins.z, '✦ 完美弹反! ' + (sl.name || '宵练断势'), '#ffd86b', 'parry');
+          this.spawnFloatingText(ins.x, 3.0, ins.z, '✦ 完美弹反 · 规则破甲! ' + (sl.name || '宵练断势'), '#ffd86b', 'parry');
           this.emitRadio({
             type: 'spark',
             speaker: '系统校验',
-            text: '【完美弹反】你以「' + (sl.name || '宵练剑弧') + '」截断了零号检票员的处决突刺，使其陷入 2.8 秒硬直并返还 25 点能量！'
+            text: '【完美弹反 · 弱点暴露】你以「' + (sl.name || '宵练剑弧') + '」截断了零号检票员的处决攻势，震碎规则护甲并暴露胸口核心 4.5 秒，返还 25 点能量！'
           });
         } else if (ins.alive && this.isPointInArc(p.x, p.z, dir.x, dir.z, ins.x, ins.z, arcRange + ins.radius, 0.15)) {
           this.damageInspector(power, dir.x * 5.0, dir.z * 5.0, vfx.isHighTier, {
@@ -4655,13 +5568,17 @@
         var chainRange = Math.max(feelMin, radius);
         var dToBoss = dist2D(p.x, p.z, ins.x, ins.z);
         if (ins.alive && dToBoss <= chainRange) {
-          var sealAdd = 28 + (activeResonance && activeResonance.bonuses ? (activeResonance.bonuses.sealBonusPct || 0) : 0);
+          var sealAdd = 24 + (activeResonance && activeResonance.bonuses ? (activeResonance.bonuses.sealBonusPct || 0) : 0);
           ins.chainTimer = Math.max(ins.chainTimer, Math.max(5.0, duration));
+          ins.armorBrokenTimer = Math.max(ins.armorBrokenTimer || 0, 4.2);
           ins.sealedPct = Math.min(100, ins.sealedPct + sealAdd);
           this.spawnSealChainsVfx(p.x, p.z, ins.x, ins.z, colorHex, vfx);
-          this.damageInspector(Math.round(power * 0.75), 0, 0, false, { impactColor: colorHex });
+          this.damageInspector(Math.round(power * 0.75), 0, 0, false, { impactColor: colorHex, ignoreRuleArmor: true });
+          if (ins.alive && ins.sealedPct < 100) {
+            this.exposeInspectorWeakpoint('seal_shatter', 4.0);
+          }
           this.spawnImpactStar(ins.x, 1.4, ins.z, colorHex, 2.1, 0.30);
-          this.spawnFloatingText(ins.x, 2.8, ins.z, '规则封印 +' + sealAdd + '% (' + Math.round(ins.sealedPct) + '%)', vfx.primaryColor || '#f0c46c');
+          this.spawnFloatingText(ins.x, 2.8, ins.z, '规则封印 +' + sealAdd + '% · 破甲!', vfx.primaryColor || '#f0c46c');
           playSfxSafe('fusion');
           this.addCameraShake(0.28, 0.25);
 
@@ -5448,15 +6365,33 @@
         if (!this.mapApi.isWalkable(Math.floor(pr.x), Math.floor(pr.z))) {
           this.spawnSparkBurst(pr.x, 1.0, pr.z, pr.color, 7);
           remove = true;
-        } else if (ins.alive && dist2D(pr.x, pr.z, ins.x, ins.z) <= ins.radius + pr.radius + 0.22) {
-          var vLen = Math.max(0.01, Math.sqrt(pr.vx * pr.vx + pr.vz * pr.vz));
-          this.damageInspector(pr.damage, (pr.vx / vLen) * pr.knockback, (pr.vz / vLen) * pr.knockback, false, {
-            impactColor: pr.color
-          });
-          this.spawnSparkBurst(pr.x, 1.1, pr.z, pr.secondaryColor || pr.color, 10);
-          remove = true;
-        } else if (pr.ttl <= 0) {
-          remove = true;
+        } else {
+          // Destructible cover hit check
+          var hitCov = null;
+          if (this.destructibleCovers && this.destructibleCovers.length) {
+            for (var ci = 0; ci < this.destructibleCovers.length; ci++) {
+              var cov = this.destructibleCovers[ci];
+              if (!cov || cov.destroyed) continue;
+              if (dist2D(pr.x, pr.z, cov.x, cov.z) <= (cov.radius || 0.72) + (pr.radius || 0.24)) {
+                hitCov = cov;
+                break;
+              }
+            }
+          }
+          if (hitCov) {
+            var pvLen = Math.max(0.01, Math.sqrt(pr.vx * pr.vx + pr.vz * pr.vz));
+            this.damageDestructibleCover(hitCov, Math.max(20, pr.damage || 22), pr.vx / pvLen, pr.vz / pvLen, 'projectile');
+            remove = true;
+          } else if (ins.alive && dist2D(pr.x, pr.z, ins.x, ins.z) <= ins.radius + pr.radius + 0.22) {
+            var vLen = Math.max(0.01, Math.sqrt(pr.vx * pr.vx + pr.vz * pr.vz));
+            this.damageInspector(pr.damage, (pr.vx / vLen) * pr.knockback, (pr.vz / vLen) * pr.knockback, false, {
+              impactColor: pr.color
+            });
+            this.spawnSparkBurst(pr.x, 1.1, pr.z, pr.secondaryColor || pr.color, 10);
+            remove = true;
+          } else if (pr.ttl <= 0) {
+            remove = true;
+          }
         }
       }
 
@@ -5485,27 +6420,43 @@
     this.glitchAmount = Math.max(this.glitchAmount, 0.5);
     playSfxSafe('emp_boom');
 
-    // Stun Inspector if in radius + snap direct lightning arc onto Inspector!
+    // Stun Inspector if in radius + snap direct lightning arc onto Inspector & shatter Rule Armor!
     var ins = this.inspector;
     if (ins.alive && dist2D(x, z, ins.x, ins.z) <= radius + ins.radius) {
-      ins.stunTimer = Math.max(ins.stunTimer, stunSec);
+      var effectiveStun = (ins.stunImmuneTimer || 0) > 0 ? Math.min(1.2, stunSec * 0.4) : stunSec;
+      ins.stunTimer = Math.max(ins.stunTimer, effectiveStun);
+      ins.armorBrokenTimer = Math.max(ins.armorBrokenTimer || 0, BOSS_DEATH_EXAM_CONFIG.armorBreakDuration);
       ins.lungeTelegraph = 0;
       ins.lungeWindup = 0;
       ins.lungeActive = 0;
+      ins.cleaveTelegraph = 0;
+      ins.gazeTelegraph = 0;
+      ins.slamTelegraph = 0;
+      ins.blinkTelegraph = 0;
+      ins.pendingWeakpoint = null;
       ins.teleMesh.visible = false;
       ins.teleFill.visible = false;
+      if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
+      if (ins.gazeBeam) ins.gazeBeam.visible = false;
+      if (ins.slamRing) ins.slamRing.visible = false;
       if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
       this.spawnLightningBolt(x, 1.1, z, ins.x, 1.45, ins.z, 0xffffff, 0.42, 7);
       this.spawnImpactStar(ins.x, 1.45, ins.z, mainCol, 2.5, 0.30);
-      this.damageInspector(power, 0, 0, true, { impactColor: mainCol });
-      this.spawnFloatingText(ins.x, 2.8, ins.z, 'EMP瘫痪 ' + stunSec.toFixed(1) + 's!', (vfx && vfx.primaryColor) || '#4de8ff');
+      this.damageInspector(power, 0, 0, true, { impactColor: mainCol, ignoreRuleArmor: true });
+      if (ins.alive) {
+        this.exposeInspectorWeakpoint('emp_shatter', 4.5);
+      }
+      this.spawnFloatingText(ins.x, 2.8, ins.z, 'EMP破甲瘫痪 ' + effectiveStun.toFixed(1) + 's!', (vfx && vfx.primaryColor) || '#4de8ff');
       this.recordMissionEvent(
         'branch',
         'EMP 电磁瘫痪零号检票员',
-        '成功干扰其胸口对讲机频段，检票员陷入 ' + stunSec.toFixed(1) + ' 秒感知僵直。',
+        '成功干扰其胸口对讲机频段，击碎规则护甲并使其陷入 ' + effectiveStun.toFixed(1) + ' 秒感知僵直。',
         { branchId: 'inspector_hunt' }
       );
     }
+
+    // EMP shockwave also shatters nearby destructible covers
+    this.damageDestructibleCoversInRadius(x, z, radius + 0.6, Math.max(40, power || 40));
 
     // Cancel active fake broadcasts!
     if (this.activeFakeBroadcastTimer > 0) {
@@ -5556,9 +6507,9 @@
         it.ringMat.color.setHex(statusHex);
         if (it.done) {
           it.mat.opacity = 0.22;
-          it.ringMat.opacity = 0.14;
+          it.ringMat.opacity = 0.12;
         } else {
-          it.ringMat.opacity = 0.56 + Math.sin(this.elapsedReal * 4.2 + i) * 0.14;
+          it.ringMat.opacity = 0.38 + Math.sin(this.elapsedReal * 4.2 + i) * 0.10;
         }
       } else if (it.type === 'console') {
         it.ring.rotation.z += simDt * (it.done ? 0.5 : 1.5);
@@ -5566,17 +6517,55 @@
         statusHex = it.done ? COL_DONE : (inProg ? COL_ACTIVE : COL_PENDING);
         pulseSpeed = inProg ? 3.2 : 1.8;
         it.ringMat.color.setHex(statusHex);
-        it.ringMat.opacity = it.done ? 0.36 : (inProg ? 0.85 : 0.64);
+        it.ringMat.opacity = it.done ? 0.28 : (inProg ? 0.68 : 0.46);
         if (it.beaconMat) it.beaconMat.color.setHex(statusHex);
       } else if (it.type === 'exit') {
         it.ring.rotation.z += simDt * (exitUnlocked ? 2.4 : 0.7);
         statusHex = exitUnlocked ? COL_EXIT_RDY : (this.trainInStation ? COL_ACTIVE : COL_WARNING);
         pulseSpeed = exitUnlocked ? 2.8 : 1.2;
         it.ringMat.color.setHex(statusHex);
-        it.ringMat.opacity = exitUnlocked ? (0.72 + Math.sin(this.elapsedReal * 6) * 0.22) : 0.48;
+        it.ringMat.opacity = exitUnlocked ? (0.58 + Math.sin(this.elapsedReal * 6) * 0.16) : 0.36;
         if (it.mat && it.mat.color) {
           it.mat.color.setHex(statusHex);
-          it.mat.opacity = exitUnlocked ? (0.62 + Math.sin(this.elapsedReal * 4) * 0.14) : 0.34;
+          it.mat.opacity = exitUnlocked ? (0.56 + Math.sin(this.elapsedReal * 4) * 0.12) : 0.30;
+        }
+      } else if (it.type === 'destructible_cover') {
+        it.ring.rotation.z += simDt * (it.destroyed ? 0.35 : 0.9);
+        if (it.hitShake > 0) {
+          it.hitShake = Math.max(0, it.hitShake - simDt * 4.5);
+          if (it.intactGroup) {
+            it.intactGroup.position.x = (Math.sin(this.elapsedReal * 65) * 0.09) * it.hitShake;
+            it.intactGroup.position.z = (Math.cos(this.elapsedReal * 58) * 0.07) * it.hitShake;
+          }
+        } else if (it.intactGroup) {
+          it.intactGroup.position.x = 0;
+          it.intactGroup.position.z = 0;
+        }
+        if (it.hitFlash > 0) {
+          it.hitFlash = Math.max(0, it.hitFlash - simDt * 5.0);
+        }
+        var damagedRatio = it.maxHp > 0 ? (it.hp / it.maxHp) : 0;
+        statusHex = it.destroyed ? COL_DONE : (damagedRatio <= 0.5 ? 0xff6b35 : COL_WARNING);
+        it.ringMat.color.setHex(statusHex);
+        it.ringMat.opacity = it.destroyed ? 0.14 : (0.34 + Math.sin(this.elapsedReal * 3.8 + i) * 0.08);
+        if (it.fractureMat) {
+          it.fractureMat.color.setHex(it.hitFlash > 0.05 ? 0xffffff : (damagedRatio <= 0.5 ? 0xff5a2c : 0xffa838));
+          it.fractureMat.opacity = it.destroyed ? 0 : (damagedRatio <= 0.5 ? 0.96 : 0.68);
+        }
+      } else if (it.type === 'scene_trigger') {
+        it.ring.rotation.z += simDt * (it.done ? 0.45 : 1.5);
+        var baseTrHex = it.triggerEffect === 'acoustic_lure' ? COL_WARNING : (it.triggerEffect === 'arc_surge' ? 0x6fa8ff : COL_PENDING);
+        statusHex = it.done ? COL_DONE : baseTrHex;
+        pulseSpeed = it.done ? 0.6 : 1.9;
+        it.ringMat.color.setHex(statusHex);
+        it.ringMat.opacity = it.done ? 0.22 : (0.42 + Math.sin(this.elapsedReal * 4.0 + i) * 0.10);
+        if (it.beaconMat) it.beaconMat.color.setHex(statusHex);
+        if (it.animPart) {
+          if (it.triggerEffect === 'vent_purge') {
+            it.animPart.rotation.z += simDt * (it.done ? 5.2 : 0.55);
+          } else if (it.triggerEffect === 'sonar_relay') {
+            it.animPart.rotation.y += simDt * (it.done ? 4.4 : 1.4);
+          }
         }
       }
 
@@ -5586,17 +6575,18 @@
         } else {
           it.pulseRing.visible = true;
           var ph = (this.elapsedReal * pulseSpeed * 0.45 + i * 0.27) % 1.0;
-          var pSc = pulseBaseScale * (1.0 + ph * 0.72);
+          var pSc = pulseBaseScale * (1.0 + ph * 0.65);
           it.pulseRing.scale.set(pSc, 1, pSc);
           it.pulseMat.color.setHex(statusHex);
-          it.pulseMat.opacity = (1.0 - ph) * (exitUnlocked && it.type === 'exit' ? 0.58 : 0.42);
+          it.pulseMat.opacity = (1.0 - ph) * (exitUnlocked && it.type === 'exit' ? 0.40 : 0.24);
         }
       }
 
       var d = dist2D(p.x, p.z, it.x, it.z);
-      if (d <= bestDist) {
+      var rangeLim = it.type === 'destructible_cover' ? (bestDist + 0.35) : bestDist;
+      if (d <= rangeLim) {
         if (it.type === 'exit' || !it.done) {
-          bestDist = d;
+          bestDist = Math.min(bestDist, d);
           best = it;
         }
       }
@@ -5784,7 +6774,215 @@
       return true;
     }
 
+    if (it.type === 'destructible_cover' && !it.destroyed) {
+      var bdx = it.x - this.player.x;
+      var bdz = it.z - this.player.z;
+      var bl = Math.max(0.01, Math.sqrt(bdx * bdx + bdz * bdz));
+      this.damageDestructibleCover(it, 35, bdx / bl, bdz / bl, 'breach');
+      return true;
+    }
+
+    if (it.type === 'scene_trigger' && !it.done) {
+      this.activateSceneTrigger(it);
+      return true;
+    }
+
     return false;
+  };
+
+  EngineSession.prototype.discoverEnvironmentClue = function (clueSpec, sourceType, worldX, worldZ) {
+    if (!clueSpec || !clueSpec.id) return null;
+    if (this.environmentCluesById[clueSpec.id]) return this.environmentCluesById[clueSpec.id];
+
+    var entry = {
+      id: clueSpec.id,
+      title: clueSpec.title || '环境物证线索',
+      tag: clueSpec.tag || (sourceType === 'destructible_cover' ? '掩体破拆' : '场景触发器'),
+      zoneId: clueSpec.zoneId || (this.mapApi ? this.mapApi.getZoneAt(worldX, worldZ) : 'concourse'),
+      zoneCode: clueSpec.zoneCode || 'Z-01',
+      summary: clueSpec.summary || '发现与零号回廊结构相关的隐藏环境线索。',
+      effectText: clueSpec.effectText || '',
+      sourceType: sourceType || 'scene_trigger',
+      discoveredAt: Math.floor(this.stats.elapsedSec || 0)
+    };
+    this.environmentCluesById[entry.id] = entry;
+    this.environmentClues.push(entry);
+    this.latestEnvironmentClue = entry;
+
+    var totalEnv = (this.destructibleCovers ? this.destructibleCovers.length : 0) + (this.sceneTriggers ? this.sceneTriggers.length : 0);
+    this.recordMissionEvent(
+      'clue',
+      entry.tag + ' · ' + entry.title + ' (' + this.environmentClues.length + '/' + Math.max(1, totalEnv) + ')',
+      entry.summary + (entry.effectText ? (' [' + entry.effectText + ']') : ''),
+      { zoneId: entry.zoneId }
+    );
+    this.emitRadio({
+      type: 'narration',
+      text: '【环境线索 · ' + entry.title + '】' + entry.summary
+    });
+    if (typeof worldX === 'number' && typeof worldZ === 'number') {
+      this.spawnFloatingText(worldX, 2.25, worldZ, '环境线索: ' + entry.title, '#5ce8c8');
+    }
+    this.emitHudSnapshot();
+    return entry;
+  };
+
+  EngineSession.prototype.damageDestructibleCover = function (cover, amount, hitDirX, hitDirZ, sourceTag) {
+    if (!cover || cover.destroyed) return false;
+    var dmg = Math.max(1, Math.round(Number(amount) || 20));
+    cover.hp = Math.max(0, cover.hp - dmg);
+    cover.progress = Math.round((1 - cover.hp / Math.max(1, cover.maxHp)) * 100);
+    cover.hitShake = 1.0;
+    cover.hitFlash = 1.0;
+
+    this.spawnSparkBurst(cover.x, 0.85, cover.z, 0xffaa3b, cover.hp <= 0 ? 18 : 8);
+    this.emitSoundRipple(cover.x, cover.z, cover.hp <= 0 ? 48 : 26, 'cover_hit');
+    playSfxSafe(cover.hp <= 0 ? 'emp_boom' : 'sword_slash');
+
+    if (cover.hp > 0) {
+      if (cover.hp <= cover.maxHp * 0.5 && cover.intactGroup) {
+        cover.intactGroup.rotation.z = 0.08 * (hitDirX >= 0 ? -1 : 1);
+      }
+      this.spawnFloatingText(cover.x, 1.85, cover.z, '-' + dmg + ' 掩体耐久 ' + cover.hp + '/' + cover.maxHp, '#ffba52');
+      this.addCameraShake(0.10, 0.12);
+      this.emitHudSnapshot();
+      return true;
+    }
+
+    // Cover shattered into walkable rubble
+    cover.destroyed = true;
+    cover.done = true;
+    cover.progress = 100;
+    if (cover.intactGroup) cover.intactGroup.visible = false;
+    if (cover.rubbleGroup) cover.rubbleGroup.visible = true;
+    this.stats.coversDestroyed = (this.stats.coversDestroyed || 0) + 1;
+    this.hitStopTimer = Math.max(this.hitStopTimer || 0, 0.035);
+    this.addCameraShake(0.22, 0.18);
+    this.spawnShockRing(cover.x, cover.z, 2.6, 0xffaa3b, 0.45);
+    this.spawnFloatingText(cover.x, 1.9, cover.z, '掩体击碎!', '#ffaa3b');
+
+    // Minor tactical recovery from crate supplies / breather opening
+    if (this.player) {
+      if (cover.kind === 'crate_barricade') {
+        this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 8);
+      } else {
+        this.player.sanity = Math.min(this.player.maxSanity, this.player.sanity + 4);
+      }
+    }
+
+    if (cover.envClue) {
+      this.discoverEnvironmentClue(cover.envClue, 'destructible_cover', cover.x, cover.z);
+    } else {
+      this.emitHudSnapshot();
+    }
+    return true;
+  };
+
+  EngineSession.prototype.damageDestructibleCoversInArc = function (ox, oz, dx, dz, maxDist, minDot, dmg) {
+    var covers = this.destructibleCovers;
+    if (!covers || !covers.length) return 0;
+    var hits = 0;
+    for (var i = 0; i < covers.length; i++) {
+      var c = covers[i];
+      if (!c || c.destroyed) continue;
+      if (this.isPointInArc(ox, oz, dx, dz, c.x, c.z, maxDist + (c.radius || 0.72), minDot)) {
+        if (this.damageDestructibleCover(c, dmg, dx, dz, 'melee')) hits++;
+      }
+    }
+    return hits;
+  };
+
+  EngineSession.prototype.damageDestructibleCoversInRadius = function (x, z, radius, dmg) {
+    var covers = this.destructibleCovers;
+    if (!covers || !covers.length) return 0;
+    var hits = 0;
+    for (var i = 0; i < covers.length; i++) {
+      var c = covers[i];
+      if (!c || c.destroyed) continue;
+      var d = dist2D(x, z, c.x, c.z);
+      if (d <= radius + (c.radius || 0.72)) {
+        var nx = d > 0.01 ? (c.x - x) / d : 1;
+        var nz = d > 0.01 ? (c.z - z) / d : 0;
+        if (this.damageDestructibleCover(c, dmg, nx, nz, 'aoe')) hits++;
+      }
+    }
+    return hits;
+  };
+
+  EngineSession.prototype.activateSceneTrigger = function (trig) {
+    if (!trig || trig.done) return false;
+    trig.done = true;
+    trig.progress = 100;
+    this.stats.triggersActivated = (this.stats.triggersActivated || 0) + 1;
+
+    if (trig.animPart && (trig.triggerEffect === 'acoustic_lure' || trig.triggerEffect === 'arc_surge')) {
+      trig.animPart.rotation.z = 0.52;
+      trig.animPart.rotation.x = -0.52;
+    }
+
+    var fx = trig.triggerEffect || 'acoustic_lure';
+    if (fx === 'acoustic_lure') {
+      var lureX = clamp(trig.x + 12, 8, (this.mapApi && this.mapApi.GRID_W ? this.mapApi.GRID_W - 14 : 210));
+      var lureZ = clamp(trig.z + 6, 8, (this.mapApi && this.mapApi.GRID_H ? this.mapApi.GRID_H - 12 : 140));
+      if (typeof this.spawnDecoyFlare === 'function') {
+        this.spawnDecoyFlare(lureX, lureZ, 6.5, 0xffaa3b, null);
+      }
+      this.emitSoundRipple(lureX, lureZ, 88, 'decoy');
+      this.soundLevel = Math.max(4, this.soundLevel - 18);
+      if (this.player) this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 10);
+      this.spawnShockRing(trig.x, trig.z, 3.8, 0xffaa3b, 0.55);
+      playSfxSafe('alert');
+    } else if (fx === 'vent_purge') {
+      this.soundLevel = Math.max(4, this.soundLevel - 24);
+      this.threatLevel = Math.max(6, this.threatLevel - 14);
+      if (this.player) {
+        this.player.sanity = Math.min(this.player.maxSanity, this.player.sanity + 10);
+        this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 12);
+      }
+      this.spawnShockRing(trig.x, trig.z, 4.4, 0x5ce8c8, 0.65);
+      this.spawnSparkBurst(trig.x, 1.35, trig.z, 0x8ef2ff, 14);
+      playSfxSafe('fusion');
+    } else if (fx === 'sonar_relay') {
+      this.reconRevealTimer = Math.max(this.reconRevealTimer || 0, 8.0);
+      if (this.player) this.player.sanity = Math.min(this.player.maxSanity, this.player.sanity + 8);
+      this.spawnShockRing(trig.x, trig.z, 6.5, 0x5ce8c8, 0.72);
+      this.spawnSparkBurst(trig.x, 1.55, trig.z, 0x5ce8c8, 14);
+      playSfxSafe('vortex_buy');
+    } else if (fx === 'arc_surge') {
+      this.empBlackoutTimer = Math.max(this.empBlackoutTimer || 0, 2.2);
+      this.empBlackoutPos.x = trig.x;
+      this.empBlackoutPos.z = trig.z;
+      if (this.player) this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 14);
+      this.spawnShockRing(trig.x, trig.z, 5.2, 0x6fa8ff, 0.62);
+      this.spawnSparkBurst(trig.x, 1.45, trig.z, 0x7cb8ff, 16);
+      if (this.inspector && this.inspector.alive && dist2D(trig.x, trig.z, this.inspector.x, this.inspector.z) <= 14.5) {
+        this.inspector.stunTimer = Math.max(this.inspector.stunTimer || 0, 2.4);
+        if (typeof this.spawnLightningBolt === 'function') {
+          this.spawnLightningBolt(trig.x, 1.4, trig.z, this.inspector.x, 1.4, this.inspector.z, 0x7cb8ff, 0.42, 6);
+        }
+        this.damageInspector(18, 0, 0, false, { impactColor: 0x6fa8ff });
+      }
+      playSfxSafe('emp_boom');
+    }
+
+    this.addCameraShake(0.18, 0.18);
+    if (trig.envClue) {
+      this.discoverEnvironmentClue(trig.envClue, 'scene_trigger', trig.x, trig.z);
+    } else {
+      this.emitHudSnapshot();
+    }
+    return true;
+  };
+
+  EngineSession.prototype.getDynamicInteractablesSummary = function () {
+    return {
+      destructiblesTotal: this.destructibleCovers ? this.destructibleCovers.length : 0,
+      destructiblesBroken: this.stats.coversDestroyed || 0,
+      triggersTotal: this.sceneTriggers ? this.sceneTriggers.length : 0,
+      triggersActivated: this.stats.triggersActivated || 0,
+      envCluesFound: this.environmentClues ? this.environmentClues.length : 0,
+      envClues: this.environmentClues ? this.environmentClues.slice() : []
+    };
   };
 
   // ---------------------------------------------------------------------------
@@ -6150,28 +7348,138 @@
 
       var moving = (Math.abs(vx) + Math.abs(vz)) > 0.35;
       this.updateActorSprite(npc, simDt, moving);
+      npc.vis.group.visible = this.canSeeWorldPoint(npc.x, npc.z);
     }
   };
 
   // ---------------------------------------------------------------------------
-  // Inspector Boss AI (PATROL -> INVESTIGATE -> HUNT + 0.9s Crimson Lunge)
+  // Inspector Boss AI — Death Exam Grade Multi-Mechanic Boss
+  // (Rule Armor + Execution Lunge + Close Shear Cleave + Audit Gaze + Rule Slam + Phase 2)
   // ---------------------------------------------------------------------------
+  EngineSession.prototype.exposeInspectorWeakpoint = function (eventType, fallbackDuration) {
+    var ins = this.inspector;
+    if (!ins || !ins.alive) return null;
+    var trigger = (INFINITY.AI && typeof INFINITY.AI.computeWeakpointTrigger === 'function')
+      ? INFINITY.AI.computeWeakpointTrigger(eventType, { threatLevel: this.threatLevel })
+      : null;
+    var dur = trigger ? trigger.duration : (Number(fallbackDuration) || 3.2);
+    var callout = trigger ? trigger.callout : '✦ 核心弱点暴露!';
+    ins.weakpointTimer = Math.max(ins.weakpointTimer || 0, dur);
+    ins.weakpointMaxTimer = Math.max(ins.weakpointMaxTimer || 0, dur);
+    ins.weakpointReason = eventType || 'exposed';
+    ins.armorBrokenTimer = Math.max(ins.armorBrokenTimer || 0, dur);
+
+    var wpSpec = (INFINITY.CombatFeel && typeof INFINITY.CombatFeel.getBossPhase2Feel === 'function')
+      ? INFINITY.CombatFeel.getBossPhase2Feel('weakpoint_expose')
+      : { shakeAmp: 0.22, shakeDur: 0.18, shakeFreq: 32, primaryColor: 0xffe875, secondaryColor: 0x4df8ff, ringRadius: 3.1 };
+    this.addCameraShake(wpSpec.shakeAmp, wpSpec.shakeDur, wpSpec.shakeFreq);
+    this.spawnShockRing(ins.x, ins.z, wpSpec.ringRadius || 3.1, wpSpec.secondaryColor || 0x4df8ff, 0.42);
+    this.spawnShockRing(ins.x, ins.z, (wpSpec.ringRadius || 3.1) * 0.62, wpSpec.primaryColor || 0xffe875, 0.28);
+    this.spawnFloatingText(ins.x, 3.05, ins.z, callout, '#ffe875', 'weakpoint');
+    playSfxSafe('blade_ring');
+    return { reason: ins.weakpointReason, duration: dur, callout: callout };
+  };
+
   EngineSession.prototype.updateInspector = function (simDt) {
     var ins = this.inspector;
     if (!ins.alive) {
       ins.vis.group.visible = false;
+      if (ins.gazeBeam) ins.gazeBeam.visible = false;
+      if (ins.weakpointVis && ins.weakpointVis.group) ins.weakpointVis.group.visible = false;
       if (this.inspectorLantern) this.inspectorLantern.intensity = 0;
       return;
     }
 
     var p = this.player;
     var mapApi = this.mapApi;
+    var cfg = BOSS_DEATH_EXAM_CONFIG;
+    var canSeeIns = this.canSeeWorldPoint(ins.x, ins.z);
+    ins.vis.group.visible = canSeeIns;
 
     if (ins.hitFlash > 0) ins.hitFlash = Math.max(0, ins.hitFlash - simDt);
     if (ins.whiteFlash > 0) ins.whiteFlash = Math.max(0, ins.whiteFlash - simDt);
     if (ins.actionTimer > 0) ins.actionTimer = Math.max(0, ins.actionTimer - simDt);
+    if (ins.blinkCd > 0) ins.blinkCd = Math.max(0, ins.blinkCd - simDt);
     if (ins.lungeCd > 0) ins.lungeCd = Math.max(0, ins.lungeCd - simDt);
+    if (ins.cleaveCd > 0) ins.cleaveCd = Math.max(0, ins.cleaveCd - simDt);
+    if (ins.gazeCd > 0) ins.gazeCd = Math.max(0, ins.gazeCd - simDt);
+    if (ins.slamCd > 0) ins.slamCd = Math.max(0, ins.slamCd - simDt);
     if (ins.chainTimer > 0) ins.chainTimer = Math.max(0, ins.chainTimer - simDt);
+    if (ins.armorBrokenTimer > 0) ins.armorBrokenTimer = Math.max(0, ins.armorBrokenTimer - simDt);
+    if (ins.stunImmuneTimer > 0) ins.stunImmuneTimer = Math.max(0, ins.stunImmuneTimer - simDt);
+    if (ins.armorMsgCd > 0) ins.armorMsgCd = Math.max(0, ins.armorMsgCd - simDt);
+    if (ins.weakpointTimer > 0) {
+      ins.weakpointTimer = Math.max(0, ins.weakpointTimer - simDt);
+      if (ins.weakpointTimer <= 0) {
+        ins.weakpointReason = null;
+        ins.weakpointMaxTimer = 0;
+      }
+    }
+
+    if (ins.weakpointVis && INFINITY.CombatFeel && typeof INFINITY.CombatFeel.updateBossWeakpointVisual === 'function') {
+      INFINITY.CombatFeel.updateBossWeakpointVisual(ins.weakpointVis, ins, this.elapsedReal);
+    }
+
+    // Phase-2 Mutation evaluation driven by HP threshold & live station threat level
+    var mutEval = (INFINITY.AI && typeof INFINITY.AI.evaluateInspectorMutation === 'function')
+      ? INFINITY.AI.evaluateInspectorMutation({
+        hp: ins.hp,
+        maxHp: ins.maxHp,
+        threatLevel: this.threatLevel,
+        alreadyMutated: ins.mutated,
+        currentPhase: ins.phase
+      })
+      : {
+        phase: (ins.phase >= 2 || (ins.hp / Math.max(1, ins.maxHp)) <= cfg.phase2Threshold) ? 2 : 1,
+        mutated: (ins.phase >= 2 || (ins.hp / Math.max(1, ins.maxHp)) <= cfg.phase2Threshold),
+        justMutated: ins.phase < 2 && ((ins.hp / Math.max(1, ins.maxHp)) <= cfg.phase2Threshold),
+        mutationTier: ins.phase >= 2 ? 'mutated' : 'dormant',
+        threatTier: 'low',
+        speedMult: ins.phase >= 2 ? 1.22 : 1.0,
+        damageMult: ins.phase >= 2 ? 1.18 : 1.0,
+        cooldownMult: ins.phase >= 2 ? 0.82 : 1.0,
+        blinkCooldownSec: 6.0,
+        radioAlert: '【死考警戒 · 二阶段变异】零号检票员撕裂规则外壳，解锁瞬移奇袭与弱点核心机制！'
+      };
+
+    ins.mutationTier = mutEval.mutationTier;
+    ins.threatTier = mutEval.threatTier;
+    var isPhase2 = Boolean(mutEval.mutated || ins.phase >= 2);
+    if (mutEval.justMutated) {
+      ins.phase = 2;
+      ins.mutated = true;
+      ins.lungeTelegraph = 0;
+      ins.lungeWindup = 0;
+      ins.lungeActive = 0;
+      ins.cleaveTelegraph = 0;
+      ins.gazeTelegraph = 0;
+      ins.blinkTelegraph = 0;
+      if (ins.teleMesh) ins.teleMesh.visible = false;
+      if (ins.teleFill) ins.teleFill.visible = false;
+      if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
+      if (ins.gazeBeam) ins.gazeBeam.visible = false;
+      if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
+      ins.slamTelegraph = 0.92;
+      ins.slamCd = Math.max(4.5, 8.5 * mutEval.cooldownMult);
+      ins.blinkCd = Math.min(ins.blinkCd || 4.5, 2.2);
+      ins.pendingWeakpoint = 'slam_recovery';
+      playSfxSafe('alert');
+      if (INFINITY.CombatFeel && typeof INFINITY.CombatFeel.triggerBossMutationAwakeningFeel === 'function') {
+        INFINITY.CombatFeel.triggerBossMutationAwakeningFeel(this, ins.x, ins.z, {
+          callout: mutEval.mutationTier === 'overdrive' ? '【高危异变 · 过载二阶段】' : '【二阶段变异 · 频段过载】'
+        });
+      } else {
+        this.addCameraShake(0.48, 0.35);
+        this.glitchAmount = Math.max(this.glitchAmount, 0.72);
+        this.spawnFloatingText(ins.x, 3.05, ins.z, '【二阶段变异 · 频段过载】', '#ff2942', 'mutation');
+      }
+      if (mutEval.radioAlert) {
+        this.emitRadio({
+          type: 'system',
+          text: mutEval.radioAlert
+        });
+      }
+    }
 
     // Boss volumetric crimson lantern sway, golden containment seal ring, & phase-2 rage fissures
     if (ins.lanternCone) {
@@ -6194,21 +7502,21 @@
         ins.sealGroup.visible = false;
       }
     }
-    // Phase-2 enraged crimson arcs when HP drops below 55%
-    if (ins.hp / Math.max(1, ins.maxHp) < 0.55) {
+    // Phase-2 enraged crimson arcs (intensifies in overdrive threat tier)
+    if (isPhase2 && canSeeIns) {
       ins.rageArcAccum = (ins.rageArcAccum || 0) - simDt;
       if (ins.rageArcAccum <= 0) {
-        ins.rageArcAccum = 0.42;
+        ins.rageArcAccum = mutEval.mutationTier === 'overdrive' ? 0.22 : 0.36;
         var ra = Math.random() * Math.PI * 2;
         this.spawnLightningBolt(
           ins.x, 1.4, ins.z,
-          ins.x + Math.cos(ra) * 1.35, 0.3 + Math.random() * 1.4, ins.z + Math.sin(ra) * 1.35,
-          0xff2942, 0.18, 4
+          ins.x + Math.cos(ra) * 1.55, 0.3 + Math.random() * 1.4, ins.z + Math.sin(ra) * 1.55,
+          mutEval.mutationTier === 'overdrive' ? 0xff4760 : 0xff2942, 0.18, 4
         );
       }
     }
     // Dark-red trailing mist & boot sparks while hunting
-    if (ins.state === 'HUNT' && ins.stunTimer <= 0) {
+    if (ins.state === 'HUNT' && ins.stunTimer <= 0 && canSeeIns) {
       ins.mistAccum = (ins.mistAccum || 0) - simDt;
       if (ins.mistAccum <= 0) {
         ins.mistAccum = 0.24;
@@ -6216,52 +7524,265 @@
       }
     }
 
-    // Stunned (from EMP or Perfect Parry!)
+    // Stunned (from EMP or Perfect Parry!) with brief stun-DR immunity on recovery
     if (ins.stunTimer > 0) {
       ins.stunTimer = Math.max(0, ins.stunTimer - simDt);
+      if (ins.stunTimer <= 0) {
+        ins.stunImmuneTimer = Math.max(ins.stunImmuneTimer || 0, cfg.stunImmuneDuration);
+      }
       ins.teleMesh.visible = false;
       ins.teleFill.visible = false;
+      if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
+      if (ins.gazeBeam) ins.gazeBeam.visible = false;
+      if (ins.slamRing) ins.slamRing.visible = false;
       if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
       this.updateActorSprite(ins, simDt, false);
       this.enforceWardBlockOnInspector();
       return;
     }
 
+    // Mechanic 0 (Phase-2 Mutation): Phantom Spatial Blink Ambush -> Chains into Parryable Shear Cleave + Core Overheat Weakpoint
+    if (ins.blinkTelegraph > 0) {
+      ins.blinkTelegraph = Math.max(0, ins.blinkTelegraph - simDt);
+      ins.hitFlash = Math.max(ins.hitFlash, 0.08);
+      ins.actionTimer = 0.22;
+      if (canSeeIns && Math.random() < 0.42) {
+        this.spawnSparkBurst(ins.x, 1.35, ins.z, 0xff2942, 3);
+      }
+      if (ins.blinkTelegraph <= 0) {
+        var bTgt = (ins.huntTargetId === 'player') ? p : (this.squadById[ins.huntTargetId] || p);
+        if (!bTgt || bTgt.alive === false) bTgt = p;
+        var oldX = ins.x;
+        var oldZ = ins.z;
+        var bAng = Math.atan2(ins.z - bTgt.z, ins.x - bTgt.x) + Math.PI;
+        var desiredX = bTgt.x + Math.cos(bAng) * 3.0;
+        var desiredZ = bTgt.z + Math.sin(bAng) * 3.0;
+        var blinkSafe = mapApi.resolveCircleWallCollision(desiredX, desiredZ, ins.radius);
+        ins.x = blinkSafe.x;
+        ins.z = blinkSafe.z;
+        ins.facingLeft = bTgt.x < ins.x;
+        ins.blinkCd = mutEval.blinkCooldownSec || 5.8;
+        this.enforceWardBlockOnInspector();
+
+        if (INFINITY.CombatFeel && typeof INFINITY.CombatFeel.spawnBossTeleportVfx === 'function') {
+          INFINITY.CombatFeel.spawnBossTeleportVfx(this, oldX, oldZ, ins.x, ins.z, {
+            facingLeft: ins.facingLeft
+          });
+        } else {
+          this.spawnAfterimage(oldX, oldZ, 'inspector', ins.facingLeft, 0xff2238, 0.45, 'dash');
+          this.spawnShockRing(ins.x, ins.z, 3.4, 0xff2942, 0.38);
+        }
+        playSfxSafe('alert');
+        this.emitSoundRipple(ins.x, ins.z, 76, 'boss');
+
+        // Immediately chain into a parryable Shear Cleave, then expose weakpoint via blink_overheat!
+        var cdx = bTgt.x - ins.x;
+        var cdz = bTgt.z - ins.z;
+        var clen = Math.max(0.01, Math.sqrt(cdx * cdx + cdz * cdz));
+        ins.cleaveDirX = cdx / clen;
+        ins.cleaveDirZ = cdz / clen;
+        ins.cleaveTelegraph = 0.48;
+        ins.pendingWeakpoint = 'blink_overheat';
+      }
+      this.updateActorSprite(ins, simDt, false);
+      return;
+    }
+
+    // Mechanic A: Rule Shockwave Slam (expanding floor ring -> heavy AOE + SAN drain + ward shred + Phase-2 weakpoint exposure)
+    if (ins.slamTelegraph > 0) {
+      ins.slamTelegraph = Math.max(0, ins.slamTelegraph - simDt);
+      var sMax = isPhase2 ? 0.92 : 1.05;
+      var sProg = 1 - clamp(ins.slamTelegraph / sMax, 0, 1);
+      if (ins.slamRing && ins.slamRingMat) {
+        ins.slamRing.visible = true;
+        var srScale = Math.max(0.4, sProg * cfg.slamRadius);
+        ins.slamRing.scale.set(srScale, srScale, 1);
+        ins.slamRingMat.opacity = 0.35 + sProg * 0.55;
+      }
+      ins.actionTimer = 0.25;
+      if (ins.slamTelegraph <= 0) {
+        if (ins.slamRing) ins.slamRing.visible = false;
+        ins.slamCd = Math.max(4.5, (isPhase2 ? 8.5 : 11.5) * mutEval.cooldownMult);
+        this.addCameraShake(0.52, 0.34);
+        this.spawnShockRing(ins.x, ins.z, cfg.slamRadius, 0xff2238, 0.55);
+        this.spawnShockRing(ins.x, ins.z, cfg.slamRadius * 0.65, 0xffb3ba, 0.34);
+        this.spawnSparkBurst(ins.x, 1.0, ins.z, 0xff2942, 24);
+        playSfxSafe('emp_boom');
+        this.emitSoundRipple(ins.x, ins.z, 86, 'boss');
+
+        var slamDmg = Math.round(cfg.slamDamage * mutEval.damageMult);
+        // Hit player if within slam radius
+        var dSlamP = dist2D(ins.x, ins.z, p.x, p.z);
+        if (dSlamP <= cfg.slamRadius) {
+          var sdx = (p.x - ins.x) / Math.max(0.01, dSlamP);
+          var sdz = (p.z - ins.z) / Math.max(0.01, dSlamP);
+          p.sanity = Math.max(0, p.sanity - cfg.slamSanityLoss);
+          this.damagePlayer(slamDmg, sdx * 6.8, sdz * 6.8);
+        }
+        // Hit allies in slam radius
+        for (var sai = 0; sai < this.squad.length; sai++) {
+          var sAlly = this.squad[sai];
+          if (sAlly.alive && dist2D(ins.x, ins.z, sAlly.x, sAlly.z) <= cfg.slamRadius) {
+            this.damageAlly(sAlly, Math.round(34 * mutEval.damageMult));
+          }
+        }
+        // Degrade nearby protective wards
+        for (var swi = 0; swi < this.wards.length; swi++) {
+          var wObj = this.wards[swi];
+          if (dist2D(ins.x, ins.z, wObj.x, wObj.z) <= cfg.slamRadius + (wObj.radius || 3.0)) {
+            wObj.ttl = Math.max(0.2, wObj.ttl - 4.0);
+          }
+        }
+        // Phase-2 Slam vents core heat, exposing Inspector's chest weakpoint!
+        if (isPhase2 || ins.pendingWeakpoint === 'slam_recovery') {
+          ins.pendingWeakpoint = null;
+          this.exposeInspectorWeakpoint('slam_recovery', 3.4);
+        }
+      }
+      this.updateActorSprite(ins, simDt, false);
+      return;
+    }
+
+    // Mechanic B: Close Shear Cleave (wide crimson arc — parryable!)
+    if (ins.cleaveTelegraph > 0) {
+      ins.cleaveTelegraph = Math.max(0, ins.cleaveTelegraph - simDt);
+      var cMax = isPhase2 ? 0.48 : 0.55;
+      var cProg = 1 - clamp(ins.cleaveTelegraph / cMax, 0, 1);
+      var cAng = Math.atan2(ins.cleaveDirZ, ins.cleaveDirX);
+      if (ins.cleaveMesh && ins.cleaveMat) {
+        ins.cleaveMesh.visible = true;
+        ins.cleaveMesh.rotation.y = -cAng;
+        ins.cleaveMat.opacity = 0.32 + cProg * 0.52;
+      }
+      if (ins.teleParryGlint && ins.teleParryGlintMat) {
+        ins.teleParryGlint.visible = true;
+        ins.teleParryGlint.position.x = ins.facingLeft ? -0.68 : 0.68;
+        ins.teleParryGlint.rotation.z = this.elapsedReal * 9.0;
+        ins.teleParryGlint.scale.set(0.85 + cProg * 0.45, 0.85 + cProg * 0.45, 1);
+        ins.teleParryGlintMat.color.setHex(0xffe484);
+        ins.teleParryGlintMat.opacity = 0.92;
+      }
+      ins.actionTimer = 0.2;
+      if (ins.cleaveTelegraph <= 0) {
+        if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
+        if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
+        ins.cleaveCd = Math.max(1.5, (isPhase2 ? 2.4 : 3.2) * mutEval.cooldownMult);
+        this.triggerActorSquash(ins, 1.24, 0.82);
+        this.spawnSlashArc(ins.x, ins.z, cAng, 3.85, 0xff2238, 0.28, true, { primaryColor: '#ff2238', secondaryColor: '#ff99a4' });
+        playSfxSafe('sword_slash');
+
+        var cDmg = Math.round((isPhase2 ? cfg.cleaveDamageP2 : cfg.cleaveDamageP1) * mutEval.damageMult);
+        if (this.isPointInArc(ins.x, ins.z, ins.cleaveDirX, ins.cleaveDirZ, p.x, p.z, 3.9 + p.radius, -0.15)) {
+          if (isPhase2) p.sanity = Math.max(0, p.sanity - cfg.cleaveSanityP2);
+          this.damagePlayer(cDmg, ins.cleaveDirX * 5.8, ins.cleaveDirZ * 5.8);
+        }
+        for (var cai = 0; cai < this.squad.length; cai++) {
+          var cAlly = this.squad[cai];
+          if (cAlly.alive && this.isPointInArc(ins.x, ins.z, ins.cleaveDirX, ins.cleaveDirZ, cAlly.x, cAlly.z, 3.9 + cAlly.radius, -0.15)) {
+            this.damageAlly(cAlly, Math.round(cDmg * 0.78));
+          }
+        }
+        // Post-Blink Ambush overheat exposes Inspector's chest weakpoint!
+        if (ins.pendingWeakpoint === 'blink_overheat') {
+          ins.pendingWeakpoint = null;
+          this.exposeInspectorWeakpoint('blink_overheat', 3.2);
+        }
+      }
+      this.updateActorSprite(ins, simDt, false);
+      return;
+    }
+
+    // Mechanic C: Cold-White Lantern Ticket Audit Gaze (lock-on beam; break LOS or stealth to dodge & trigger weakpoint!)
+    if (ins.gazeTelegraph > 0) {
+      ins.gazeTelegraph = Math.max(0, ins.gazeTelegraph - simDt);
+      var gTgt = (ins.gazeTargetId === 'player') ? p : (this.squadById[ins.gazeTargetId] || p);
+      if (!gTgt || gTgt.alive === false) gTgt = p;
+      var gDist = dist2D(ins.x, ins.z, gTgt.x, gTgt.z);
+      var gLos = mapApi.hasLineOfSight(ins.x, ins.z, gTgt.x, gTgt.z) && !(gTgt === p && p.stealthTimer > 0);
+      var gMax = isPhase2 ? 1.10 : 1.25;
+      var gProg = 1 - clamp(ins.gazeTelegraph / gMax, 0, 1);
+
+      if (ins.gazeBeam && ins.gazeBeamMat) {
+        if (canSeeIns && gLos) {
+          ins.gazeBeam.visible = true;
+          ins.gazeBeam.position.set(ins.x, 1.32, ins.z);
+          ins.gazeBeam.rotation.y = Math.atan2(gTgt.x - ins.x, gTgt.z - ins.z);
+          ins.gazeBeam.scale.set(0.6 + gProg * 1.4, 1, Math.max(0.5, gDist));
+          ins.gazeBeamMat.color.setHex(gProg > 0.72 ? 0xff2942 : 0xffe4e8);
+          ins.gazeBeamMat.opacity = 0.45 + gProg * 0.48;
+        } else {
+          ins.gazeBeam.visible = false;
+        }
+      }
+      ins.facingLeft = gTgt.x < ins.x;
+      ins.actionTimer = 0.2;
+
+      if (ins.gazeTelegraph <= 0) {
+        if (ins.gazeBeam) ins.gazeBeam.visible = false;
+        ins.gazeCd = Math.max(4.0, (isPhase2 ? 6.5 : 8.5) * mutEval.cooldownMult);
+        if (gLos && gDist <= 18.0) {
+          this.spawnLaserBeam(ins.x, ins.z, gTgt.x, gTgt.z, 0xff2942, 0.36, { primaryColor: '#ff2942', secondaryColor: '#ffffff' });
+          playSfxSafe('rail_fire');
+          if (gTgt === p) {
+            p.sanity = Math.max(0, p.sanity - cfg.gazeSanityLoss);
+            p.ruleBindTimer = Math.max(p.ruleBindTimer || 0, cfg.gazeBindSec);
+            this.threatLevel = clamp(this.threatLevel + 24, 0, 100);
+            this.damagePlayer(Math.round(cfg.gazeDamage * mutEval.damageMult), 0, 0);
+            this.spawnFloatingText(p.x, 2.65, p.z, '查票锁定! 规则束缚 -' + cfg.gazeSanityLoss + ' SAN', '#ff6e7a');
+          } else {
+            this.damageAlly(gTgt, Math.round(30 * mutEval.damageMult));
+          }
+        } else {
+          this.spawnFloatingText(p.x, 2.35, p.z, '凝视规避!', '#58e6d8');
+          if (isPhase2) {
+            this.exposeInspectorWeakpoint('gaze_evaded', 2.8);
+          }
+        }
+      }
+      this.updateActorSprite(ins, simDt, false);
+      return;
+    }
+
     // Active Lunge Dash execution (swept collision + wall bounce + walkable-clamped shears scar)
     if (ins.lungeActive > 0) {
       ins.lungeActive = Math.max(0, ins.lungeActive - simDt);
-      var dashSpeed = 19.0;
+      var dashSpeed = isPhase2 ? 21.5 : 19.5;
       var nx = ins.x + ins.lungeDirX * dashSpeed * simDt;
       var nz = ins.z + ins.lungeDirZ * dashSpeed * simDt;
       var step = this.moveEntityWithCollision(ins.x, ins.z, nx, nz, ins.radius);
       ins.x = step.x;
       ins.z = step.z;
       this.enforceWardBlockOnInspector();
-      // Crimson phantom wake + boot sparks during execution lunge
-      this.spawnAfterimage(ins.x, ins.z, 'inspector', ins.facingLeft, 0xff2238, 0.24, 'dash');
+      if (canSeeIns) {
+        this.spawnAfterimage(ins.x, ins.z, 'inspector', ins.facingLeft, 0xff2238, 0.24, 'dash');
+      }
       if (step.hit && step.hitWall) {
         ins.lungeActive = 0;
-        ins.stunTimer = Math.max(ins.stunTimer, 0.55);
+        ins.stunTimer = Math.max(ins.stunTimer, 0.65);
+        ins.armorBrokenTimer = Math.max(ins.armorBrokenTimer || 0, 3.0);
         this.hitStopTimer = Math.max(this.hitStopTimer || 0, 0.035);
         this.triggerActorSquash(ins, 0.78, 1.24);
         this.spawnWallImpactDebris(step.x - step.normalX * ins.radius, step.z - step.normalZ * ins.radius, step.normalX, step.normalZ);
         this.addCameraShake(0.24, 0.18);
         this.spawnScorchDecal(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 1.9, 0xff2238);
+        this.exposeInspectorWeakpoint('wall_crash', 3.6);
       } else if (ins.lungeActive <= 0) {
         this.spawnScorchDecal(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 1.8, 0xff2238);
       }
 
-      // Check damage to player or squad during lunge
+      // Check Death Exam lethal damage to player or squad during lunge
       if (!ins.lungeHitDone) {
-        if (dist2D(ins.x, ins.z, p.x, p.z) <= ins.radius + p.radius + 0.55) {
+        if (dist2D(ins.x, ins.z, p.x, p.z) <= ins.radius + p.radius + 0.60) {
           ins.lungeHitDone = true;
-          this.damagePlayer(34, ins.lungeDirX * 5.2, ins.lungeDirZ * 5.2);
+          var lDmg = Math.round((isPhase2 ? cfg.lungeDamageP2 : cfg.lungeDamageP1) * mutEval.damageMult);
+          if (isPhase2) p.sanity = Math.max(0, p.sanity - cfg.lungeSanityP2);
+          this.damagePlayer(lDmg, ins.lungeDirX * 6.0, ins.lungeDirZ * 6.0);
         } else {
           for (var si = 0; si < this.squad.length; si++) {
             var al = this.squad[si];
-            if (al.alive && dist2D(ins.x, ins.z, al.x, al.z) <= ins.radius + al.radius + 0.5) {
+            if (al.alive && dist2D(ins.x, ins.z, al.x, al.z) <= ins.radius + al.radius + 0.55) {
               ins.lungeHitDone = true;
-              this.damageAlly(al, 26);
+              this.damageAlly(al, Math.round((isPhase2 ? cfg.lungeAllyDamageP2 : cfg.lungeAllyDamageP1) * mutEval.damageMult));
               break;
             }
           }
@@ -6273,11 +7794,12 @@
       return;
     }
 
-    // 0.9s Crimson Lunge Telegraph wind-up (with clear gold-white PARRY WINDOW glint!)
+    // Crimson Lunge Telegraph wind-up (with clear gold-white PARRY WINDOW glint!)
     if (ins.lungeTelegraph > 0) {
       ins.lungeTelegraph = Math.max(0, ins.lungeTelegraph - simDt);
       ins.lungeWindup = ins.lungeTelegraph;
-      var progress = 1 - clamp(ins.lungeTelegraph / 0.9, 0, 1);
+      var tMax = ins.lungeTelegraphMax || 0.85;
+      var progress = 1 - clamp(ins.lungeTelegraph / tMax, 0, 1);
       ins.teleMesh.visible = true;
       ins.teleFill.visible = true;
       var yaw = Math.atan2(ins.lungeDirX, ins.lungeDirZ);
@@ -6290,7 +7812,7 @@
         ins.teleParryGlint.visible = true;
         ins.teleParryGlint.position.x = ins.facingLeft ? -0.68 : 0.68;
         ins.teleParryGlint.rotation.z = this.elapsedReal * 7.5;
-        var inSweetSpot = progress >= 0.35;
+        var inSweetSpot = progress >= 0.32;
         var gScale = inSweetSpot ? (0.9 + Math.sin(progress * Math.PI * 3) * 0.45) : (0.45 + progress * 0.5);
         ins.teleParryGlint.scale.set(gScale, gScale, 1);
         ins.teleParryGlintMat.color.setHex(inSweetSpot ? 0xffe484 : 0xff3b4f);
@@ -6302,9 +7824,9 @@
         ins.teleMesh.visible = false;
         ins.teleFill.visible = false;
         if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
-        ins.lungeActive = 0.28;
+        ins.lungeActive = isPhase2 ? 0.31 : 0.28;
         ins.lungeHitDone = false;
-        ins.lungeCd = 3.2;
+        ins.lungeCd = Math.max(1.4, (isPhase2 ? 2.1 : 2.9) * mutEval.cooldownMult);
         this.triggerActorSquash(ins, 1.28, 0.78);
         this.combatFocusTimer = Math.max(this.combatFocusTimer || 0, 5.0);
         this.spawnSlashArc(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 3.6, 0xff2238, 0.42, true, {
@@ -6318,7 +7840,7 @@
           this.directorTimeline.triggerBeat({ zoom: 0.72, holdSec: 0.30, chromatic: 0.42, inkEdge: 0.55 });
         }
         playSfxSafe('sword_slash');
-        this.emitSoundRipple(ins.x, ins.z, 65, 'boss');
+        this.emitSoundRipple(ins.x, ins.z, 68, 'boss');
       }
       this.updateActorSprite(ins, simDt, false);
       return;
@@ -6326,28 +7848,28 @@
 
     // Vision & target selection (Decoys lure Inspector strongly!)
     var activeDecoy = this.decoys.length > 0 ? this.decoys[0] : null;
-    if (activeDecoy && dist2D(ins.x, ins.z, activeDecoy.x, activeDecoy.z) < 26) {
+    if (activeDecoy && dist2D(ins.x, ins.z, activeDecoy.x, activeDecoy.z) < 34) {
       ins.state = 'INVESTIGATE';
       ins.investigateTarget = { x: activeDecoy.x, z: activeDecoy.z };
-      ins.investigateTimer = 4.0;
+      ins.investigateTimer = 4.5;
     } else {
       // Check line-of-sight to player (Stealth Veil drastically cuts sight range)
-      var sightRange = p.stealthTimer > 0 ? 4.2 : 13.8;
+      var sightRange = p.stealthTimer > 0 ? 5.2 : 21.5;
       var dPlayer = dist2D(ins.x, ins.z, p.x, p.z);
       var seesPlayer = (dPlayer <= sightRange && mapApi.hasLineOfSight(ins.x, ins.z, p.x, p.z));
 
       if (seesPlayer) {
         if (ins.state !== 'HUNT') {
           playSfxSafe('alert');
-          this.spawnFloatingText(ins.x, 2.8, ins.z, '已锁定目标!', '#ff2c44');
+          this.spawnFloatingText(ins.x, 2.8, ins.z, '已锁定无票考生!', '#ff2c44');
         }
         ins.state = 'HUNT';
         ins.huntTargetId = 'player';
-        ins.huntLoseTimer = 6.5;
+        ins.huntLoseTimer = 7.0;
       } else {
         // Also check Lu Jin intercepting close by
         var lujin = this.squadById['lujin'];
-        if (lujin && lujin.alive && dist2D(ins.x, ins.z, lujin.x, lujin.z) < 7.0 && mapApi.hasLineOfSight(ins.x, ins.z, lujin.x, lujin.z)) {
+        if (lujin && lujin.alive && dist2D(ins.x, ins.z, lujin.x, lujin.z) < 8.5 && mapApi.hasLineOfSight(ins.x, ins.z, lujin.x, lujin.z)) {
           ins.state = 'HUNT';
           ins.huntTargetId = 'lujin';
           ins.huntLoseTimer = 4.5;
@@ -6355,13 +7877,13 @@
       }
     }
 
-    // Determine movement target based on state
+    // Determine movement target based on state (scaled by Phase-2 mutation & threat tier)
     var targetX = ins.x;
     var targetZ = ins.z;
-    var baseSpeed = 3.35;
+    var baseSpeed = (isPhase2 ? 5.8 : 5.2) * Math.min(1.22, mutEval.speedMult);
 
     if (ins.state === 'HUNT') {
-      baseSpeed = 4.65;
+      baseSpeed = 7.4 * mutEval.speedMult;
       var tgt = (ins.huntTargetId === 'player') ? p : (this.squadById[ins.huntTargetId] || p);
       if (tgt.alive === false) tgt = p;
       targetX = tgt.x;
@@ -6370,6 +7892,7 @@
       var dTgt = dist2D(ins.x, ins.z, tgt.x, tgt.z);
       var hasLos = mapApi.hasLineOfSight(ins.x, ins.z, tgt.x, tgt.z);
       if (!hasLos || (tgt === p && p.stealthTimer > 0 && dTgt > 4.5)) {
+        ins.kiteTimer = 0;
         ins.huntLoseTimer -= simDt;
         if (ins.huntLoseTimer <= 0) {
           ins.state = 'INVESTIGATE';
@@ -6377,24 +7900,96 @@
           ins.investigateTimer = 4.5;
         }
       } else {
-        ins.huntLoseTimer = 6.0;
-        // Initiate 0.9s Crimson Lunge Telegraph when in strike distance!
-        if (dTgt <= 4.9 && ins.lungeCd <= 0) {
-          var ldx = tgt.x - ins.x;
-          var ldz = tgt.z - ins.z;
-          var ll = Math.max(0.01, Math.sqrt(ldx * ldx + ldz * ldz));
-          ins.lungeDirX = ldx / ll;
-          ins.lungeDirZ = ldz / ll;
-          ins.lungeTelegraph = 0.9;
-          ins.lungeWindup = 0.9;
+        ins.huntLoseTimer = 6.5;
+
+        // Phase-2 Anti-Kite pressure accelerates Blink Ambush cooldown if player kites > 10.5m
+        if (isPhase2 && dTgt >= 10.5) {
+          ins.kiteTimer = (ins.kiteTimer || 0) + simDt;
+          if (ins.kiteTimer >= 3.0) {
+            ins.kiteTimer = 0;
+            ins.blinkCd = 0;
+          }
+        } else {
+          ins.kiteTimer = Math.max(0, (ins.kiteTimer || 0) - simDt * 1.5);
+        }
+
+        var ldx = tgt.x - ins.x;
+        var ldz = tgt.z - ins.z;
+        var ll = Math.max(0.01, Math.sqrt(ldx * ldx + ldz * ldz));
+        var ndx = ldx / ll;
+        var ndz = ldz / ll;
+
+        // Threat-level-driven skill cycle via INFINITY.AI.selectInspectorSkillCycle
+        var plan = (INFINITY.AI && typeof INFINITY.AI.selectInspectorSkillCycle === 'function')
+          ? INFINITY.AI.selectInspectorSkillCycle({
+            phase: ins.phase,
+            mutated: isPhase2,
+            threatLevel: this.threatLevel,
+            distToTarget: dTgt,
+            hasLos: hasLos,
+            cycleIndex: ins.skillCycleIndex || 0,
+            cooldowns: {
+              blink_ambush: ins.blinkCd || 0,
+              slam: ins.slamCd || 0,
+              lunge: ins.lungeCd || 0,
+              cleave: ins.cleaveCd || 0,
+              gaze: ins.gazeCd || 0
+            },
+            isStunned: ins.stunTimer > 0
+          })
+          : { skill: 'pursue', nextCycleIndex: ins.skillCycleIndex || 0 };
+
+        ins.skillCycleIndex = plan.nextCycleIndex || 0;
+
+        if (plan.skill === 'blink_ambush') {
+          ins.blinkTelegraphMax = plan.telegraphSec || 0.48;
+          ins.blinkTelegraph = ins.blinkTelegraphMax;
+          ins.blinkTargetX = tgt.x;
+          ins.blinkTargetZ = tgt.z;
+          ins.pendingWeakpoint = plan.weakpointReason || 'blink_overheat';
+          ins.facingLeft = ndx < 0;
+          this.spawnFloatingText(ins.x, 3.0, ins.z, plan.callout || '瞬移截击!', '#ff3b52', 'mutation');
+          playSfxSafe('alert');
+          return;
+        }
+        if (plan.skill === 'slam') {
+          ins.slamTelegraph = plan.telegraphSec || (isPhase2 ? 0.92 : 1.05);
+          ins.pendingWeakpoint = plan.exposeWeakpointAfter ? (plan.weakpointReason || 'slam_recovery') : null;
+          this.spawnFloatingText(ins.x, 3.0, ins.z, plan.callout || '轨道压制波! 快撤出红圈', '#ff2942');
+          playSfxSafe('alert');
+          return;
+        }
+        if (plan.skill === 'lunge') {
+          ins.lungeDirX = ndx;
+          ins.lungeDirZ = ndz;
+          ins.lungeTelegraphMax = plan.telegraphSec || (isPhase2 ? 0.68 : 0.85);
+          ins.lungeTelegraph = ins.lungeTelegraphMax;
+          ins.lungeWindup = ins.lungeTelegraph;
           ins.facingLeft = ins.lungeDirX < 0;
-          this.spawnFloatingText(ins.x, 2.9, ins.z, '处决蓄力! (可弹反/结界)', '#ff3b4f');
+          this.spawnFloatingText(ins.x, 2.9, ins.z, plan.callout || '处决突刺! (可弹反/破甲)', '#ff3b4f');
+          playSfxSafe('alert');
+          return;
+        }
+        if (plan.skill === 'cleave') {
+          ins.cleaveDirX = ndx;
+          ins.cleaveDirZ = ndz;
+          ins.cleaveTelegraph = plan.telegraphSec || (isPhase2 ? 0.48 : 0.55);
+          ins.facingLeft = ins.cleaveDirX < 0;
+          this.spawnFloatingText(ins.x, 2.85, ins.z, plan.callout || '铁剪横扫!', '#ff3b4f');
+          playSfxSafe('alert');
+          return;
+        }
+        if (plan.skill === 'gaze') {
+          ins.gazeTargetId = (tgt === p) ? 'player' : tgt.id;
+          ins.gazeTelegraph = plan.telegraphSec || (isPhase2 ? 1.10 : 1.25);
+          ins.facingLeft = ndx < 0;
+          this.spawnFloatingText(ins.x, 2.95, ins.z, plan.callout || '查票凝视! 找掩体/潜行', '#ffd2d8');
           playSfxSafe('alert');
           return;
         }
       }
     } else if (ins.state === 'INVESTIGATE' && ins.investigateTarget) {
-      baseSpeed = 3.95;
+      baseSpeed = isPhase2 ? 6.8 : 6.2;
       targetX = ins.investigateTarget.x;
       targetZ = ins.investigateTarget.z;
       ins.investigateTimer -= simDt;
@@ -6414,14 +8009,14 @@
       }
     }
 
-    // Apply slows (Overclock 45% slow, Seal Chain 65% slow)
+    // Apply slows (Overclock 45% slow, Seal Chain 60% slow)
     if (p.overclockTimer > 0) baseSpeed *= 0.55;
-    if (ins.chainTimer > 0) baseSpeed *= 0.35;
+    if (ins.chainTimer > 0) baseSpeed *= 0.40;
 
     // A* Pathfinding
     ins.repathTimer -= simDt;
     if (ins.repathTimer <= 0) {
-      ins.repathTimer = ins.state === 'HUNT' ? 0.55 : 1.3;
+      ins.repathTimer = ins.state === 'HUNT' ? 0.5 : 1.3;
       var bPath = mapApi.findPath(ins.x, ins.z, targetX, targetZ);
       ins.path = Array.isArray(bPath) ? bPath : [];
       ins.pathIndex = 0;
@@ -6448,7 +8043,7 @@
       ins.z = res.z;
       if (Math.abs(mx) > 0.2) ins.facingLeft = mx < 0;
       moving = true;
-      if (this.isPointInPuddle(ins.x, ins.z)) {
+      if (canSeeIns && this.isPointInPuddle(ins.x, ins.z)) {
         ins.puddleAccum = (ins.puddleAccum || 0) + baseSpeed * simDt;
         if (ins.puddleAccum >= 0.78) {
           ins.puddleAccum = 0;
@@ -6461,6 +8056,7 @@
     this.enforceWardBlockOnInspector();
 
     this.updateActorSprite(ins, simDt, moving);
+    ins.vis.group.visible = this.canSeeWorldPoint(ins.x, ins.z);
   };
 
   // ---------------------------------------------------------------------------
@@ -6469,18 +8065,50 @@
   EngineSession.prototype.damageInspector = function (amount, kbX, kbZ, isCrit, opts) {
     var ins = this.inspector;
     if (!ins.alive) return;
-    var dmg = Math.max(1, Math.round(amount));
+
+    var wpHit = false;
+    var wpEval = null;
+    if ((ins.weakpointTimer || 0) > 0 && INFINITY.AI && typeof INFINITY.AI.evaluateWeakpointExposure === 'function') {
+      var isFlank = (this.player && ((this.player.x < ins.x) !== Boolean(ins.facingLeft)));
+      wpEval = INFINITY.AI.evaluateWeakpointExposure({
+        weakpointTimer: ins.weakpointTimer,
+        weakpointMaxTimer: ins.weakpointMaxTimer,
+        isCrit: Boolean(isCrit),
+        isFlank: isFlank,
+        baseDamage: amount
+      });
+      if (wpEval && wpEval.exposed) {
+        wpHit = true;
+      }
+    }
+
+    var calc = computeBossDamageTaken(amount, {
+      armorBrokenTimer: ins.armorBrokenTimer,
+      stunTimer: ins.stunTimer,
+      overridePct: this.overridePct,
+      ignoreRuleArmor: wpHit || !!(opts && opts.ignoreRuleArmor)
+    });
+    var dmg = wpHit ? wpEval.finalDamage : calc.damage;
     ins.hp = Math.max(0, ins.hp - dmg);
     ins.hitFlash = 0.16;
     this.triggerActorSquash(ins, 0.84, 1.18);
     this.stats.damageDealt += dmg;
-    playSfxSafe('hit_impact');
+    playSfxSafe(wpHit ? 'parry_clang' : 'hit_impact');
 
-    var impactCol = (opts && opts.impactColor) || (isCrit ? 0xffe07d : 0xff3b4f);
+    if (wpHit) {
+      if (wpEval.energyRefund > 0 && this.player) {
+        this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + wpEval.energyRefund);
+      }
+      if (wpEval.bonusSealPct > 0) {
+        ins.sealedPct = Math.min(100, (ins.sealedPct || 0) + wpEval.bonusSealPct);
+      }
+    }
+
+    var impactCol = wpHit ? 0xffe875 : ((opts && opts.impactColor) || (isCrit ? 0xffe07d : 0xff3b4f));
     if (opts && opts.playerImpact) {
-      ins.whiteFlash = Math.max(ins.whiteFlash || 0, 0.09);
+      ins.whiteFlash = Math.max(ins.whiteFlash || 0, wpHit ? 0.14 : 0.09);
       this.hitStopTimer = Math.max(this.hitStopTimer, opts.hitStop || 0.05);
-      if (isCrit) {
+      if (isCrit || wpHit) {
         this.triggerImpactFrame(0.068);
       }
       if (kbX || kbZ) {
@@ -6494,10 +8122,9 @@
       this.enforceWardBlockOnInspector();
     }
 
-    this.spawnFloatingText(ins.x, 2.5, ins.z, (isCrit ? '★-' : '-') + dmg, isCrit ? '#ffd86b' : '#edf3fa', isCrit ? 'crit' : 'normal');
     if (opts && opts.playerImpact) {
       this.combatFocusTimer = Math.max(this.combatFocusTimer || 0, 5.0);
-      if (isCrit) {
+      if (isCrit || wpHit) {
         this.triggerOnomatopoeia(ins.x + (Math.random() - 0.5) * 0.6, 1.95, ins.z, dmg >= 45 ? '轟!' : '斬!', '#ffd86b');
         if (this.directorTimeline) {
           this.directorTimeline.triggerBeat({ chromatic: 0.65, inkEdge: 0.65 });
@@ -6506,16 +8133,27 @@
         this.triggerOnomatopoeia(ins.x + (Math.random() - 0.5) * 0.5, 1.85, ins.z, '斬!', '#78f0ff');
       }
     }
-    this.spawnSparkBurst(ins.x, 1.3, ins.z, impactCol, isCrit ? 16 : 9);
-    if (isCrit) {
-      this.spawnImpactStar(ins.x, 1.4, ins.z, impactCol, 2.0, 0.24);
+    if (wpHit && INFINITY.CombatFeel && typeof INFINITY.CombatFeel.triggerBossWeakpointHitFeel === 'function') {
+      INFINITY.CombatFeel.triggerBossWeakpointHitFeel(this, ins.x, ins.z, dmg, { callout: wpEval.callout });
+    } else {
+      var dmgLabel = (isCrit ? '★-' : '-') + dmg + (calc.armorVulnerable ? ' 破防' : '');
+      var dmgColor = calc.armorVulnerable ? '#ffd86b' : (calc.armorMitigated ? '#9fb3c8' : (isCrit ? '#ffd86b' : '#edf3fa'));
+      this.spawnFloatingText(ins.x, 2.5, ins.z, dmgLabel, dmgColor, (isCrit || calc.armorVulnerable) ? 'crit' : 'normal');
+      if (calc.armorMitigated && opts && opts.playerImpact && (ins.armorMsgCd || 0) <= 0) {
+        ins.armorMsgCd = 3.5;
+        this.spawnFloatingText(ins.x, 3.05, ins.z, '规则护甲减伤! (弹反/EMP/封印破甲)', '#a8c2d8');
+      }
+      this.spawnSparkBurst(ins.x, 1.3, ins.z, impactCol, isCrit ? 16 : 9);
+      if (isCrit) {
+        this.spawnImpactStar(ins.x, 1.4, ins.z, impactCol, 2.0, 0.24);
+      }
     }
 
     // Taking damage alerts Inspector toward player if not stunned
     if (ins.stunTimer <= 0 && this.player.stealthTimer <= 0) {
       ins.state = 'HUNT';
       ins.huntTargetId = 'player';
-      ins.huntLoseTimer = 7.0;
+      ins.huntLoseTimer = 7.5;
     }
 
     var hpDealtPct = Math.round(((ins.maxHp - ins.hp) / Math.max(1, ins.maxHp)) * 100);
@@ -6535,7 +8173,7 @@
       this.recordMissionEvent(
         'progress',
         '检票员生命削减过半 (' + hpDealtPct + '%)',
-        '零号检票员已进入重伤态，继续集火或衔接封印锁链即可彻底肃清。',
+        '零号检票员已进入二阶段变异态，抓住大招收尾或破甲后的弱点核心窗口集火！',
         { branchId: 'inspector_hunt' }
       );
     } else if (ins.hp > 0) {
@@ -6545,6 +8183,8 @@
 
     if (ins.hp <= 0) {
       this.defeatInspector(false);
+    } else if (ins.sealedPct >= 100) {
+      this.defeatInspector(true);
     }
   };
 
@@ -6553,9 +8193,18 @@
     if (!ins.alive) return;
     ins.alive = false;
     ins.hp = 0;
+    ins.weakpointTimer = 0;
+    ins.weakpointMaxTimer = 0;
+    ins.weakpointReason = null;
+    ins.blinkTelegraph = 0;
+    ins.pendingWeakpoint = null;
     ins.teleMesh.visible = false;
     ins.teleFill.visible = false;
+    if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
+    if (ins.gazeBeam) ins.gazeBeam.visible = false;
+    if (ins.slamRing) ins.slamRing.visible = false;
     if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
+    if (ins.weakpointVis && ins.weakpointVis.group) ins.weakpointVis.group.visible = false;
     ins.vis.group.visible = false;
 
     this.stats.inspectorDefeated = true;
@@ -6705,6 +8354,10 @@
   EngineSession.prototype.updateGhostTrain = function (simDt) {
     if (!this.train) return;
     var tr = this.train;
+    var trainX = (this.mapApi && this.mapApi.TRAIN_X) || TRAIN_X;
+    var gridH = (this.mapApi && this.mapApi.GRID_H) || 152;
+    var targetDockZ = Math.round(gridH * 0.72);
+    var departEndZ = gridH + 66;
 
     if (this.trainPhase === 'waiting') {
       this.trainCountdownSec -= simDt;
@@ -6720,23 +8373,22 @@
       if (this.trainCountdownSec <= 0) {
         this.trainCountdownSec = 0;
         this.trainPhase = 'arriving';
-        tr.z = -24;
+        tr.z = -64;
         tr.group.visible = true;
-        tr.group.position.set(TRAIN_X, RAIL_Y + 0.12, tr.z);
+        tr.group.position.set(trainX, RAIL_Y + 0.12, tr.z);
         playSfxSafe('train_horn');
       }
     } else if (this.trainPhase === 'arriving') {
-      var targetZ = 27;
-      var rem = targetZ - tr.z;
-      var spd = clamp(rem * 1.45, 2.5, 26);
+      var rem = targetDockZ - tr.z;
+      var spd = clamp(rem * 1.45, 4.0, 42);
       tr.z += spd * simDt;
       tr.group.position.z = tr.z;
-      if (dist2D(this.player.x, this.player.z, TRAIN_X, 18) < 15) {
+      if (dist2D(this.player.x, this.player.z, trainX, gridH * 0.5) < 36) {
         this.addCameraShake(0.08, 0.1);
       }
       this.checkTrainCollision();
-      if (tr.z >= targetZ - 0.15) {
-        tr.z = targetZ;
+      if (tr.z >= targetDockZ - 0.15) {
+        tr.z = targetDockZ;
         this.trainPhase = 'docked';
         this.trainInStation = true;
         this.trainTimer = TRAIN_DWELL_SEC;
@@ -6762,10 +8414,10 @@
         playSfxSafe('train_horn');
       }
     } else if (this.trainPhase === 'departing') {
-      tr.z += 22 * simDt;
+      tr.z += 38 * simDt;
       tr.group.position.z = tr.z;
       this.checkTrainCollision();
-      if (tr.z >= 72) {
+      if (tr.z >= departEndZ) {
         tr.group.visible = false;
         this.trainPhase = 'waiting';
         this.trainCountdownSec = TRAIN_CYCLE_SEC;
@@ -6776,7 +8428,8 @@
 
   EngineSession.prototype.checkTrainCollision = function () {
     var p = this.player;
-    if (p.x >= TRAIN_X - 1.65 && p.x <= TRAIN_X + 1.65 && p.z <= this.train.z + 3.2 && p.z >= this.train.z - 22) {
+    var trainX = (this.mapApi && this.mapApi.TRAIN_X) || TRAIN_X;
+    if (p.x >= trainX - 1.65 && p.x <= trainX + 1.65 && p.z <= this.train.z + 3.4 && p.z >= this.train.z - 62) {
       this.damagePlayer(40, -10, 0);
       this.showSpeechBubble('player', '快退回月台！差点被零号列车卷进去！');
     }
@@ -6879,13 +8532,15 @@
     else if (sourceTag === 'boss' || sourceTag === 'yellow_line') color = 0xff2c44;
     else if (sourceTag === 'shenyan') color = 0xc9a66b;
 
-    var maxRad = 1.6 + s * 0.08;
-    var geo = new THREE.RingGeometry(0.84, 1.0, 28);
+    var isSubtleFootstep = (sourceTag === 'player' && s < 35);
+    var maxRad = isSubtleFootstep ? (1.1 + s * 0.04) : (1.6 + s * 0.08);
+    var baseOp = isSubtleFootstep ? 0.22 : 0.55;
+    var geo = new THREE.RingGeometry(0.86, 1.0, 28);
     geo.rotateX(-Math.PI / 2);
     var mat = new THREE.MeshBasicMaterial({
       color: color,
       transparent: true,
-      opacity: 0.55,
+      opacity: baseOp,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending
@@ -6899,8 +8554,9 @@
       mesh: mesh,
       geo: geo,
       mat: mat,
-      ttl: 0.72,
-      maxTtl: 0.72,
+      baseOp: baseOp,
+      ttl: isSubtleFootstep ? 0.45 : 0.72,
+      maxTtl: isSubtleFootstep ? 0.45 : 0.72,
       maxRad: maxRad
     });
 
@@ -6930,7 +8586,7 @@
       var p = 1 - clamp(sr.ttl / sr.maxTtl, 0, 1);
       var sc = 0.3 + p * sr.maxRad;
       sr.mesh.scale.set(sc, sc, 1);
-      sr.mat.opacity = 0.55 * (1 - p);
+      sr.mat.opacity = (sr.baseOp || 0.55) * (1 - p);
       if (sr.ttl <= 0) {
         this.scene.remove(sr.mesh);
         disposeOwned(sr.geo);
@@ -7486,13 +9142,18 @@
     }
     if (this.playerGlow) {
       this.playerGlow.position.set(p.x, 1.55, p.z);
-      this.playerGlow.color.setHex(p.overclockTimer > 0 ? 0x4df8ff : 0x7cc8e8);
+      var zoneGlowHex = (this.activeZoneConfig && this.activeZoneConfig.playerGlowColor) || 0x7cc8e8;
+      this.playerGlow.color.setHex(p.overclockTimer > 0 ? 0x4df8ff : zoneGlowHex);
     }
 
-    // Inspector crimson lantern light (flickers dead when EMP-stunned!)
+    // Inspector crimson lantern light (hidden when Inspector is in an unseen room!)
     if (this.inspectorLantern && ins.alive) {
+      var insSeen = this.canSeeWorldPoint(ins.x, ins.z);
       this.inspectorLantern.position.set(ins.x + (ins.facingLeft ? -0.35 : 0.35), 1.65, ins.z + 0.25);
-      if (ins.stunTimer > 0) {
+      if (!insSeen) {
+        this.inspectorLantern.intensity = 0;
+        if (this.inspectorLanternOrb) this.inspectorLanternOrb.visible = false;
+      } else if (ins.stunTimer > 0) {
         this.inspectorLantern.intensity = (Math.sin(t * 48) > 0.65) ? 1.1 : 0.1;
         this.inspectorLanternOrb.visible = (Math.sin(t * 48) > 0.4);
       } else {
@@ -7643,8 +9304,9 @@
     safeAudio('updateSpatialSource', 'inspector', ins ? (ins.x - p.x) : 99, ins ? (ins.z - p.z) : 99, insIntensity);
 
     var trainActive = !!(this.train && this.train.group && this.train.group.visible && this.trainPhase !== 'waiting' && !this.ended);
-    var trainZ = this.train ? this.train.z : -32;
-    safeAudio('updateSpatialSource', 'train', TRAIN_X - p.x, trainZ - p.z, trainActive ? 1 : 0);
+    var trainZ = this.train ? this.train.z : -46;
+    var trainX = (this.mapApi && this.mapApi.TRAIN_X) || TRAIN_X;
+    safeAudio('updateSpatialSource', 'train', trainX - p.x, trainZ - p.z, trainActive ? 1 : 0);
 
     safeAudio('setBulletTime', !!(this.slowMo || this.inputPaused));
   };
@@ -7653,10 +9315,19 @@
     if (!this.dustPoints) return;
     var attr = this.dustPoints.geometry.attributes.position;
     var arr = attr.array;
+    var maxW = (this.mapApi && this.mapApi.GRID_W) || 224;
+    var maxH = (this.mapApi && this.mapApi.GRID_H) || 152;
+    var dx = this.dustDrift ? this.dustDrift.x : 0.12;
+    var dy = this.dustDrift ? this.dustDrift.y : 0.08;
+    var dz = this.dustDrift ? this.dustDrift.z : 0.0;
     for (var i = 0; i < arr.length; i += 3) {
-      arr[i + 1] += Math.sin(this.elapsedReal * 0.8 + i) * 0.08 * simDt;
-      arr[i] += 0.12 * simDt;
-      if (arr[i] > 56) arr[i] = 0.5;
+      arr[i] += dx * simDt;
+      arr[i + 1] += Math.sin(this.elapsedReal * 0.8 + i) * dy * simDt;
+      arr[i + 2] += dz * simDt;
+      if (arr[i] > maxW) arr[i] = 0.5;
+      else if (arr[i] < 0.5) arr[i] = maxW - 0.5;
+      if (arr[i + 2] > maxH) arr[i + 2] = 0.5;
+      else if (arr[i + 2] < 0.5) arr[i + 2] = maxH - 0.5;
     }
     attr.needsUpdate = true;
   };
@@ -7742,10 +9413,19 @@
     this.floatersLayer.appendChild(el);
 
     var ttl = st.ttl || 1.15;
+    var spawnX = x + (tier === 'normal' ? (Math.random() - 0.5) * 0.4 : 0);
+    var spawnY = y;
+    for (var fi = 0, bumps = 0; fi < this.floatingTexts.length && bumps < 4; fi++) {
+      var prevFt = this.floatingTexts[fi];
+      if (Math.abs(prevFt.x - spawnX) < 2.2 && Math.abs(prevFt.z - z) < 2.2 && Math.abs(prevFt.y - spawnY) < 0.52) {
+        spawnY += 0.54;
+        bumps++;
+      }
+    }
     this.floatingTexts.push({
       el: el,
-      x: x + (tier === 'normal' ? (Math.random() - 0.5) * 0.4 : 0),
-      y: y,
+      x: spawnX,
+      y: spawnY,
       z: z,
       vy: st.vy || 1.25,
       tiltDeg: tilt,
@@ -7770,11 +9450,21 @@
       } else if (this.player.stealthTimer > 0) {
         this.vignetteEl.style.boxShadow = 'inset 0 0 105px rgba(110,88,210,0.35)';
       } else {
-        this.vignetteEl.style.boxShadow = 'inset 0 0 90px rgba(4,6,10,0.72)';
+        var zoneVig = (this.activeZoneConfig && this.activeZoneConfig.vignetteRgba) || 'rgba(4,6,10,0.72)';
+        this.vignetteEl.style.boxShadow = 'inset 0 0 90px ' + zoneVig;
       }
     }
 
-    // World-space mini HP/Name tags for Squad & Inspector
+    // Zone Transition Banner smooth auto-fade
+    if (this.zoneBannerEl && this.zoneBannerTimer > 0) {
+      this.zoneBannerTimer = Math.max(0, this.zoneBannerTimer - realDt);
+      if (this.zoneBannerTimer <= 0) {
+        this.zoneBannerEl.style.opacity = '0';
+        this.zoneBannerEl.style.transform = 'translate(-50%,-10px)';
+      }
+    }
+
+    // World-space mini HP/Name tags for Squad & Inspector (strictly gated by room/recon vision!)
     var tagIds = Object.keys(this.worldTags);
     for (var ti = 0; ti < tagIds.length; ti++) {
       var tid = tagIds[ti];
@@ -7786,7 +9476,7 @@
       }
       var yOff = tid === 'inspector' ? (ACTOR_DIMENSIONS.inspector.height + 0.14) : (ACTOR_DIMENSIONS.squad.height + 0.18);
       var scr = this.projectToScreen(actor.x, yOff, actor.z);
-      var visibleInFog = (tid !== 'inspector') || (dist2D(this.player.x, this.player.z, actor.x, actor.z) < 18 || this.reconRevealTimer > 0);
+      var visibleInFog = this.canSeeWorldPoint(actor.x, actor.z);
       if (!scr || !visibleInFog || scr.x < -60 || scr.x > w + 60 || scr.y < -40 || scr.y > h + 40) {
         tag.el.style.display = 'none';
       } else {
@@ -7800,7 +9490,7 @@
       }
     }
 
-    // Speech Bubbles projected cleanly above character heads
+    // Speech Bubbles projected cleanly above character heads (hidden if speaker is in an unseen room)
     var bIds = Object.keys(this.speechBubbles);
     for (var bi = 0; bi < bIds.length; bi++) {
       var bid = bIds[bi];
@@ -7816,6 +9506,10 @@
         b.el.style.display = 'none';
         continue;
       }
+      if (bid !== 'player' && !this.canSeeWorldPoint(bActor.x, bActor.z)) {
+        b.el.style.display = 'none';
+        continue;
+      }
       var bScr = this.projectToScreen(bActor.x, 2.65, bActor.z);
       if (!bScr) {
         b.el.style.display = 'none';
@@ -7827,7 +9521,7 @@
       }
     }
 
-    // Floating Damage / Status Numbers
+    // Floating Damage / Status Numbers (hidden if occurring in an unseen room)
     for (var fi = this.floatingTexts.length - 1; fi >= 0; fi--) {
       var ft = this.floatingTexts[fi];
       ft.ttl -= realDt;
@@ -7835,6 +9529,11 @@
       if (ft.ttl <= 0) {
         if (ft.el.parentNode) ft.el.parentNode.removeChild(ft.el);
         this.floatingTexts.splice(fi, 1);
+        continue;
+      }
+      var nearPlayer = dist2D(this.player.x, this.player.z, ft.x, ft.z) <= 2.2;
+      if (!nearPlayer && !this.canSeeWorldPoint(ft.x, ft.z)) {
+        ft.el.style.display = 'none';
         continue;
       }
       var fScr = this.projectToScreen(ft.x, ft.y, ft.z);
@@ -7864,9 +9563,18 @@
           this.promptEl.style.display = 'none';
         } else {
           var suffix = '';
-          if (ni.type === 'console') suffix = ' (' + Math.round(ni.progress) + '%)';
-          else if (ni.type === 'exit') suffix = (this.overridePct >= 100 || !this.inspector.alive) ? ' [可撤离]' : ' [道岔' + this.overridePct + '%]';
-          this.promptEl.textContent = '[E] ' + ni.label + suffix;
+          var prefixLabel = ni.label;
+          if (ni.type === 'console') {
+            suffix = ' (' + Math.round(ni.progress) + '%)';
+          } else if (ni.type === 'exit') {
+            suffix = (this.overridePct >= 100 || !this.inspector.alive) ? ' [可撤离]' : ' [道岔' + this.overridePct + '%]';
+          } else if (ni.type === 'destructible_cover') {
+            prefixLabel = (ni.actionLabel || '破拆掩体') + ' · ' + ni.label;
+            suffix = ' (HP ' + Math.round(ni.hp) + '/' + Math.round(ni.maxHp) + ')';
+          } else if (ni.type === 'scene_trigger') {
+            prefixLabel = (ni.actionLabel || '启动机关') + ' · ' + ni.label;
+          }
+          this.promptEl.textContent = '[E] ' + prefixLabel + suffix;
           this.promptEl.style.display = 'block';
           this.promptEl.style.left = Math.round(pScr.x) + 'px';
           this.promptEl.style.top = Math.round(pScr.y) + 'px';
@@ -7888,11 +9596,9 @@
 
     var insZoneId = mapApi.getZoneAt(ins.x, ins.z) || 'platform0';
     var dBoss = dist2D(p.x, p.z, ins.x, ins.z);
-    var insVisible = ins.alive && (
-      this.reconRevealTimer > 0 ||
-      dBoss <= 11.5 ||
-      (dBoss <= 16 && mapApi.hasLineOfSight(p.x, p.z, ins.x, ins.z))
-    );
+    var reconActive = this.hasActiveReconVision();
+    var hasRecon = reconActive || this.hasPassiveReconCapability();
+    var insVisible = ins.alive && this.canSeeWorldPoint(ins.x, ins.z);
 
     var cluesTotal = 0;
     var consolesMini = [];
@@ -7901,7 +9607,10 @@
       var it = this.interactables[i];
       if (it.type === 'clue') cluesTotal++;
       if (it.type === 'console') {
-        consolesMini.push({ x: it.x, z: it.z, done: !!it.done });
+        var conZone = it.zoneId || mapApi.getZoneAt(it.x, it.z);
+        if (hasRecon || !conZone || conZone === pZoneId || this.visitedZones.indexOf(conZone) !== -1) {
+          consolesMini.push({ x: it.x, z: it.z, done: !!it.done });
+        }
         consolesDetail.push({
           id: it.id,
           zoneId: it.zoneId,
@@ -7956,7 +9665,9 @@
       };
     });
 
-    var squadMini = this.squad.filter(function (n) { return n.alive; }).map(function (n) {
+    var squadMini = this.squad.filter(function (n) {
+      return n.alive && (reconActive || this.canSeeWorldPoint(n.x, n.z));
+    }, this).map(function (n) {
       return { id: n.id, x: n.x, z: n.z, color: n.accentColor };
     });
 
@@ -7966,10 +9677,34 @@
 
     var near = this.nearbyInteractable ? {
       id: this.nearbyInteractable.id,
-      label: this.nearbyInteractable.label,
+      label: this.nearbyInteractable.type === 'destructible_cover'
+        ? ((this.nearbyInteractable.actionLabel || '破拆掩体') + ' · ' + this.nearbyInteractable.label)
+        : (this.nearbyInteractable.type === 'scene_trigger'
+          ? ((this.nearbyInteractable.actionLabel || '启动机关') + ' · ' + this.nearbyInteractable.label)
+          : this.nearbyInteractable.label),
       type: this.nearbyInteractable.type,
       progress: Math.round(this.nearbyInteractable.progress)
     } : null;
+
+    var dynamicMini = [];
+    if (this.sceneTriggers && this.sceneTriggers.length) {
+      for (var sti = 0; sti < this.sceneTriggers.length; sti++) {
+        var stg = this.sceneTriggers[sti];
+        var stgZone = stg.zoneId || mapApi.getZoneAt(stg.x, stg.z);
+        if (hasRecon || stgZone === pZoneId || this.visitedZones.indexOf(stgZone) !== -1) {
+          dynamicMini.push({ x: stg.x, z: stg.z, type: 'scene_trigger', done: !!stg.done });
+        }
+      }
+    }
+    if (this.destructibleCovers && this.destructibleCovers.length) {
+      for (var dci = 0; dci < this.destructibleCovers.length; dci++) {
+        var dcv = this.destructibleCovers[dci];
+        var dcvZone = dcv.zoneId || mapApi.getZoneAt(dcv.x, dcv.z);
+        if (hasRecon || dcvZone === pZoneId || this.visitedZones.indexOf(dcvZone) !== -1) {
+          dynamicMini.push({ x: dcv.x, z: dcv.z, type: 'destructible_cover', done: !!dcv.destroyed });
+        }
+      }
+    }
 
     var insOffscreen = dBoss > 7.5;
     var insScreenBearing = Math.atan2(ins.z - p.z, ins.x - p.x);
@@ -7989,10 +9724,24 @@
       }
     }
 
+    var destructiblesTotal = this.destructibleCovers ? this.destructibleCovers.length : 0;
+    var triggersTotal = this.sceneTriggers ? this.sceneTriggers.length : 0;
+    var pSubZone = (mapApi && typeof mapApi.getSubZoneAt === 'function')
+      ? mapApi.getSubZoneAt(p.x, p.z)
+      : null;
+
+    var activeZoneCfg = this.activeZoneConfig || resolveZoneSceneConfig(pZoneId, mapApi);
+
     return {
       zoneId: pZoneId,
       zoneName: pZone.name,
       zoneCode: pZone.code,
+      subZoneId: pSubZone ? pSubZone.id : null,
+      subZoneCode: pSubZone ? pSubZone.code : pZone.code,
+      subZoneName: pSubZone ? pSubZone.name : null,
+      zoneSceneAssetKey: activeZoneCfg && activeZoneCfg.assetSet ? activeZoneCfg.assetSet.key : null,
+      zoneAudioId: activeZoneCfg && activeZoneCfg.audio ? activeZoneCfg.audio.id : null,
+      zoneAudioLabel: activeZoneCfg && activeZoneCfg.audio ? activeZoneCfg.audio.label : null,
       elapsedSec: Math.floor(this.stats.elapsedSec || 0),
       timeRemainingSec: Math.ceil(this.timeRemainingSec),
       trainCountdownSec: Math.ceil(this.trainCountdownSec),
@@ -8001,6 +9750,14 @@
       cluesFoundCount: this.discoveredClueIds.length,
       cluesTotal: cluesTotal,
       discoveredClueIds: this.discoveredClueIds.slice(),
+      environmentClues: this.environmentClues ? this.environmentClues.slice() : [],
+      envCluesFoundCount: this.environmentClues ? this.environmentClues.length : 0,
+      envCluesTotal: destructiblesTotal + triggersTotal,
+      latestEnvironmentClue: this.latestEnvironmentClue || null,
+      destructiblesTotal: destructiblesTotal,
+      destructiblesBroken: this.stats.coversDestroyed || 0,
+      triggersTotal: triggersTotal,
+      triggersActivated: this.stats.triggersActivated || 0,
       consoles: consolesDetail,
       visitedZones: this.visitedZones.slice(),
       totalZones: 6,
@@ -8020,9 +9777,19 @@
       inspector: {
         hp: Math.round(ins.hp),
         maxHp: Math.round(ins.maxHp),
+        phase: ins.phase || 1,
+        mutated: Boolean(ins.mutated),
+        mutationTier: ins.mutationTier || 'dormant',
+        threatTier: ins.threatTier || 'low',
+        weakpointExposed: Boolean(ins.alive && (ins.weakpointTimer || 0) > 0),
+        weakpointRemainingSec: Number(Math.max(0, ins.weakpointTimer || 0).toFixed(2)),
+        weakpointReason: (ins.weakpointTimer || 0) > 0 ? (ins.weakpointReason || null) : null,
+        skillCycleIndex: ins.skillCycleIndex || 0,
+        ruleArmorActive: ins.alive && ins.stunTimer <= 0 && (ins.armorBrokenTimer || 0) <= 0,
+        intelKnown: !ins.alive || insVisible,
         sealedPct: Math.round(ins.sealedPct),
-        state: ins.alive ? ins.state : 'DEFEATED',
-        zoneId: insZoneId,
+        state: ins.alive ? (insVisible ? ins.state : 'UNKNOWN') : 'DEFEATED',
+        zoneId: insVisible ? insZoneId : null,
         dx: Number((ins.x - p.x).toFixed(2)),
         dz: Number((ins.z - p.z).toFixed(2)),
         distToPlayer: Number(dBoss.toFixed(1)),
@@ -8040,6 +9807,11 @@
         squad: squadMini,
         wards: wardsMini,
         consoles: consolesMini,
+        dynamicPoints: dynamicMini,
+        hasRecon: hasRecon,
+        reconActive: reconActive,
+        currentZone: pZoneId,
+        visitedZones: this.visitedZones.slice(),
         exitReady: (this.overridePct >= 100 || !ins.alive),
         focusWaypoint: this.focusWaypoint ? {
           x: this.focusWaypoint.x,
@@ -8175,10 +9947,12 @@
     this.clearFocusWaypoint();
     this.disposePostFx();
 
-    // Silence spatial audio sources and reset bullet-time filter cleanly
+    // Silence spatial audio sources, zone ambience and reset bullet-time filter cleanly
     safeAudio('updateSpatialSource', 'inspector', 99, 99, 0);
     safeAudio('updateSpatialSource', 'train', 99, 99, 0);
+    safeAudio('stopZoneAmbience');
     safeAudio('setBulletTime', false);
+    this.zoneAssetRigs = Object.create(null);
 
     // Dispose all tracked engine-owned geometries, materials, fallback textures
     for (var gi = 0; gi < this.ownedGeometries.length; gi++) {
@@ -8320,7 +10094,15 @@
 
     ACTOR_DIMENSIONS: ACTOR_DIMENSIONS,
     CAMERA_25D_SPEC: CAMERA_25D_SPEC,
+    ZONE_SCENE_CONFIGS: ZONE_SCENE_CONFIGS,
+    BOSS_DEATH_EXAM_CONFIG: BOSS_DEATH_EXAM_CONFIG,
+    computePlayerOrbiterCount: computePlayerOrbiterCount,
+    hasPassiveReconItem: hasPassiveReconItem,
+    evaluatePointVisibility: evaluatePointVisibility,
+    computeBossDamageTaken: computeBossDamageTaken,
+    resolveZoneSceneConfig: resolveZoneSceneConfig,
     resolveSweptMovement: resolveSweptMovement,
+    computeCameraScrollBounds: computeCameraScrollBounds,
 
     _getSession: function () {
       return activeSession;
