@@ -187,6 +187,192 @@
     platform0:  { id: 'platform0',  name: '0号站台铁轨',   code: 'Z-06', cx: 47, cz: 18, color: '#e69c3c' }
   };
 
+  // Per-zone dynamic scene asset, lighting, fog, atmospheric particle, and audio configurations.
+  // Driven by StationMap.ZONES / ArtTokens.ZONES so crossing any zone boundary transforms
+  // the rendered atmosphere, active scene asset rig, background ambience, and HUD live.
+  var ZONE_SCENE_CONFIGS = {
+    concourse: {
+      id: 'concourse',
+      accentHex: 0x68c8de,
+      bgColor: 0x060b12,
+      fogColor: 0x070f18,
+      fogDensity: 0.0195,
+      ambientColor: 0x3b5876,
+      ambientIntensity: 0.28,
+      hemiSky: 0x76badc,
+      hemiGround: 0x132230,
+      hemiIntensity: 0.36,
+      keyColor: 0xd8f4ff,
+      keyIntensity: 0.42,
+      rimColor: 0x68c8de,
+      rimIntensity: 0.24,
+      exposure: 1.16,
+      flashColor: 0xdcf5ff,
+      playerGlowColor: 0x7cc8e8,
+      vignetteRgba: 'rgba(6, 16, 26, 0.70)',
+      dust: { color: 0x8cd8f0, size: 0.11, opacity: 0.34, driftX: 0.14, driftY: 0.07, driftZ: 0.03 },
+      ambientFx: 'fluorescent_motes',
+      assetSet: { key: 'concourse_atrium_rig', groundHazeOpacity: 0.15, shaftOpacity: 0.16, pulseHz: 1.35 },
+      audio: { id: 'concourse_fluorescent', sceneMode: 'station_tense', label: '日光灯镇流器 · 检票厅混响' }
+    },
+    corridor: {
+      id: 'corridor',
+      accentHex: 0xd6b274,
+      bgColor: 0x0c0906,
+      fogColor: 0x15100a,
+      fogDensity: 0.0225,
+      ambientColor: 0x5f4c34,
+      ambientIntensity: 0.27,
+      hemiSky: 0xdeb87c,
+      hemiGround: 0x241a10,
+      hemiIntensity: 0.35,
+      keyColor: 0xffe5be,
+      keyIntensity: 0.40,
+      rimColor: 0xd69852,
+      rimIntensity: 0.28,
+      exposure: 1.14,
+      flashColor: 0xfff0d8,
+      playerGlowColor: 0xd6b274,
+      vignetteRgba: 'rgba(20, 13, 6, 0.74)',
+      dust: { color: 0xe6c288, size: 0.125, opacity: 0.40, driftX: 0.28, driftY: 0.05, driftZ: 0.02 },
+      ambientFx: 'sodium_haze',
+      assetSet: { key: 'corridor_sodium_rig', groundHazeOpacity: 0.18, shaftOpacity: 0.18, pulseHz: 1.05 },
+      audio: { id: 'corridor_draft', sceneMode: 'station_tense', label: '钠灯穿堂风 · 通道回声' }
+    },
+    dispatch: {
+      id: 'dispatch',
+      accentHex: 0x52c4a2,
+      bgColor: 0x040e0c,
+      fogColor: 0x061713,
+      fogDensity: 0.0205,
+      ambientColor: 0x2b5e51,
+      ambientIntensity: 0.29,
+      hemiSky: 0x62cfa9,
+      hemiGround: 0x0e231d,
+      hemiIntensity: 0.37,
+      keyColor: 0xc8ffec,
+      keyIntensity: 0.41,
+      rimColor: 0x52c4a2,
+      rimIntensity: 0.29,
+      exposure: 1.17,
+      flashColor: 0xd4fff2,
+      playerGlowColor: 0x52c4a2,
+      vignetteRgba: 'rgba(4, 20, 15, 0.72)',
+      dust: { color: 0x64e8be, size: 0.105, opacity: 0.38, driftX: 0.06, driftY: 0.12, driftZ: -0.04 },
+      ambientFx: 'crt_scan_motes',
+      assetSet: { key: 'dispatch_crt_rig', groundHazeOpacity: 0.17, shaftOpacity: 0.19, pulseHz: 2.15 },
+      audio: { id: 'dispatch_crt_43hz', sceneMode: 'station_tense', label: '机柜散热 · 43.2Hz 载波滴答' }
+    },
+    substation: {
+      id: 'substation',
+      accentHex: 0x6e9eff,
+      bgColor: 0x050915,
+      fogColor: 0x070e21,
+      fogDensity: 0.022,
+      ambientColor: 0x324d82,
+      ambientIntensity: 0.28,
+      hemiSky: 0x74a8ff,
+      hemiGround: 0x101833,
+      hemiIntensity: 0.36,
+      keyColor: 0xd4e7ff,
+      keyIntensity: 0.40,
+      rimColor: 0x6e9eff,
+      rimIntensity: 0.31,
+      exposure: 1.16,
+      flashColor: 0xd8ecff,
+      playerGlowColor: 0x6e9eff,
+      vignetteRgba: 'rgba(6, 12, 28, 0.74)',
+      dust: { color: 0x82b6ff, size: 0.12, opacity: 0.42, driftX: 0.09, driftY: 0.17, driftZ: 0.05 },
+      ambientFx: 'ozone_sparks',
+      assetSet: { key: 'substation_arc_rig', groundHazeOpacity: 0.18, shaftOpacity: 0.20, pulseHz: 3.1 },
+      audio: { id: 'substation_hv_hum', sceneMode: 'station_tense', label: '50Hz 变压器嗡鸣 · 臭氧电弧' }
+    },
+    tunnel: {
+      id: 'tunnel',
+      accentHex: 0xa884e0,
+      bgColor: 0x090612,
+      fogColor: 0x110a1f,
+      fogDensity: 0.0245,
+      ambientColor: 0x4e3970,
+      ambientIntensity: 0.26,
+      hemiSky: 0xac88e4,
+      hemiGround: 0x181026,
+      hemiIntensity: 0.34,
+      keyColor: 0xe6d6ff,
+      keyIntensity: 0.37,
+      rimColor: 0xa884e0,
+      rimIntensity: 0.29,
+      exposure: 1.13,
+      flashColor: 0xeee4ff,
+      playerGlowColor: 0xa884e0,
+      vignetteRgba: 'rgba(15, 8, 26, 0.78)',
+      dust: { color: 0xc29ef2, size: 0.135, opacity: 0.45, driftX: -0.10, driftY: -0.09, driftZ: 0.08 },
+      ambientFx: 'steam_drip',
+      assetSet: { key: 'tunnel_mist_rig', groundHazeOpacity: 0.22, shaftOpacity: 0.18, pulseHz: 0.88 },
+      audio: { id: 'tunnel_steam_drip', sceneMode: 'station_tense', label: '蒸汽管嘶鸣 · 暗渠滴水回响' }
+    },
+    platform0: {
+      id: 'platform0',
+      accentHex: 0xe69c3c,
+      bgColor: 0x0c0805,
+      fogColor: 0x181008,
+      fogDensity: 0.0185,
+      ambientColor: 0x684a28,
+      ambientIntensity: 0.30,
+      hemiSky: 0xefb45a,
+      hemiGround: 0x26160a,
+      hemiIntensity: 0.38,
+      keyColor: 0xffe2b4,
+      keyIntensity: 0.44,
+      rimColor: 0xe69c3c,
+      rimIntensity: 0.33,
+      exposure: 1.19,
+      flashColor: 0xfff0d4,
+      playerGlowColor: 0xe69c3c,
+      vignetteRgba: 'rgba(22, 12, 4, 0.72)',
+      dust: { color: 0xf4ba64, size: 0.125, opacity: 0.42, driftX: 0.04, driftY: 0.10, driftZ: 0.40 },
+      ambientFx: 'rail_wind',
+      assetSet: { key: 'platform0_rail_rig', groundHazeOpacity: 0.17, shaftOpacity: 0.20, pulseHz: 1.75 },
+      audio: { id: 'platform0_rail_wind', sceneMode: 'station_tense', label: '轨道穿堂风 · 钢轨低频共鸣' }
+    }
+  };
+
+  function resolveZoneSceneConfig(zoneId, mapApi) {
+    var zid = ZONE_SCENE_CONFIGS[zoneId] ? zoneId : 'concourse';
+    var base = ZONE_SCENE_CONFIGS[zid];
+    var zInfo = getZoneInfo(mapApi, zid);
+    var accentCss = (INFINITY.ArtTokens && typeof INFINITY.ArtTokens.getZoneColor === 'function')
+      ? INFINITY.ArtTokens.getZoneColor(zid, zInfo.color)
+      : (zInfo.color || '#68c8de');
+    return {
+      id: zid,
+      code: zInfo.code,
+      name: zInfo.name,
+      accentCss: accentCss,
+      accentHex: hexToInt(accentCss, base.accentHex),
+      bgColor: base.bgColor,
+      fogColor: base.fogColor,
+      fogDensity: base.fogDensity,
+      ambientColor: base.ambientColor,
+      ambientIntensity: base.ambientIntensity,
+      hemiSky: base.hemiSky,
+      hemiGround: base.hemiGround,
+      hemiIntensity: base.hemiIntensity,
+      keyColor: base.keyColor,
+      keyIntensity: base.keyIntensity,
+      rimColor: base.rimColor,
+      rimIntensity: base.rimIntensity,
+      exposure: base.exposure,
+      flashColor: base.flashColor,
+      playerGlowColor: base.playerGlowColor,
+      vignetteRgba: base.vignetteRgba,
+      dust: base.dust,
+      ambientFx: base.ambientFx,
+      assetSet: base.assetSet,
+      audio: base.audio
+    };
+  }
+
   var DEFAULT_SLOTS = [
     { archetype: 'sword_arc',   name: '宵练剑弧',   color: '#6fd8ea', cooldown: 3.2, energyCost: 14, power: 34, radius: 3.8, duration: 0.35, icon: '⚔' },
     { archetype: 'ward_circle', name: '画地界',     color: '#f0c46c', cooldown: 11,  energyCost: 22, power: 0,  radius: 3.4, duration: 7.0,  icon: '◎' },
@@ -416,6 +602,10 @@
     this.shakeTimer = 0;
 
     // Station & lighting pools
+    this.ambientLight = null;
+    this.hemiLight = null;
+    this.dirKeyLight = null;
+    this.dirRimLight = null;
     this.stationLightDefs = [];
     this.stationLightPool = [];
     this.stationBulbMat = null;
@@ -425,6 +615,19 @@
     this.inspectorLantern = null;
     this.inspectorLanternOrb = null;
     this.dustPoints = null;
+    this.dustDrift = { x: 0.14, y: 0.07, z: 0.03 };
+
+    // Dynamic zone atmosphere, asset-rig & ambient audio state
+    this.activeZoneId = null;
+    this.activeSubZoneId = null;
+    this.activeZoneConfig = null;
+    this.activeZoneAudioId = null;
+    this.zoneAssetRigs = Object.create(null);
+    this.zoneFxTimer = 0;
+    this.zoneBannerEl = null;
+    this.zoneBannerTimer = 0;
+    this._tmpColor = null;
+    this._tmpClearColor = null;
 
     // EMP blackout, Fog-of-War LOS shadow & 2-pass WebGL PostFX
     this.empBlackoutTimer = 0;
@@ -845,6 +1048,8 @@
     this.camera = new THREE.PerspectiveCamera(38, width / height, 0.5, 190);
 
     // Build combat loadout & entities
+    this._tmpColor = new THREE.Color();
+    this._tmpClearColor = new THREE.Color(0x070a10);
     this.initLoadout();
     this.buildLighting();
     this.buildStationGeometry();
@@ -853,6 +1058,7 @@
     this.buildActors();
     this.buildReticle();
     this.buildAtmosphericDust();
+    this.buildZoneSceneAssetRigs();
     this.buildFogOfWar();
     this.buildPostFx(width, height);
 
@@ -873,10 +1079,11 @@
     this.mounted = true;
     this.lastFrameTs = performance.now();
 
-    // Opening radio atmosphere & HUD push
+    // Opening radio atmosphere, initial zone scene assets/ambience & HUD push
     if (INFINITY.Audio && typeof INFINITY.Audio.setScene === 'function') {
       try { INFINITY.Audio.setScene('station_tense'); } catch (_) {}
     }
+    this.updateZoneEnvironment(0.016, true);
     this.recordMissionEvent(
       'progress',
       '接入《零号回廊 · 停摆站台》',
@@ -951,6 +1158,18 @@
       'letter-spacing:0.5px;border-radius:3px;box-shadow:0 0 14px rgba(111,216,234,0.35);white-space:nowrap;';
     root.appendChild(prompt);
 
+    // Non-blocking top-center Zone Transition Banner (zero backdrop-filter over WebGL!)
+    var zoneBanner = document.createElement('div');
+    zoneBanner.className = 'w25d-zone-banner';
+    zoneBanner.setAttribute('aria-live', 'polite');
+    zoneBanner.style.cssText =
+      'position:absolute;top:18px;left:50%;transform:translate(-50%,-10px);opacity:0;' +
+      'display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 20px 8px;' +
+      'background:rgba(8,12,19,0.88);border:1px solid rgba(104,200,222,0.42);' +
+      'border-top:2px solid #68c8de;border-radius:4px;pointer-events:none;white-space:nowrap;' +
+      'box-shadow:0 8px 24px rgba(0,0,0,0.55);transition:opacity 0.35s ease,transform 0.35s ease;';
+    root.appendChild(zoneBanner);
+
     this.containerEl.appendChild(root);
     this.overlayRoot = root;
     this.vignetteEl = vignette;
@@ -958,6 +1177,7 @@
     this.bubblesLayer = bubbles;
     this.floatersLayer = floaters;
     this.promptEl = prompt;
+    this.zoneBannerEl = zoneBanner;
   };
 
   // ---------------------------------------------------------------------------
@@ -1091,20 +1311,25 @@
     var THREE = this.THREE;
 
     // Dark-horror balance: low global fill so the flashlight, zone lamps and the
-    // Inspector's lantern own the light. Values assume the sRGB-correct PostFX path.
+    // Inspector's lantern own the light. Values assume the sRGB-correct PostFX path
+    // and smoothly crossfade per zone in updateZoneEnvironment().
     var amb = new THREE.AmbientLight(0x3a4d6b, 0.26);
     this.scene.add(amb);
+    this.ambientLight = amb;
 
     var hemi = new THREE.HemisphereLight(0x6e92bd, 0x161d2b, 0.32);
     this.scene.add(hemi);
+    this.hemiLight = hemi;
 
     var dirKey = new THREE.DirectionalLight(0xd8f0ff, 0.38);
     dirKey.position.set(14, 18, 16);
     this.scene.add(dirKey);
+    this.dirKeyLight = dirKey;
 
     var dirRim = new THREE.DirectionalLight(0xffa060, 0.22);
     dirRim.position.set(-18, 10, -14);
     this.scene.add(dirRim);
+    this.dirRimLight = dirRim;
 
     // Player directional flashlight (SpotLight) + soft personal halo
     var flashTarget = new THREE.Object3D();
@@ -2522,6 +2747,337 @@
   };
 
   // ---------------------------------------------------------------------------
+  // Dynamic Per-Zone Scene Asset Rigs, Atmosphere & Ambience Controller
+  // ---------------------------------------------------------------------------
+  EngineSession.prototype.buildZoneSceneAssetRigs = function () {
+    var THREE = this.THREE;
+    if (!this.scene || !this.mapApi) return;
+
+    this.zoneAssetRigs = Object.create(null);
+
+    // Shared soft radial mist/glow CanvasTexture for zone-scoped ground haze & light shafts
+    var hazeCanvas = document.createElement('canvas');
+    hazeCanvas.width = 256;
+    hazeCanvas.height = 256;
+    var hCtx = hazeCanvas.getContext('2d');
+    var grad = hCtx.createRadialGradient(128, 128, 10, 128, 128, 126);
+    grad.addColorStop(0, 'rgba(255,255,255,0.68)');
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.28)');
+    grad.addColorStop(1, 'rgba(255,255,255,0.0)');
+    hCtx.fillStyle = grad;
+    hCtx.fillRect(0, 0, 256, 256);
+    var hazeTex = this.trackTex(new THREE.CanvasTexture(hazeCanvas));
+    if (THREE.sRGBEncoding !== undefined) hazeTex.encoding = THREE.sRGBEncoding;
+
+    var shaftCanvas = document.createElement('canvas');
+    shaftCanvas.width = 128;
+    shaftCanvas.height = 256;
+    var sCtx = shaftCanvas.getContext('2d');
+    var sGrad = sCtx.createLinearGradient(0, 0, 0, 256);
+    sGrad.addColorStop(0, 'rgba(255,255,255,0.42)');
+    sGrad.addColorStop(0.55, 'rgba(255,255,255,0.14)');
+    sGrad.addColorStop(1, 'rgba(255,255,255,0.0)');
+    sCtx.fillStyle = sGrad;
+    sCtx.fillRect(0, 0, 128, 256);
+    var shaftTex = this.trackTex(new THREE.CanvasTexture(shaftCanvas));
+    if (THREE.sRGBEncoding !== undefined) shaftTex.encoding = THREE.sRGBEncoding;
+
+    var hazeGeo = this.trackGeo(new THREE.PlaneGeometry(1, 1));
+    hazeGeo.rotateX(-Math.PI / 2);
+    var shaftGeo = this.trackGeo(new THREE.PlaneGeometry(4.2, 3.1));
+
+    var boundsMap = (this.mapApi && this.mapApi.ZONE_BOUNDS) || null;
+    var zoneIds = Object.keys(ZONE_SCENE_CONFIGS);
+    var subZones = (this.mapApi && typeof this.mapApi.getSubZones === 'function')
+      ? (this.mapApi.getSubZones() || [])
+      : [];
+
+    for (var i = 0; i < zoneIds.length; i++) {
+      var zid = zoneIds[i];
+      var cfg = resolveZoneSceneConfig(zid, this.mapApi);
+      var b = boundsMap && boundsMap[zid];
+      var zCenter = (this.mapApi && typeof this.mapApi.getZoneCenter === 'function')
+        ? this.mapApi.getZoneCenter(zid)
+        : { x: 41.5, z: 37.5 };
+      var cx = b ? ((b.x0 + b.x1) * 0.5) : zCenter.x;
+      var cz = b ? ((b.z0 + b.z1) * 0.5) : zCenter.z;
+      var spanX = b ? Math.max(16, (b.x1 - b.x0) * 0.92) : 28;
+      var spanZ = b ? Math.max(16, (b.z1 - b.z0) * 0.92) : 24;
+
+      var group = new THREE.Group();
+      group.name = 'zone_asset_rig_' + zid;
+      group.visible = false;
+
+      var hazeMat = this.trackMat(new THREE.MeshBasicMaterial({
+        map: hazeTex,
+        color: cfg.accentHex,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      }));
+      var hazeMesh = new THREE.Mesh(hazeGeo, hazeMat);
+      hazeMesh.position.set(cx, FLOOR_Y + 0.055, cz);
+      hazeMesh.scale.set(spanX, 1, spanZ);
+      group.add(hazeMesh);
+
+      var shaftMat = this.trackMat(new THREE.MeshBasicMaterial({
+        map: shaftTex,
+        color: cfg.accentHex,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      }));
+
+      // Place volumetric accent light-shafts at each sub-zone focal anchor inside this zone
+      var anchors = [];
+      for (var si = 0; si < subZones.length; si++) {
+        if (subZones[si] && subZones[si].zoneId === zid) {
+          anchors.push({ x: subZones[si].cx, z: subZones[si].cz });
+        }
+      }
+      if (anchors.length === 0) anchors.push({ x: cx, z: cz });
+
+      var shafts = [];
+      for (var ai = 0; ai < anchors.length; ai++) {
+        var sh = new THREE.Mesh(shaftGeo, shaftMat);
+        sh.position.set(anchors[ai].x, 1.75, anchors[ai].z);
+        sh.rotation.y = (ai % 2 === 0 ? 0.18 : -0.18);
+        group.add(sh);
+        shafts.push(sh);
+      }
+
+      this.scene.add(group);
+      this.zoneAssetRigs[zid] = {
+        zoneId: zid,
+        key: cfg.assetSet.key,
+        group: group,
+        hazeMat: hazeMat,
+        shaftMat: shaftMat,
+        shafts: shafts,
+        weight: 0,
+        targetHazeOpacity: cfg.assetSet.groundHazeOpacity,
+        targetShaftOpacity: cfg.assetSet.shaftOpacity,
+        pulseHz: cfg.assetSet.pulseHz
+      };
+    }
+  };
+
+  EngineSession.prototype.showZoneBanner = function (zoneInfo, subZoneInfo, cfg) {
+    if (!this.zoneBannerEl || !zoneInfo) return;
+    var accent = (cfg && cfg.accentCss) || zoneInfo.color || '#68c8de';
+    var code = (subZoneInfo && subZoneInfo.code) || zoneInfo.code || 'Z-01';
+    var title = zoneInfo.name || '零号回廊';
+    var subText = (subZoneInfo && subZoneInfo.name) ? subZoneInfo.name : '';
+    var audioLabel = (cfg && cfg.audio && cfg.audio.label) ? ('♪ ' + cfg.audio.label) : '';
+
+    this.zoneBannerEl.style.borderColor = accent;
+    this.zoneBannerEl.style.borderTopColor = accent;
+    this.zoneBannerEl.innerHTML = '';
+
+    var topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+    var codeSpan = document.createElement('span');
+    codeSpan.style.cssText =
+      'font-size:10.5px;font-weight:700;letter-spacing:0.08em;padding:1px 6px;border-radius:3px;' +
+      'background:rgba(255,255,255,0.08);color:' + accent + ';';
+    codeSpan.textContent = code;
+    topRow.appendChild(codeSpan);
+
+    var titleSpan = document.createElement('strong');
+    titleSpan.style.cssText = 'font-size:14.5px;letter-spacing:0.1em;color:#f0f6fc;font-weight:700;';
+    titleSpan.textContent = title;
+    topRow.appendChild(titleSpan);
+    this.zoneBannerEl.appendChild(topRow);
+
+    if (subText || audioLabel) {
+      var subRow = document.createElement('div');
+      subRow.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:11px;color:#b8cade;letter-spacing:0.04em;';
+      if (subText) {
+        var s1 = document.createElement('span');
+        s1.textContent = subText;
+        subRow.appendChild(s1);
+      }
+      if (audioLabel) {
+        var s2 = document.createElement('span');
+        s2.style.color = accent;
+        s2.style.opacity = '0.9';
+        s2.textContent = audioLabel;
+        subRow.appendChild(s2);
+      }
+      this.zoneBannerEl.appendChild(subRow);
+    }
+
+    this.zoneBannerEl.style.opacity = '1';
+    this.zoneBannerEl.style.transform = 'translate(-50%,0px)';
+    this.zoneBannerTimer = 2.6;
+  };
+
+  EngineSession.prototype.updateZoneEnvironment = function (realDt, forceSnap) {
+    if (!this.mapApi || !this.player) return;
+    var p = this.player;
+    var curZoneId = this.mapApi.getZoneAt(p.x, p.z) || 'concourse';
+    var curSubZone = (typeof this.mapApi.getSubZoneAt === 'function')
+      ? this.mapApi.getSubZoneAt(p.x, p.z)
+      : null;
+    var curSubZoneId = curSubZone ? curSubZone.id : null;
+
+    var zoneChanged = (curZoneId !== this.activeZoneId);
+    var subZoneChanged = (curSubZoneId !== this.activeSubZoneId);
+
+    if (zoneChanged) {
+      var prevZoneId = this.activeZoneId;
+      var cfg = resolveZoneSceneConfig(curZoneId, this.mapApi);
+      var zInfo = getZoneInfo(this.mapApi, curZoneId);
+      this.activeZoneId = curZoneId;
+      this.activeSubZoneId = curSubZoneId;
+      this.activeZoneConfig = cfg;
+      this.activeZoneAudioId = cfg.audio ? cfg.audio.id : null;
+
+      // Update particle drift profile for the newly entered zone
+      if (cfg.dust) {
+        this.dustDrift.x = cfg.dust.driftX;
+        this.dustDrift.y = cfg.dust.driftY;
+        this.dustDrift.z = cfg.dust.driftZ;
+      }
+
+      // Dynamically switch background environmental soundscape for this zone
+      safeAudio('setZoneAmbience', curZoneId, cfg.audio);
+      if (prevZoneId) {
+        playSfxSafe('zone_enter');
+        this.showZoneBanner(zInfo, curSubZone, cfg);
+      }
+
+      // Immediately push updated zone name & asset/audio state to the HUD
+      this.emitHudSnapshot();
+    } else if (subZoneChanged) {
+      this.activeSubZoneId = curSubZoneId;
+      if (this.activeZoneConfig) {
+        this.showZoneBanner(getZoneInfo(this.mapApi, curZoneId), curSubZone, this.activeZoneConfig);
+      }
+      this.emitHudSnapshot();
+    }
+
+    var activeCfg = this.activeZoneConfig || resolveZoneSceneConfig(curZoneId, this.mapApi);
+    if (!activeCfg || !this.THREE) return;
+
+    var dt = Math.max(0.001, realDt || 0.016);
+    var blend = forceSnap ? 1.0 : (1 - Math.exp(-3.2 * dt));
+    var tmpC = this._tmpColor || (this._tmpColor = new this.THREE.Color());
+
+    // 1. Smoothly transition global lighting rig (Ambient, Hemisphere, Key, Rim)
+    if (this.ambientLight) {
+      tmpC.setHex(activeCfg.ambientColor);
+      this.ambientLight.color.lerp(tmpC, blend);
+      this.ambientLight.intensity = lerp(this.ambientLight.intensity, activeCfg.ambientIntensity, blend);
+    }
+    if (this.hemiLight) {
+      tmpC.setHex(activeCfg.hemiSky);
+      this.hemiLight.color.lerp(tmpC, blend);
+      tmpC.setHex(activeCfg.hemiGround);
+      this.hemiLight.groundColor.lerp(tmpC, blend);
+      this.hemiLight.intensity = lerp(this.hemiLight.intensity, activeCfg.hemiIntensity, blend);
+    }
+    if (this.dirKeyLight) {
+      tmpC.setHex(activeCfg.keyColor);
+      this.dirKeyLight.color.lerp(tmpC, blend);
+      this.dirKeyLight.intensity = lerp(this.dirKeyLight.intensity, activeCfg.keyIntensity, blend);
+    }
+    if (this.dirRimLight) {
+      tmpC.setHex(activeCfg.rimColor);
+      this.dirRimLight.color.lerp(tmpC, blend);
+      this.dirRimLight.intensity = lerp(this.dirRimLight.intensity, activeCfg.rimIntensity, blend);
+    }
+    if (this.flashLight) {
+      tmpC.setHex(activeCfg.flashColor);
+      this.flashLight.color.lerp(tmpC, blend);
+    }
+
+    // 2. Smoothly transition scene fog, background, clear color & exposure
+    if (this.scene && this.scene.fog) {
+      tmpC.setHex(activeCfg.fogColor);
+      this.scene.fog.color.lerp(tmpC, blend);
+      if (typeof this.scene.fog.density === 'number') {
+        this.scene.fog.density = lerp(this.scene.fog.density, activeCfg.fogDensity, blend);
+      }
+    }
+    if (this.scene && this.scene.background && this.scene.background.isColor) {
+      tmpC.setHex(activeCfg.bgColor);
+      this.scene.background.lerp(tmpC, blend);
+      if (this.renderer && typeof this.renderer.setClearColor === 'function') {
+        this.renderer.setClearColor(this.scene.background, 1);
+      }
+    }
+    if (this.renderer && typeof this.renderer.toneMappingExposure === 'number') {
+      this.renderer.toneMappingExposure = lerp(this.renderer.toneMappingExposure, activeCfg.exposure, blend);
+    }
+
+    // 3. Smoothly transition atmospheric dust material profile
+    if (this.dustPoints && this.dustPoints.material && activeCfg.dust) {
+      var dMat = this.dustPoints.material;
+      tmpC.setHex(activeCfg.dust.color);
+      dMat.color.lerp(tmpC, blend);
+      dMat.size = lerp(dMat.size, activeCfg.dust.size, blend);
+      dMat.opacity = lerp(dMat.opacity, activeCfg.dust.opacity, blend);
+    }
+
+    // 4. Dynamically activate & crossfade the current zone's scene asset rig
+    if (this.zoneAssetRigs) {
+      var rigKeys = Object.keys(this.zoneAssetRigs);
+      for (var rk = 0; rk < rigKeys.length; rk++) {
+        var rig = this.zoneAssetRigs[rigKeys[rk]];
+        if (!rig) continue;
+        var targetW = (rig.zoneId === curZoneId) ? 1.0 : 0.0;
+        rig.weight = forceSnap ? targetW : lerp(rig.weight, targetW, blend);
+        var active = rig.weight > 0.008;
+        rig.group.visible = active;
+        if (active) {
+          var pulse = 0.86 + 0.14 * Math.sin(this.elapsedReal * rig.pulseHz * Math.PI * 2);
+          rig.hazeMat.opacity = rig.targetHazeOpacity * rig.weight * pulse;
+          rig.shaftMat.opacity = rig.targetShaftOpacity * rig.weight * (0.88 + 0.12 * Math.cos(this.elapsedReal * rig.pulseHz * 2.1));
+        }
+      }
+    }
+
+    // 5. Subtle per-zone ambient environmental micro-VFX near the player
+    if (!forceSnap && !this.ended && this.scene) {
+      this.zoneFxTimer += dt;
+      if (this.zoneFxTimer >= 2.2) {
+        this.zoneFxTimer = 0;
+        var fxKind = activeCfg.ambientFx;
+        if (fxKind === 'ozone_sparks' && typeof this.spawnSparkBurst === 'function') {
+          this.spawnSparkBurst(
+            p.x + (Math.random() - 0.5) * 9.0,
+            2.15 + Math.random() * 0.7,
+            p.z + (Math.random() - 0.5) * 7.0,
+            0x78b4ff,
+            4
+          );
+        } else if (fxKind === 'steam_drip' && typeof this.spawnRingPulse === 'function') {
+          this.spawnRingPulse(
+            p.x + (Math.random() - 0.5) * 8.0,
+            p.z + (Math.random() - 0.5) * 6.0,
+            0.75,
+            0xa884e0,
+            0.55
+          );
+        } else if (fxKind === 'rail_wind' && typeof this.spawnSparkBurst === 'function') {
+          this.spawnSparkBurst(
+            Math.min(207.0, p.x + 3.5 + Math.random() * 3.0),
+            0.6 + Math.random() * 1.4,
+            p.z + (Math.random() - 0.5) * 8.0,
+            0xf0b258,
+            3
+          );
+        }
+      }
+    }
+  };
+
+  // ---------------------------------------------------------------------------
   // True Wall-Occluded Line-of-Sight Shadow / Fog-of-War (72-Ray 2D DDA)
   // ---------------------------------------------------------------------------
   EngineSession.prototype.buildFogOfWar = function () {
@@ -2965,24 +3521,27 @@
       }
 
       // three r147 applies fog after output encoding and writes clear/background colors raw,
-      // so all three are display-space values. Swap in their linear equivalents while
-      // rendering into the linear RT so the post pass's sRGB encode does not lift them.
+      // so all three are display-space values. Sync live zone-transitioned display colors into
+      // pre-allocated linear Color buffers so PostFX tracks dynamic zone fog/background transitions!
       var fog = this.scene.fog;
       var bg = this.scene.background;
       var bgIsColor = bg && typeof bg.isColor === 'boolean' && bg.isColor;
-      if (!fx.fogDisplay && fog && fog.color) {
-        fx.fogDisplay = fog.color.clone();
-        fx.fogLinear = fog.color.clone().convertSRGBToLinear();
+      if (fog && fog.color) {
+        if (!fx.fogDisplay) fx.fogDisplay = new this.THREE.Color();
+        if (!fx.fogLinear) fx.fogLinear = new this.THREE.Color();
+        fx.fogDisplay.copy(fog.color);
+        fx.fogLinear.copy(fog.color).convertSRGBToLinear();
       }
-      if (!fx.bgDisplay && bgIsColor) {
-        fx.bgDisplay = bg.clone();
-        fx.bgLinear = bg.clone().convertSRGBToLinear();
+      if (bgIsColor) {
+        if (!fx.bgDisplay) fx.bgDisplay = new this.THREE.Color();
+        if (!fx.bgLinear) fx.bgLinear = new this.THREE.Color();
+        fx.bgDisplay.copy(bg);
+        fx.bgLinear.copy(bg).convertSRGBToLinear();
       }
-      if (!fx.clearDisplay) {
-        fx.clearDisplay = new this.THREE.Color();
-        this.renderer.getClearColor(fx.clearDisplay);
-        fx.clearLinear = fx.clearDisplay.clone().convertSRGBToLinear();
-      }
+      if (!fx.clearDisplay) fx.clearDisplay = new this.THREE.Color();
+      if (!fx.clearLinear) fx.clearLinear = new this.THREE.Color();
+      this.renderer.getClearColor(fx.clearDisplay);
+      fx.clearLinear.copy(fx.clearDisplay).convertSRGBToLinear();
 
       try {
         if (fog && fx.fogLinear) fog.color.copy(fx.fogLinear);
@@ -3212,6 +3771,7 @@
 
     this.updateVfx(simDt, realDt);
     this.updateSoundRipples(simDt);
+    this.updateZoneEnvironment(realDt, false);
     this.updateLights(realDt);
     this.updateFogOfWar(realDt);
     this.updateSpatialAudio();
@@ -7681,7 +8241,8 @@
     }
     if (this.playerGlow) {
       this.playerGlow.position.set(p.x, 1.55, p.z);
-      this.playerGlow.color.setHex(p.overclockTimer > 0 ? 0x4df8ff : 0x7cc8e8);
+      var zoneGlowHex = (this.activeZoneConfig && this.activeZoneConfig.playerGlowColor) || 0x7cc8e8;
+      this.playerGlow.color.setHex(p.overclockTimer > 0 ? 0x4df8ff : zoneGlowHex);
     }
 
     // Inspector crimson lantern light (flickers dead when EMP-stunned!)
@@ -7850,10 +8411,18 @@
     var attr = this.dustPoints.geometry.attributes.position;
     var arr = attr.array;
     var maxW = (this.mapApi && this.mapApi.GRID_W) || 224;
+    var maxH = (this.mapApi && this.mapApi.GRID_H) || 152;
+    var dx = this.dustDrift ? this.dustDrift.x : 0.12;
+    var dy = this.dustDrift ? this.dustDrift.y : 0.08;
+    var dz = this.dustDrift ? this.dustDrift.z : 0.0;
     for (var i = 0; i < arr.length; i += 3) {
-      arr[i + 1] += Math.sin(this.elapsedReal * 0.8 + i) * 0.08 * simDt;
-      arr[i] += 0.12 * simDt;
+      arr[i] += dx * simDt;
+      arr[i + 1] += Math.sin(this.elapsedReal * 0.8 + i) * dy * simDt;
+      arr[i + 2] += dz * simDt;
       if (arr[i] > maxW) arr[i] = 0.5;
+      else if (arr[i] < 0.5) arr[i] = maxW - 0.5;
+      if (arr[i + 2] > maxH) arr[i + 2] = 0.5;
+      else if (arr[i + 2] < 0.5) arr[i + 2] = maxH - 0.5;
     }
     attr.needsUpdate = true;
   };
@@ -7961,7 +8530,17 @@
       } else if (this.player.stealthTimer > 0) {
         this.vignetteEl.style.boxShadow = 'inset 0 0 105px rgba(110,88,210,0.35)';
       } else {
-        this.vignetteEl.style.boxShadow = 'inset 0 0 90px rgba(4,6,10,0.72)';
+        var zoneVig = (this.activeZoneConfig && this.activeZoneConfig.vignetteRgba) || 'rgba(4,6,10,0.72)';
+        this.vignetteEl.style.boxShadow = 'inset 0 0 90px ' + zoneVig;
+      }
+    }
+
+    // Zone Transition Banner smooth auto-fade
+    if (this.zoneBannerEl && this.zoneBannerTimer > 0) {
+      this.zoneBannerTimer = Math.max(0, this.zoneBannerTimer - realDt);
+      if (this.zoneBannerTimer <= 0) {
+        this.zoneBannerEl.style.opacity = '0';
+        this.zoneBannerEl.style.transform = 'translate(-50%,-10px)';
       }
     }
 
@@ -8204,11 +8783,22 @@
 
     var destructiblesTotal = this.destructibleCovers ? this.destructibleCovers.length : 0;
     var triggersTotal = this.sceneTriggers ? this.sceneTriggers.length : 0;
+    var pSubZone = (mapApi && typeof mapApi.getSubZoneAt === 'function')
+      ? mapApi.getSubZoneAt(p.x, p.z)
+      : null;
+
+    var activeZoneCfg = this.activeZoneConfig || resolveZoneSceneConfig(pZoneId, mapApi);
 
     return {
       zoneId: pZoneId,
       zoneName: pZone.name,
       zoneCode: pZone.code,
+      subZoneId: pSubZone ? pSubZone.id : null,
+      subZoneCode: pSubZone ? pSubZone.code : pZone.code,
+      subZoneName: pSubZone ? pSubZone.name : null,
+      zoneSceneAssetKey: activeZoneCfg && activeZoneCfg.assetSet ? activeZoneCfg.assetSet.key : null,
+      zoneAudioId: activeZoneCfg && activeZoneCfg.audio ? activeZoneCfg.audio.id : null,
+      zoneAudioLabel: activeZoneCfg && activeZoneCfg.audio ? activeZoneCfg.audio.label : null,
       elapsedSec: Math.floor(this.stats.elapsedSec || 0),
       timeRemainingSec: Math.ceil(this.timeRemainingSec),
       trainCountdownSec: Math.ceil(this.trainCountdownSec),
@@ -8399,10 +8989,12 @@
     this.clearFocusWaypoint();
     this.disposePostFx();
 
-    // Silence spatial audio sources and reset bullet-time filter cleanly
+    // Silence spatial audio sources, zone ambience and reset bullet-time filter cleanly
     safeAudio('updateSpatialSource', 'inspector', 99, 99, 0);
     safeAudio('updateSpatialSource', 'train', 99, 99, 0);
+    safeAudio('stopZoneAmbience');
     safeAudio('setBulletTime', false);
+    this.zoneAssetRigs = Object.create(null);
 
     // Dispose all tracked engine-owned geometries, materials, fallback textures
     for (var gi = 0; gi < this.ownedGeometries.length; gi++) {
@@ -8544,6 +9136,8 @@
 
     ACTOR_DIMENSIONS: ACTOR_DIMENSIONS,
     CAMERA_25D_SPEC: CAMERA_25D_SPEC,
+    ZONE_SCENE_CONFIGS: ZONE_SCENE_CONFIGS,
+    resolveZoneSceneConfig: resolveZoneSceneConfig,
     resolveSweptMovement: resolveSweptMovement,
     computeCameraScrollBounds: computeCameraScrollBounds,
 

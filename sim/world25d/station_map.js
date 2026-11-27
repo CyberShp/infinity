@@ -69,10 +69,50 @@
     platform0:  { x0: 168, z0: 6,   x1: 206, z1: 144 }
   };
 
+  // 21 Architectural Sub-Zones dividing the 6 grand sectors into unmistakable functional rooms & wings
+  var SUBZONES = [
+    // Z-01 B1 检票大厅 (4 sub-zones)
+    { id: 'concourse_ticket_lobby', zoneId: 'concourse',  code: 'Z-01A', name: '北部购票闸口厅', x0: 4,   z0: 4,   x1: 78,  z1: 20,  cx: 41,  cz: 16,  style: 'ticket_lobby' },
+    { id: 'concourse_security_bay', zoneId: 'concourse',  code: 'Z-01C', name: '西侧安检行李区', x0: 4,   z0: 21,  x1: 22,  z1: 70,  cx: 14,  cz: 40,  style: 'security_bay' },
+    { id: 'concourse_east_lounge',  zoneId: 'concourse',  code: 'Z-01D', name: '东侧商业候车廊', x0: 60,  z0: 21,  x1: 78,  z1: 70,  cx: 67,  cz: 40,  style: 'lounge_kiosk' },
+    { id: 'concourse_clock_atrium', zoneId: 'concourse',  code: 'Z-01B', name: '中央时钟中庭',   x0: 23,  z0: 21,  x1: 59,  z1: 70,  cx: 41,  cz: 37,  style: 'clock_atrium' },
+
+    // Z-02 B2 换乘长廊 (5 sub-zones)
+    { id: 'corridor_west_gate',     zoneId: 'corridor',   code: 'Z-02A', name: '西段换乘闸口',   x0: 84,  z0: 50,  x1: 104, z1: 98,  cx: 92,  cz: 74,  style: 'transfer_gate' },
+    { id: 'corridor_north_gallery', zoneId: 'corridor',   code: 'Z-02B', name: '北侧泥污灯箱廊', x0: 105, z0: 50,  x1: 141, z1: 62,  cx: 122, cz: 55,  style: 'ad_gallery' },
+    { id: 'corridor_south_gallery', zoneId: 'corridor',   code: 'Z-02D', name: '南侧卷帘商业廊', x0: 105, z0: 86,  x1: 141, z1: 98,  cx: 122, cz: 92,  style: 'shop_gallery' },
+    { id: 'corridor_east_approach', zoneId: 'corridor',   code: 'Z-02E', name: '东段站台前导厅', x0: 142, z0: 50,  x1: 160, z1: 98,  cx: 151, cz: 74,  style: 'platform_approach' },
+    { id: 'corridor_central_hub',   zoneId: 'corridor',   code: 'Z-02C', name: '中枢换乘十字厅', x0: 105, z0: 63,  x1: 141, z1: 85,  cx: 122, cz: 74,  style: 'transfer_hub' },
+
+    // Z-03 信号调度室 (4 sub-zones)
+    { id: 'dispatch_server_vault',  zoneId: 'dispatch',   code: 'Z-03A', name: '西侧中继服务器库', x0: 84,  z0: 4,   x1: 106, z1: 44,  cx: 95,  cz: 26,  style: 'server_vault' },
+    { id: 'dispatch_archive_room',  zoneId: 'dispatch',   code: 'Z-03C', name: '东侧时刻表档案室', x0: 138, z0: 4,   x1: 160, z1: 44,  cx: 149, cz: 16,  style: 'archive_room' },
+    { id: 'dispatch_control_deck',  zoneId: 'dispatch',   code: 'Z-03B', name: '中央主调度操作台', x0: 107, z0: 4,   x1: 137, z1: 30,  cx: 122, cz: 19,  style: 'control_deck' },
+    { id: 'dispatch_obs_gallery',   zoneId: 'dispatch',   code: 'Z-03D', name: '南侧防爆玻璃观测廊', x0: 107, z0: 31,  x1: 137, z1: 44,  cx: 122, cz: 37,  style: 'obs_gallery' },
+
+    // Z-04 旧变电间 (4 sub-zones)
+    { id: 'substation_workshop',    zoneId: 'substation', code: 'Z-04A', name: '北侧工务检修区', x0: 4,   z0: 76,  x1: 78,  z1: 90,  cx: 41,  cz: 83,  style: 'workshop' },
+    { id: 'substation_switchgear',  zoneId: 'substation', code: 'Z-04B', name: '西侧高压开关柜廊', x0: 4,   z0: 91,  x1: 26,  z1: 144, cx: 14,  cz: 116, style: 'switchgear' },
+    { id: 'substation_cooling_bay', zoneId: 'substation', code: 'Z-04D', name: '东侧冷却电容间', x0: 56,  z0: 91,  x1: 78,  z1: 144, cx: 68,  cz: 116, style: 'cooling_bay' },
+    { id: 'substation_transformer', zoneId: 'substation', code: 'Z-04C', name: '中央变压器主厅', x0: 27,  z0: 91,  x1: 55,  z1: 144, cx: 41,  cz: 110, style: 'transformer_hall' },
+
+    // Z-05 废弃应急通道 (4 sub-zones)
+    { id: 'tunnel_pipe_gallery',    zoneId: 'tunnel',     code: 'Z-05A', name: '北侧高压管廊道', x0: 84,  z0: 104, x1: 160, z1: 123, cx: 122, cz: 114, style: 'pipe_gallery' },
+    { id: 'tunnel_valve_chamber',   zoneId: 'tunnel',     code: 'Z-05B', name: '西侧蓄水阀门室', x0: 84,  z0: 124, x1: 106, z1: 144, cx: 95,  cz: 134, style: 'valve_chamber' },
+    { id: 'tunnel_culvert_alcove',  zoneId: 'tunnel',     code: 'Z-05C', name: '中央暗格排水渠', x0: 107, z0: 124, x1: 138, z1: 144, cx: 122, cz: 134, style: 'culvert_alcove' },
+    { id: 'tunnel_bulkhead_east',   zoneId: 'tunnel',     code: 'Z-05D', name: '东侧防爆检修口', x0: 139, z0: 124, x1: 160, z1: 144, cx: 149, cz: 134, style: 'bulkhead_east' },
+
+    // Z-06 0号站台铁轨 (3 walkable platform bays; rail trench is x: 208..219)
+    { id: 'platform0_north_exit',   zoneId: 'platform0',  code: 'Z-06A', name: '北段应急脱出站厅', x0: 168, z0: 6,   x1: 207, z1: 44,  cx: 188, cz: 26,  style: 'north_terminal' },
+    { id: 'platform0_central_bay',  zoneId: 'platform0',  code: 'Z-06B', name: '中段零号候车月台', x0: 168, z0: 45,  x1: 207, z1: 102, cx: 188, cz: 74,  style: 'boarding_bay' },
+    { id: 'platform0_south_freight',zoneId: 'platform0',  code: 'Z-06C', name: '南段货运信号端',   x0: 168, z0: 103, x1: 207, z1: 144, cx: 188, cz: 124, style: 'freight_end' }
+  ];
+
   /* --------------------------------------------------------------------------
    * Build 224x152 Mega-Station Grid Layout (4.0x Area of 112x76 -> 34,048 m²)
    * pillarMask: 0 = full wall (3.2m), 1 = structural pillar (2.6m),
-   *             2 = waist-high tactical cover barricade (1.25m, open sightlines!)
+   *             2 = waist-high tactical cover barricade (1.25m, open sightlines!),
+   *             3 = architectural glazed/framed interior partition (2.35m, open sightlines!)
    * -------------------------------------------------------------------------- */
   var grid = [];
   var pillarMask = [];
@@ -101,6 +141,17 @@
       }
     }
 
+    function addWall(x0, z0, x1, z1) {
+      for (var zz = z0; zz <= z1; zz++) {
+        for (var xx = x0; xx <= x1; xx++) {
+          if (xx >= 0 && xx < GRID_W && zz >= 0 && zz < GRID_H) {
+            grid[zz][xx] = T_WALL;
+            pillarMask[zz][xx] = 0;
+          }
+        }
+      }
+    }
+
     function addPillar(x0, z0, x1, z1) {
       for (var zz = z0; zz <= z1; zz++) {
         for (var xx = x0; xx <= x1; xx++) {
@@ -119,42 +170,87 @@
       }
     }
 
-    // 1. Concourse (B1 检票大厅): x: 4..78, z: 4..70 (75x67 = 5,025 m²)
-    fillRect(4, 4, 78, 70, T_FLOOR);
-    // Grand 10-pillar symmetrical colonnade leaving central atrium open around spawn (41.5, 37.5)
-    addPillar(18, 18, 19, 18);
-    addPillar(32, 18, 33, 18);
-    addPillar(49, 18, 50, 18);
-    addPillar(63, 18, 64, 18);
-    addPillar(18, 36, 19, 36);
-    addPillar(63, 36, 64, 36);
-    addPillar(18, 54, 19, 54);
-    addPillar(32, 54, 33, 54);
-    addPillar(49, 54, 50, 54);
-    addPillar(63, 54, 64, 54);
-    // Waist-high tactical concourse cover barricades (framing spawn plaza & side lanes)
-    addCover(28, 31, 30, 31);
-    addCover(52, 31, 54, 31);
-    addCover(28, 44, 30, 44);
-    addCover(52, 44, 54, 44);
-    addCover(11, 26, 12, 27);
-    addCover(70, 26, 71, 27);
-    addCover(11, 47, 12, 48);
-    addCover(70, 47, 71, 48);
-    addCover(25, 11, 27, 11);
-    addCover(55, 11, 57, 11);
-    addCover(25, 62, 27, 62);
-    addCover(55, 62, 57, 62);
-
-    // 2. Corridor (B2 换乘长廊): x: 84..160, z: 50..98 (77x49 = 3,773 m²)
-    fillRect(84, 50, 160, 98, T_FLOOR);
-    // 10 monumental reinforced cover pillars framing a wide central transit boulevard (z=64..84)
-    var corrCols = [94, 108, 121, 135, 149];
-    for (var ci = 0; ci < corrCols.length; ci++) {
-      addPillar(corrCols[ci], 62, corrCols[ci] + 1, 62);
-      addPillar(corrCols[ci], 86, corrCols[ci] + 1, 86);
+    function addPartition(x0, z0, x1, z1) {
+      for (var zz = z0; zz <= z1; zz++) {
+        for (var xx = x0; xx <= x1; xx++) {
+          if (xx >= 0 && xx < GRID_W && zz >= 0 && zz < GRID_H) {
+            grid[zz][xx] = T_WALL;
+            pillarMask[zz][xx] = 3;
+          }
+        }
+      }
     }
-    // Tactical waist-high flanking cover islands along north/south boulevard shoulders
+
+    // 1. Concourse (B1 检票大厅): x: 4..78, z: 4..70 (partitioned into 4 distinct sub-zones)
+    fillRect(4, 4, 78, 70, T_FLOOR);
+
+    // Z-01A North Ticket Checkpoint Glazed Partition (z=21) with 3 wide turnstile gateways
+    addPartition(4, 21, 14, 21);
+    addPartition(23, 21, 35, 21);
+    addPartition(47, 21, 59, 21);
+    addPartition(68, 21, 78, 21);
+    // Staffed Glass Ticket Office Booth inside North Ticket Lobby (leaves wide corridor behind & front)
+    addPartition(38, 11, 44, 13);
+
+    // Z-01C West Security & Baggage Bay Glazed Partition (x=22) with 3 wide portals (z=30..36, 47..53, 63..67)
+    addPartition(22, 22, 22, 29);
+    addPartition(22, 37, 22, 46);
+    addPartition(22, 54, 22, 62);
+    addPartition(22, 68, 22, 70);
+    // Solid X-ray baggage scanner beds inside West Security Bay (clear of clue at 18.5, 40.5)
+    addCover(10, 31, 13, 32);
+    addCover(10, 48, 13, 49);
+
+    // Z-01D East Passenger Lounge & Kiosk Wing Partition (x=60) with 3 wide portals
+    addPartition(60, 22, 60, 29);
+    addPartition(60, 37, 60, 46);
+    addPartition(60, 54, 60, 62);
+    addPartition(60, 68, 60, 70);
+    // Shuttered Metro Convenience Kiosk / Newsstand booths along East Lounge wall
+    addPartition(73, 27, 76, 32);
+    addPartition(73, 40, 76, 45);
+
+    // Z-01B Central Clock Atrium colonnade & seating planters framing open spawn plaza (41.5, 37.5)
+    addPillar(26, 25, 27, 25);
+    addPillar(55, 25, 56, 25);
+    addPillar(26, 51, 27, 51);
+    addPillar(55, 51, 56, 51);
+    addPillar(18, 13, 19, 13);
+    addPillar(63, 13, 64, 13);
+    // Waist-high tactical concourse cover & info counters framing spawn plaza & side lanes
+    addCover(30, 31, 32, 31);
+    addCover(50, 31, 52, 31);
+    addCover(30, 45, 32, 45);
+    addCover(50, 45, 52, 45);
+    addCover(27, 62, 29, 62);
+    addCover(53, 62, 55, 62);
+    addCover(65, 33, 67, 33);
+    addCover(65, 48, 67, 48);
+
+    // 2. Corridor (B2 换乘长廊): x: 84..160, z: 50..98 (partitioned into Central Hub + North/South Galleries + West/East Gates)
+    fillRect(84, 50, 160, 98, T_FLOOR);
+    // Preserve test pillar at (94..95, 62) and frame North & South Galleries with glazed ad-wall dividers
+    addPillar(94, 62, 95, 62);
+    addPillar(94, 86, 95, 86);
+    addPartition(106, 62, 114, 62);
+    addPillar(115, 62, 116, 62);
+    addPartition(129, 62, 137, 62);
+    addPillar(138, 62, 139, 62);
+    addPillar(149, 62, 150, 62);
+
+    addPartition(106, 86, 114, 86);
+    addPillar(115, 86, 116, 86);
+    addPartition(129, 86, 137, 86);
+    addPillar(138, 86, 139, 86);
+    addPillar(149, 86, 150, 86);
+
+    // West & East checkpoint wing jambs demarcating Z-02A / Z-02C / Z-02E
+    addWall(104, 50, 104, 54);
+    addWall(104, 94, 104, 98);
+    addWall(142, 50, 142, 54);
+    addWall(142, 94, 142, 98);
+
+    // Tactical waist-high boulevard cover islands & shop counters
     addCover(101, 69, 103, 69);
     addCover(141, 69, 143, 69);
     addCover(101, 79, 103, 79);
@@ -166,24 +262,54 @@
     addCover(89, 73, 90, 75);
     addCover(154, 73, 155, 75);
 
-    // 3. Dispatch (信号调度室): x: 84..160, z: 4..44 (77x41 = 3,157 m²)
+    // 3. Dispatch (信号调度室): x: 84..160, z: 4..44 (partitioned into West Server Vault, Central Control Deck, East Archive, South Obs Gallery)
     fillRect(84, 4, 160, 44, T_FLOOR);
-    // 6 relay pillars framing the northern control deck & twin flank aisles
-    addPillar(98, 20, 99, 20);
-    addPillar(114, 20, 115, 20);
-    addPillar(129, 20, 130, 20);
-    addPillar(145, 20, 146, 20);
-    addPillar(98, 34, 99, 34);
-    addPillar(145, 34, 146, 34);
-    // Tactical low relay console islands
-    addCover(106, 13, 108, 13);
-    addCover(136, 13, 138, 13);
-    addCover(106, 29, 108, 29);
-    addCover(136, 29, 138, 29);
-    addCover(121, 35, 123, 35);
 
-    // 4. Substation (旧变电间): x: 4..78, z: 76..144 (75x69 = 5,175 m²)
+    // Z-03A West Server Vault Bulkhead Wall (x=106) with wide 8-tile doors at z=11..18 & z=28..35
+    addWall(106, 4, 106, 10);
+    addWall(106, 19, 106, 27);
+    addWall(106, 36, 106, 44);
+    // Server vault aisle rack footprints (clear of radar_tower at 92.5, 34.5)
+    addCover(90, 12, 91, 18);
+    addCover(98, 12, 99, 18);
+
+    // Z-03C East Timetable Archive Glazed Partition Wall (x=138) with wide 8-tile doors at z=11..18 & z=28..35
+    addPartition(138, 4, 138, 10);
+    addPartition(138, 19, 138, 27);
+    addPartition(138, 36, 138, 44);
+    // Central illuminated Railway Map Table inside East Archive (clear of clue at 150.5, 13.5 & east doorway)
+    addCover(147, 23, 151, 25);
+
+    // Z-03B Central Master Control Deck Blast-Glass Observation Partition (z=30) with twin 6-tile entryways
+    addPartition(113, 30, 131, 30);
+    addPillar(112, 20, 113, 20);
+    addPillar(131, 20, 132, 20);
+    // Flanking curved operator console desks inside Control Deck (clear of console at 122.5, 11.5)
+    addCover(114, 14, 117, 15);
+    addCover(127, 14, 130, 15);
+    addCover(121, 36, 123, 36);
+
+    // 4. Substation (旧变电间): x: 4..78, z: 76..144 (partitioned into North Workshop, West Switchgear, Central Transformer Hall, East Cooling Bay)
     fillRect(4, 76, 78, 144, T_FLOOR);
+
+    // Z-04A North Workshop Safety Divider (z=90) with 3 wide vehicle/equipment bays
+    addCover(6, 90, 15, 90);
+    addCover(29, 90, 36, 90);
+    addCover(46, 90, 53, 90);
+    addCover(67, 90, 76, 90);
+
+    // Z-04B West HV Switchgear Bulkhead Partition (x=26) with 3 wide bays (z=98..105, 115..122, 132..139)
+    addWall(26, 91, 26, 97);
+    addPartition(26, 106, 26, 114);
+    addWall(26, 123, 26, 131);
+    addWall(26, 140, 26, 144);
+
+    // Z-04D East Cooling & Capacitor Bulkhead Partition (x=56) with 3 wide bays
+    addWall(56, 91, 56, 97);
+    addPartition(56, 106, 56, 114);
+    addWall(56, 123, 56, 131);
+    addWall(56, 140, 56, 144);
+
     // 6 heavy 2x2 high-voltage transformer blocks (3x2 turbine hall array)
     addPillar(18, 94, 19, 95);
     addPillar(40, 94, 41, 95);
@@ -191,45 +317,63 @@
     addPillar(18, 124, 19, 125);
     addPillar(40, 124, 41, 125);
     addPillar(62, 124, 63, 125);
-    // Tactical waist-high breaker cover barriers
-    addCover(29, 102, 31, 102);
-    addCover(51, 102, 53, 102);
-    addCover(29, 117, 31, 117);
-    addCover(51, 117, 53, 117);
-    addCover(11, 109, 12, 110);
-    addCover(70, 109, 71, 110);
-    addCover(29, 85, 31, 85);
-    addCover(51, 85, 53, 85);
-    addCover(29, 134, 31, 134);
-    addCover(51, 134, 53, 134);
+    // Tactical waist-high breaker cover barriers inside central hall & workshop
+    addCover(31, 102, 33, 102);
+    addCover(49, 102, 51, 102);
+    addCover(31, 117, 33, 117);
+    addCover(49, 117, 51, 117);
+    addCover(10, 109, 11, 110);
+    addCover(71, 109, 72, 110);
+    addCover(31, 134, 33, 134);
+    addCover(49, 134, 51, 134);
 
-    // 5. Tunnel (废弃应急通道): x: 84..160, z: 104..144 (77x41 = 3,157 m²)
+    // 5. Tunnel (废弃应急通道): x: 84..160, z: 104..144 (carved into twin parallel maintenance galleries + 3 vaulted chambers)
     fillRect(84, 104, 160, 144, T_FLOOR);
-    // 4 structural tunnel rib pillars splitting north & south maintenance galleries
-    addPillar(96, 124, 97, 124);
-    addPillar(110, 124, 111, 124);
-    addPillar(133, 124, 134, 124);
-    addPillar(147, 124, 148, 124);
-    // Tactical maintenance cover barricades
-    addCover(103, 113, 105, 113);
-    addCover(121, 113, 123, 113);
-    addCover(139, 113, 141, 113);
-    addCover(103, 135, 105, 135);
-    addCover(139, 135, 141, 135);
 
-    // 6. Platform 0 (0号站台铁轨): x: 168..219, z: 6..144 (139m grand underground platform!)
+    // Central Concrete Tunnel Spine Bulkhead (z=124) splitting North Pipe Gallery from South Chambers
+    // Leaves open vestibules at x=84..87 & x=157..160 plus 3 wide 8-tile cross-passages!
+    addWall(88, 124, 96, 124);
+    addWall(105, 124, 118, 124);
+    addWall(127, 124, 139, 124);
+    addWall(148, 124, 156, 124);
+
+    // South Chamber Bulkhead Dividers (x=106 & x=138, z=125..144) with 8-tile arched passages (z=130..137)
+    addWall(106, 125, 106, 129);
+    addWall(106, 138, 106, 144);
+    addWall(138, 125, 138, 129);
+    addWall(138, 138, 138, 144);
+
+    // Tactical maintenance cover barricades along North Pipe Gallery & South Alcove
+    addCover(102, 113, 104, 113);
+    addCover(121, 113, 123, 113);
+    addCover(140, 113, 142, 113);
+    addCover(113, 136, 115, 136);
+    addCover(129, 136, 131, 136);
+
+    // 6. Platform 0 (0号站台铁轨): x: 168..219, z: 6..144 (partitioned into North Exit Terminal, Central Boarding Bay, South Freight End)
     fillRect(PLATFORM_START_X, 6, HAZARD_X - 1, 144, T_PLATFORM); // 39m-wide walkable concrete esplanade (x: 168..206)
     fillRect(HAZARD_X, 6, HAZARD_X, 144, T_HAZARD);               // yellow-black hazard strip (x: 207, walkable!)
     fillRect(RAIL_MIN_X, 6, RAIL_MAX_X, 144, T_RAIL);             // recessed 12m rail trench (x: 208..219)
+
+    // Z-06A North Terminal Glazed Divider (z=44) + Stationmaster Booth (clear of exit gate 190.5, 16.5)
+    addPartition(182, 44, 194, 44);
+    addPartition(171, 13, 175, 17);
+
+    // Z-06C South Freight Divider (z=103)
+    addCover(182, 103, 194, 103);
+
     // Monumental Platform 0 colonnade of 7 reinforced pillars along x=178..179
     var platPilZ = [20, 38, 56, 74, 92, 110, 128];
     for (var pi = 0; pi < platPilZ.length; pi++) {
       addPillar(178, platPilZ[pi], 179, platPilZ[pi]);
     }
-    // Staggered waist-high tactical boarding cover barricades along x=193..194 (wide 12m Boss esplanade stays clear east!)
-    var platCovZ = [29, 47, 65, 83, 101, 119, 135];
+    // Glazed Waiting Shelter backings in Central Boarding Bay (x=186..187)
+    addPartition(186, 53, 186, 55);
+    addPartition(186, 91, 186, 93);
+    // Staggered waist-high tactical boarding cover barricades along x=194..195 (wide 11m Boss esplanade stays clear east!)
+    var platCovZ = [29, 49, 65, 83, 101, 119, 135];
     for (var pci = 0; pci < platCovZ.length; pci++) {
-      addCover(193, platCovZ[pci], 194, platCovZ[pci]);
+      addCover(194, platCovZ[pci], 195, platCovZ[pci]);
     }
 
     // --- Wide Multi-Route Doorways (every gateway is 7-15 tiles wide for fluid squad & Boss movement!) ---
@@ -267,6 +411,7 @@
     if (gz === 3 && gx >= 102 && gx <= 142) return true;                  // Dispatch north command wall
     if (gz === 71 && gx >= 52 && gx <= 76) return true;                   // Concourse south directional strip
     if (gx === 83 && gz >= 52 && gz <= 96) return true;                   // Corridor west transition wall
+    if (gz === 124 && gx >= 88 && gx <= 156) return true;                 // Tunnel spine directional beacon band
     return false;
   }
 
@@ -295,7 +440,7 @@
         }
         var pMask = pillarMask[gz][gx];
         var neon = isNeonWallCell(gx, gz);
-        var h = pMask === 2 ? 1.25 : (pMask === 1 ? 2.6 : 3.2);
+        var h = pMask === 2 ? 1.25 : (pMask === 3 ? 2.35 : (pMask === 1 ? 2.6 : 3.2));
         var startX = gx;
         gx++;
         while (
@@ -315,7 +460,8 @@
           d: TILE,
           h: h,
           neon: neon,
-          cover: pMask === 2
+          cover: pMask === 2,
+          partition: pMask === 3
         });
       }
     }
@@ -471,8 +617,9 @@
     var ix = Math.floor(gx);
     var iz = Math.floor(gz);
     if (ix < 0 || ix >= GRID_W || iz < 0 || iz >= GRID_H) return true;
-    // Waist-high tactical cover (pillarMask === 2) blocks movement but allows elevated sightlines!
-    return grid[iz][ix] === T_WALL && pillarMask[iz][ix] !== 2;
+    // Waist-high tactical cover (pillarMask === 2) and glazed interior partitions (pillarMask === 3)
+    // block movement while preserving elevated/glazed sightlines.
+    return grid[iz][ix] === T_WALL && pillarMask[iz][ix] !== 2 && pillarMask[iz][ix] !== 3;
   }
 
   function resolveCircleWallCollision(x, z, radius) {
@@ -794,6 +941,27 @@
     return 'corridor';
   }
 
+  function getSubZoneAt(x, z) {
+    for (var i = 0; i < SUBZONES.length; i++) {
+      var sz = SUBZONES[i];
+      if (x >= sz.x0 && x <= sz.x1 + 1 && z >= sz.z0 && z <= sz.z1 + 1) {
+        return sz;
+      }
+    }
+    var parentZone = getZoneAt(x, z);
+    var fallback = null;
+    for (var j = 0; j < SUBZONES.length; j++) {
+      if (SUBZONES[j].zoneId === parentZone) {
+        fallback = SUBZONES[j];
+      }
+    }
+    return fallback || SUBZONES[0];
+  }
+
+  function getSubZones() {
+    return SUBZONES;
+  }
+
   function getZoneCenter(zoneId) {
     var z = ZONES[zoneId] || ZONES.concourse;
     return { x: z.cx + 0.5, z: z.cz + 0.5 };
@@ -801,6 +969,10 @@
 
   function getGrid() {
     return grid;
+  }
+
+  function getPillarMask() {
+    return pillarMask;
   }
 
   function getWalls() {
@@ -828,15 +1000,19 @@
     RAIL_MAX_X: RAIL_MAX_X,
     TRAIN_X: TRAIN_X,
     ZONES: ZONES,
+    SUBZONES: SUBZONES,
     ZONE_BOUNDS: ZONE_BOUNDS,
     isWalkable: isWalkable,
     resolveCircleWallCollision: resolveCircleWallCollision,
     hasLineOfSight: hasLineOfSight,
     findPath: findPath,
     getZoneAt: getZoneAt,
+    getSubZoneAt: getSubZoneAt,
+    getSubZones: getSubZones,
     getZoneCenter: getZoneCenter,
     getZoneBounds: getZoneBounds,
     getGrid: getGrid,
+    getPillarMask: getPillarMask,
     getWalls: getWalls,
     getLights: getLights,
     getInteractables: getInteractables

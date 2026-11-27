@@ -57,6 +57,14 @@
     train: { dx: 12, dz: 40, intensity: 0 }
   };
 
+  // Dynamic per-zone environmental ambience layer (smoothly crossfaded on zone transitions)
+  var activeZoneAmbienceId = null;
+  var activeZoneAmbienceProfile = null;
+  var activeZoneAmbienceGain = null;
+  var activeZoneAmbienceNodes = [];
+  var activeZoneAmbienceTimer = null;
+  var pendingZoneAmbience = null;
+
   function clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
   }
@@ -1146,11 +1154,15 @@
       if (spatialPending.train && spatialPending.train.intensity > 0) {
         applySpatialUpdate('train', spatialPending.train.dx, spatialPending.train.dz, spatialPending.train.intensity);
       }
+      if (pendingZoneAmbience && pendingZoneAmbience.zoneId) {
+        startZoneAmbienceInternal(pendingZoneAmbience.zoneId, pendingZoneAmbience.profile);
+      }
       return;
     }
 
-    // Non-exam scenes silence spatial channels & mission closure ambience cleanly
+    // Non-exam scenes silence spatial channels, zone ambience & mission closure ambience cleanly
     silenceSpatialChannels();
+    stopZoneAmbienceInternal();
     stopMissionClosureAmbienceInternal();
 
     var sceneGain = ctx.createGain();
@@ -1229,6 +1241,34 @@
     var now = ctx.currentTime;
 
     // ---- Existing SFX keys (100% preserved) ----
+
+    if (name === 'zone_enter') {
+      // Subtle spatial-acoustic chime/swell announcing entry into a new Station Zero sector
+      var zOsc = ctx.createOscillator();
+      var zSub = ctx.createOscillator();
+      var zLp = ctx.createBiquadFilter();
+      var zG = ctx.createGain();
+      zOsc.type = 'sine';
+      zSub.type = 'triangle';
+      zOsc.frequency.setValueAtTime(329.63, now);
+      zOsc.frequency.exponentialRampToValueAtTime(493.88, now + 0.24);
+      zSub.frequency.setValueAtTime(164.81, now);
+      zLp.type = 'lowpass';
+      zLp.frequency.setValueAtTime(1400, now);
+      zLp.frequency.exponentialRampToValueAtTime(520, now + 0.42);
+      zG.gain.setValueAtTime(0.0001, now);
+      zG.gain.linearRampToValueAtTime(0.048, now + 0.045);
+      zG.gain.exponentialRampToValueAtTime(0.0001, now + 0.46);
+      zOsc.connect(zLp);
+      zSub.connect(zLp);
+      zLp.connect(zG);
+      zG.connect(sfxBus);
+      zOsc.start(now);
+      zSub.start(now);
+      zOsc.stop(now + 0.48);
+      zSub.stop(now + 0.48);
+      return;
+    }
 
     if (name === 'ui_tick') {
       var osc = ctx.createOscillator();
@@ -2217,6 +2257,224 @@
   }
 
   // =========================================================================
+  // 4. DYNAMIC PER-ZONE ENVIRONMENTAL AMBIENCE LAYER (6 STATION ZERO SECTORS)
+  // =========================================================================
+
+  function stopZoneAmbienceInternal() {
+    if (activeZoneAmbienceTimer) {
+      clearTimeout(activeZoneAmbienceTimer);
+      activeZoneAmbienceTimer = null;
+    }
+    var oldGain = activeZoneAmbienceGain;
+    var oldNodes = activeZoneAmbienceNodes.slice();
+    activeZoneAmbienceGain = null;
+    activeZoneAmbienceNodes = [];
+    activeZoneAmbienceId = null;
+
+    if (!ctx || !oldGain) return;
+    var now = ctx.currentTime;
+    try {
+      oldGain.gain.cancelScheduledValues(now);
+      oldGain.gain.setValueAtTime(Math.max(oldGain.gain.value, 0.0001), now);
+      oldGain.gain.linearRampToValueAtTime(0.0001, now + 0.58);
+    } catch (_) {}
+
+    setTimeout(function () {
+      for (var i = 0; i < oldNodes.length; i++) {
+        try {
+          if (typeof oldNodes[i].stop === 'function') oldNodes[i].stop();
+        } catch (_) {}
+        try {
+          if (typeof oldNodes[i].disconnect === 'function') oldNodes[i].disconnect();
+        } catch (_) {}
+      }
+      try { oldGain.disconnect(); } catch (_) {}
+    }, 680);
+  }
+
+  function scheduleZoneDetailPulse(zoneId, destGain) {
+    if (!ctx || activeZoneAmbienceId !== zoneId || activeZoneAmbienceGain !== destGain) {
+      return;
+    }
+    var nextMs = 3600 + Math.random() * 4400;
+    if (!muted && ctx.state === 'running' && currentScene !== 'crisis') {
+      var now = ctx.currentTime;
+      if (zoneId === 'substation') {
+        // High-voltage ozone arc micro-crackle
+        var arc = ctx.createBufferSource();
+        arc.buffer = whiteBuffer;
+        var bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(3400 + Math.random() * 1400, now);
+        bp.Q.setValueAtTime(6.5, now);
+        var ag = ctx.createGain();
+        ag.gain.setValueAtTime(0.0001, now);
+        ag.gain.linearRampToValueAtTime(0.065, now + 0.006);
+        ag.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
+        arc.connect(bp);
+        bp.connect(ag);
+        ag.connect(destGain);
+        arc.start(now);
+        arc.stop(now + 0.11);
+        nextMs = 2100 + Math.random() * 3200;
+      } else if (zoneId === 'tunnel') {
+        // Echoing subterranean drainage water drip
+        var drip = ctx.createOscillator();
+        var dg = ctx.createGain();
+        var f0 = 980 + Math.random() * 380;
+        drip.type = 'sine';
+        drip.frequency.setValueAtTime(f0, now);
+        drip.frequency.exponentialRampToValueAtTime(f0 * 1.48, now + 0.075);
+        dg.gain.setValueAtTime(0.0001, now);
+        dg.gain.linearRampToValueAtTime(0.042, now + 0.005);
+        dg.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+        drip.connect(dg);
+        dg.connect(destGain);
+        drip.start(now);
+        drip.stop(now + 0.18);
+        nextMs = 1900 + Math.random() * 2900;
+      } else if (zoneId === 'dispatch') {
+        // Soft CRT relay / signal telegraph pulse
+        var rel = ctx.createOscillator();
+        var rg = ctx.createGain();
+        rel.type = 'square';
+        rel.frequency.setValueAtTime(1480 + (Math.random() > 0.5 ? 240 : 0), now);
+        var rbp = ctx.createBiquadFilter();
+        rbp.type = 'bandpass';
+        rbp.frequency.setValueAtTime(1600, now);
+        rbp.Q.setValueAtTime(8, now);
+        rg.gain.setValueAtTime(0.0001, now);
+        rg.gain.linearRampToValueAtTime(0.028, now + 0.003);
+        rg.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+        rel.connect(rbp);
+        rbp.connect(rg);
+        rg.connect(destGain);
+        rel.start(now);
+        rel.stop(now + 0.055);
+        nextMs = 1600 + Math.random() * 2600;
+      } else if (zoneId === 'platform0') {
+        // Distant hollow steel rail resonance ping
+        var rail = ctx.createOscillator();
+        var rlg = ctx.createGain();
+        rail.type = 'triangle';
+        rail.frequency.setValueAtTime(204 + Math.random() * 24, now);
+        rail.frequency.exponentialRampToValueAtTime(182, now + 0.9);
+        rlg.gain.setValueAtTime(0.0001, now);
+        rlg.gain.linearRampToValueAtTime(0.032, now + 0.18);
+        rlg.gain.exponentialRampToValueAtTime(0.0001, now + 1.05);
+        rail.connect(rlg);
+        rlg.connect(destGain);
+        rail.start(now);
+        rail.stop(now + 1.1);
+        nextMs = 4200 + Math.random() * 4800;
+      } else if (zoneId === 'concourse') {
+        // Distant turnstile magnetic solenoid click
+        var click = ctx.createBufferSource();
+        click.buffer = whiteBuffer;
+        var cbp = ctx.createBiquadFilter();
+        cbp.type = 'bandpass';
+        cbp.frequency.setValueAtTime(2400, now);
+        cbp.Q.setValueAtTime(5.0, now);
+        var cg = ctx.createGain();
+        cg.gain.setValueAtTime(0.0001, now);
+        cg.gain.linearRampToValueAtTime(0.025, now + 0.003);
+        cg.gain.exponentialRampToValueAtTime(0.0001, now + 0.032);
+        click.connect(cbp);
+        cbp.connect(cg);
+        cg.connect(destGain);
+        click.start(now);
+        click.stop(now + 0.04);
+        nextMs = 3800 + Math.random() * 4800;
+      }
+    }
+    activeZoneAmbienceTimer = setTimeout(function () {
+      scheduleZoneDetailPulse(zoneId, destGain);
+    }, nextMs);
+  }
+
+  function startZoneAmbienceInternal(zoneId, profile) {
+    if (!ctx || !ambienceBus || !pinkBuffer || !whiteBuffer) return;
+    if (activeZoneAmbienceId === zoneId && activeZoneAmbienceGain) return;
+
+    stopZoneAmbienceInternal();
+
+    var now = ctx.currentTime;
+    var zGain = ctx.createGain();
+    zGain.gain.setValueAtTime(0.0001, now);
+    zGain.gain.linearRampToValueAtTime(0.88, now + 0.65);
+    zGain.connect(ambienceBus);
+
+    var nodes = [];
+    activeZoneAmbienceId = zoneId;
+    activeZoneAmbienceProfile = profile || null;
+    activeZoneAmbienceGain = zGain;
+
+    if (zoneId === 'concourse') {
+      // Cold 100Hz fluorescent ballast hum + spacious tiled-hall ventilation air
+      makeOsc('sine', 100, 0.034, zGain, nodes);
+      makeOsc('triangle', 200, 0.011, zGain, nodes);
+      makeNoiseLoop(pinkBuffer, 'bandpass', 620, 0.9, 0.055, zGain, nodes);
+    } else if (zoneId === 'corridor') {
+      // Resonant corridor draft + warm sodium 120Hz hum with slow air sweep
+      var draft = makeNoiseLoop(pinkBuffer, 'bandpass', 240, 1.8, 0.095, zGain, nodes);
+      var lfoC = ctx.createOscillator();
+      var lfoCG = ctx.createGain();
+      lfoC.type = 'sine';
+      lfoC.frequency.setValueAtTime(0.14, now);
+      lfoCG.gain.setValueAtTime(70, now);
+      lfoC.connect(lfoCG);
+      lfoCG.connect(draft.filter.frequency);
+      lfoC.start();
+      nodes.push(lfoC, lfoCG);
+      makeOsc('sine', 120, 0.026, zGain, nodes);
+    } else if (zoneId === 'dispatch') {
+      // Server-rack fan airflow + eerie 43.2Hz Mimic Broadcast carrier undertone
+      makeNoiseLoop(pinkBuffer, 'bandpass', 980, 1.4, 0.052, zGain, nodes);
+      makeOsc('sine', 43.2, 0.055, zGain, nodes);
+      makeOsc('triangle', 86.4, 0.022, zGain, nodes);
+      makeOsc('sine', 432, 0.008, zGain, nodes);
+    } else if (zoneId === 'substation') {
+      // Heavy 50/100/150Hz high-voltage transformer mains hum
+      var subLp = ctx.createBiquadFilter();
+      subLp.type = 'lowpass';
+      subLp.frequency.setValueAtTime(260, now);
+      subLp.Q.setValueAtTime(2.2, now);
+      subLp.connect(zGain);
+      nodes.push(subLp);
+      makeOsc('sawtooth', 50, 0.048, subLp, nodes);
+      makeOsc('triangle', 100, 0.036, subLp, nodes);
+      makeOsc('sine', 150, 0.020, subLp, nodes);
+      makeNoiseLoop(whiteBuffer, 'bandpass', 3200, 4.5, 0.009, zGain, nodes);
+    } else if (zoneId === 'tunnel') {
+      // Pressurized steam pipe hiss + damp culvert bass resonance
+      makeNoiseLoop(whiteBuffer, 'bandpass', 1750, 2.6, 0.034, zGain, nodes);
+      makeNoiseLoop(pinkBuffer, 'lowpass', 190, 1.3, 0.085, zGain, nodes);
+      makeOsc('sine', 58, 0.048, zGain, nodes);
+    } else if (zoneId === 'platform0') {
+      // Open rail-trench gusting wind + metallic rail resonance harmonic
+      var wind = makeNoiseLoop(pinkBuffer, 'bandpass', 320, 1.2, 0.105, zGain, nodes);
+      var lfoP = ctx.createOscillator();
+      var lfoPG = ctx.createGain();
+      lfoP.type = 'sine';
+      lfoP.frequency.setValueAtTime(0.19, now);
+      lfoPG.gain.setValueAtTime(125, now);
+      lfoP.connect(lfoPG);
+      lfoPG.connect(wind.filter.frequency);
+      lfoP.start();
+      nodes.push(lfoP, lfoPG);
+      makeOsc('sine', 136, 0.018, zGain, nodes);
+      makeOsc('triangle', 204, 0.010, zGain, nodes);
+    } else {
+      makeNoiseLoop(pinkBuffer, 'bandpass', 420, 1.0, 0.05, zGain, nodes);
+    }
+
+    activeZoneAmbienceNodes = nodes;
+    activeZoneAmbienceTimer = setTimeout(function () {
+      scheduleZoneDetailPulse(zoneId, zGain);
+    }, 1500 + Math.random() * 1800);
+  }
+
+  // =========================================================================
   // PUBLIC API (window.INFINITY.Audio)
   // =========================================================================
 
@@ -2230,6 +2488,9 @@
       applyBulletTimeFilter();
       if (currentScene && !activeSceneGain) {
         buildScene(currentScene);
+      }
+      if (pendingZoneAmbience && pendingZoneAmbience.zoneId && activeZoneAmbienceId !== pendingZoneAmbience.zoneId) {
+        startZoneAmbienceInternal(pendingZoneAmbience.zoneId, pendingZoneAmbience.profile);
       }
       if (closureAmbiencePending && !closureAmbienceActive) {
         startMissionClosureAmbienceInternal();
@@ -2316,6 +2577,30 @@
 
     isMissionClosureAmbienceActive: function () {
       return closureAmbienceActive;
+    },
+
+    setZoneAmbience: function (zoneId, profile) {
+      if (!zoneId) return;
+      pendingZoneAmbience = { zoneId: String(zoneId), profile: profile || null };
+      if (!unlocked) return;
+      if (!ensureContext()) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(function () {});
+      }
+      startZoneAmbienceInternal(pendingZoneAmbience.zoneId, pendingZoneAmbience.profile);
+    },
+
+    stopZoneAmbience: function () {
+      pendingZoneAmbience = null;
+      stopZoneAmbienceInternal();
+    },
+
+    getZoneAmbience: function () {
+      return {
+        zoneId: activeZoneAmbienceId || (pendingZoneAmbience ? pendingZoneAmbience.zoneId : null),
+        active: !!activeZoneAmbienceGain,
+        profile: activeZoneAmbienceProfile || (pendingZoneAmbience ? pendingZoneAmbience.profile : null)
+      };
     },
 
     playSfx: function (name) {

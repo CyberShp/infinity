@@ -1133,34 +1133,56 @@
     ctx.fillStyle = '#07080d';
     ctx.fillRect(0, 0, off.width, off.height);
 
+    var pMask = (typeof mapMod.getPillarMask === 'function') ? mapMod.getPillarMask() : null;
+    var hasZoneFn = typeof mapMod.getZoneAt === 'function';
+    var ZONE_MINI_FLOOR = {
+      concourse:  '#152230',
+      corridor:   '#241f18',
+      dispatch:   '#122624',
+      substation: '#161e30',
+      tunnel:     '#1d172a',
+      platform0:  '#222836'
+    };
+
     for (var z = 0; z < H; z++) {
       var row = grid[z];
       if (!row) continue;
+      var pRow = pMask ? pMask[z] : null;
       for (var x = 0; x < W; x++) {
         var tile = row[x];
         if (tile === 1) {
-          ctx.fillStyle = '#2d3344';
+          var pm = pRow ? pRow[x] : 0;
+          if (pm === 3) {
+            ctx.fillStyle = '#5da4bc';
+          } else if (pm === 2) {
+            ctx.fillStyle = '#4c576b';
+          } else if (pm === 1) {
+            ctx.fillStyle = '#434d63';
+          } else {
+            ctx.fillStyle = '#2a3040';
+          }
         } else if (tile === 2) {
-          ctx.fillStyle = '#212735';
+          ctx.fillStyle = '#232a38';
         } else if (tile === 3) {
-          ctx.fillStyle = '#6f5522';
+          ctx.fillStyle = '#806224';
         } else if (tile === 4) {
           ctx.fillStyle = '#140c10';
         } else {
-          ctx.fillStyle = '#131722';
+          var zid = hasZoneFn ? mapMod.getZoneAt(x + 0.5, z + 0.5) : 'concourse';
+          ctx.fillStyle = ZONE_MINI_FLOOR[zid] || '#131722';
         }
         ctx.fillRect(x * scale, z * scale, Math.ceil(scale), Math.ceil(scale));
       }
     }
 
-    // Subtle zone center labels
+    // Subtle zone center labels with zone-coded tints
     if (mapMod.ZONES) {
       ctx.font = 'bold 8px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       Object.keys(mapMod.ZONES).forEach(function (zid) {
         var zn = mapMod.ZONES[zid];
-        ctx.fillStyle = 'rgba(226, 212, 188, 0.38)';
+        ctx.fillStyle = 'rgba(232, 224, 206, 0.54)';
         ctx.fillText(zn.code || zid, zn.cx * scale, zn.cz * scale);
       });
     }
@@ -1770,9 +1792,17 @@
       st.exam.cluesFound = snapshot.discoveredClueIds.slice();
     }
 
-    // 2. Top-Left Objective Tracker & Zone
+    // 2. Top-Left Objective Tracker & Zone / Sub-Zone Readout
     if ($('hud25d-zone-code')) $('hud25d-zone-code').textContent = snapshot.zoneCode || 'Z-01';
     if ($('hud25d-zone-name')) $('hud25d-zone-name').textContent = snapshot.zoneName || '零号回廊';
+    if ($('hud25d-subzone-code')) $('hud25d-subzone-code').textContent = snapshot.subZoneCode || snapshot.zoneCode || 'Z-01B';
+    if ($('hud25d-subzone-name')) $('hud25d-subzone-name').textContent = snapshot.subZoneName || snapshot.zoneName || '零号回廊';
+    var szBar = $('hud25d-subzone-bar');
+    if (szBar) {
+      var artTokens = window.INFINITY && window.INFINITY.ArtTokens;
+      var zTok = artTokens && artTokens.ZONES && artTokens.ZONES[snapshot.zoneId];
+      szBar.style.setProperty('--zone-accent', (zTok && zTok.color) ? zTok.color : '#68c8de');
+    }
     if ($('hud25d-clock-val')) $('hud25d-clock-val').textContent = formatClockMMSS(snapshot.timeRemainingSec);
 
     var trainEl = $('hud25d-train-val');

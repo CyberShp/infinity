@@ -1653,8 +1653,38 @@ body[data-scene="exam"] {
 
 .hud25d-zone-name {
   font-family: var(--font-serif);
-  font-size: 14.5px;
+  font-size: 14px;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud25d-subzone-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-left: 2px solid var(--zone-accent, #68c8de);
+  background: rgba(16, 24, 36, 0.72);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.hud25d-subzone-code {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--zone-accent, #68c8de);
+  flex-shrink: 0;
+}
+
+.hud25d-subzone-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #dce9f5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

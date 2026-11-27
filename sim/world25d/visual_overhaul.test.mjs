@@ -813,6 +813,148 @@ test('4x map dynamic interactive points: destructible covers, scene triggers, wa
   }
 });
 
+test('21 architectural sub-zones, glazed partition walls, A* reachability, and bespoke set-pieces across all 6 zones', () => {
+  assert.ok(Array.isArray(StationMap.SUBZONES) && StationMap.SUBZONES.length >= 21,
+    `Expected >= 21 sub-zones, got ${StationMap.SUBZONES && StationMap.SUBZONES.length}`);
+  assert.equal(typeof StationMap.getSubZoneAt, 'function');
+  assert.equal(typeof StationMap.getPillarMask, 'function');
+
+  const countByZone = Object.create(null);
+  const spawn = StationMap.getZoneCenter('concourse');
+  for (const sz of StationMap.SUBZONES) {
+    countByZone[sz.zoneId] = (countByZone[sz.zoneId] || 0) + 1;
+    assert.ok(sz.id && sz.code && sz.name && sz.style, `Sub-zone ${sz.id} missing metadata`);
+
+    const sx = sz.cx + 0.5;
+    const szz = sz.cz + 0.5;
+    assert.equal(StationMap.isWalkable(sx, szz), true,
+      `Sub-zone ${sz.id} center (${sx}, ${szz}) must be walkable`);
+    const lookup = StationMap.getSubZoneAt(sx, szz);
+    assert.equal(lookup.id, sz.id,
+      `getSubZoneAt(${sx}, ${szz}) returned ${lookup && lookup.id} instead of ${sz.id}`);
+
+    const path = StationMap.findPath(spawn.x, spawn.z, sx, szz);
+    assert.ok(path.length > 0, `Sub-zone ${sz.id} (${sx}, ${szz}) must be A*-reachable from spawn`);
+  }
+
+  for (const zId of Object.keys(StationMap.ZONES)) {
+    assert.ok((countByZone[zId] || 0) >= 3,
+      `Zone ${zId} must have at least 3 distinct sub-zones, got ${countByZone[zId] || 0}`);
+  }
+
+  // Glazed architectural interior partitions must exist, block movement, yet allow glazed line-of-sight
+  const partitionRuns = StationMap.getWalls().filter((w) => w.partition);
+  assert.ok(partitionRuns.length >= 18, `Expected >= 18 glazed partition runs, got ${partitionRuns.length}`);
+  // Concourse North Ticket Checkpoint partition at (25, 21) blocks walking but preserves glazed sightline across z=21
+  assert.equal(StationMap.isWalkable(25.5, 21.5), false, 'Glazed partition at (25.5, 21.5) must block movement');
+  assert.equal(StationMap.hasLineOfSight(25.5, 19.5, 25.5, 23.5), true,
+    'Glazed partition at (25.5, 21.5) must allow elevated/glazed line of sight');
+
+  // Bespoke 3D set-pieces must populate every single one of the 6 zones and stay clear of rail trench & walls
+  const props = SceneArchitect.generateDynamicZoneProps(StationMap);
+  assert.ok(props.zoneSetPieces, 'generateDynamicZoneProps must return zoneSetPieces');
+  assert.ok(props.meta.partitionRunCount >= 18, `Expected partitionRunCount >= 18, got ${props.meta.partitionRunCount}`);
+  for (const zId of Object.keys(StationMap.ZONES)) {
+    const cnt = props.meta.subZoneSetPieces && props.meta.subZoneSetPieces[zId];
+    assert.ok(cnt >= 5, `Zone ${zId} must have >= 5 bespoke architectural set-pieces, got ${cnt}`);
+  }
+
+  // Every walkable set-piece prop must sit on walkable floor off the rail trench
+  const walkableBuckets = [
+    ...props.zoneSetPieces.concourse.tvmBanks,
+    ...props.zoneSetPieces.concourse.metalDetectors,
+    ...props.zoneSetPieces.concourse.vendingMachines,
+    ...props.zoneSetPieces.concourse.luggageClusters,
+    ...props.zoneSetPieces.corridor.payphones,
+    ...props.zoneSetPieces.dispatch.filingCabinets,
+    ...props.zoneSetPieces.substation.switchgearCabinets,
+    ...props.zoneSetPieces.substation.coolingTanks,
+    ...props.zoneSetPieces.substation.cableSpools,
+    ...props.zoneSetPieces.tunnel.maintenanceDrums,
+    ...props.zoneSetPieces.platform0.freightStacks
+  ];
+  const grid = StationMap.getGrid();
+  for (const wp of walkableBuckets) {
+    assert.equal(StationMap.isWalkable(wp.x, wp.z), true,
+      `Set-piece prop at (${wp.x}, ${wp.z}) must be walkable`);
+    assert.notEqual(grid[Math.floor(wp.z)][Math.floor(wp.x)], 4,
+      `Set-piece prop at (${wp.x}, ${wp.z}) must not sit inside rail trench`);
+  }
+});
+
+test('Dynamic per-zone scene asset configs, PostFX sync, HUD banner, and zone environmental audio', () => {
+  const zoneIds = Object.keys(StationMap.ZONES);
+  assert.equal(zoneIds.length, 6, 'Expected 6 zones in StationMap.ZONES');
+
+  assert.ok(World25D.ZONE_SCENE_CONFIGS, 'World25D.ZONE_SCENE_CONFIGS must be exported');
+  assert.equal(typeof World25D.resolveZoneSceneConfig, 'function', 'World25D.resolveZoneSceneConfig must be exported');
+
+  const fogColors = new Set();
+  const assetKeys = new Set();
+  const audioIds = new Set();
+
+  for (const zId of zoneIds) {
+    const cfg = World25D.resolveZoneSceneConfig(zId, StationMap);
+    assert.ok(cfg, `Missing zone scene config for ${zId}`);
+    assert.equal(cfg.id, zId, `Resolved id mismatch for ${zId}`);
+    assert.equal(typeof cfg.fogColor, 'number');
+    assert.ok(cfg.fogDensity > 0 && cfg.fogDensity < 0.08, `Unexpected fogDensity for ${zId}: ${cfg.fogDensity}`);
+    assert.equal(typeof cfg.bgColor, 'number');
+    assert.ok(cfg.exposure >= 0.8 && cfg.exposure <= 1.8, `Unexpected exposure for ${zId}: ${cfg.exposure}`);
+    assert.equal(typeof cfg.ambientColor, 'number');
+    assert.ok(cfg.ambientIntensity > 0, `Unexpected ambientIntensity for ${zId}`);
+    assert.equal(typeof cfg.hemiSky, 'number');
+    assert.equal(typeof cfg.hemiGround, 'number');
+    assert.equal(typeof cfg.keyColor, 'number');
+    assert.ok(cfg.keyIntensity > 0, `Unexpected keyIntensity for ${zId}`);
+    assert.equal(typeof cfg.rimColor, 'number');
+    assert.ok(cfg.rimIntensity > 0, `Unexpected rimIntensity for ${zId}`);
+    assert.ok(cfg.dust && typeof cfg.dust.driftX === 'number' && typeof cfg.dust.driftY === 'number' && typeof cfg.dust.driftZ === 'number');
+    assert.ok(cfg.assetSet && typeof cfg.assetSet.key === 'string' && cfg.assetSet.key.length > 0);
+    assert.ok(cfg.audio && typeof cfg.audio.id === 'string' && cfg.audio.id.length > 0);
+
+    fogColors.add(cfg.fogColor);
+    assetKeys.add(cfg.assetSet.key);
+    audioIds.add(cfg.audio.id);
+  }
+
+  assert.equal(fogColors.size, 6, 'All 6 zones must define distinct fog colors');
+  assert.equal(assetKeys.size, 6, 'All 6 zones must define distinct scene asset set keys');
+  assert.equal(audioIds.size, 6, 'All 6 zones must define distinct environmental audio profiles');
+
+  // Unknown zone IDs fall back gracefully to concourse
+  const fallback = World25D.resolveZoneSceneConfig('nonexistent_zone_xyz', StationMap);
+  assert.equal(fallback.id, 'concourse');
+  assert.equal(fallback.assetSet.key, World25D.ZONE_SCENE_CONFIGS.concourse.assetSet.key);
+
+  // Verify dynamic zone rendering, PostFX live color sync, HUD snapshot & banner, and audio integration in source
+  const engineSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/world25d/engine_25d.js'), 'utf8');
+  for (const needle of [
+    'buildZoneSceneAssetRigs',
+    'updateZoneEnvironment',
+    'showZoneBanner',
+    "safeAudio('setZoneAmbience', curZoneId",
+    "safeAudio('stopZoneAmbience')",
+    'fx.fogDisplay.copy(fog.color)',
+    'zoneSceneAssetKey',
+    'zoneAudioId',
+    'zoneAudioLabel'
+  ]) {
+    assert.ok(engineSrc.includes(needle), `engine_25d.js missing expected dynamic zone symbol: ${needle}`);
+  }
+
+  const audioSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/engine/audio_engine.js'), 'utf8');
+  for (const needle of [
+    'setZoneAmbience',
+    'stopZoneAmbience',
+    'getZoneAmbience',
+    "if (name === 'zone_enter')"
+  ]) {
+    assert.ok(audioSrc.includes(needle), `audio_engine.js missing expected zone ambience symbol: ${needle}`);
+  }
+});
+
+
 
 
 
