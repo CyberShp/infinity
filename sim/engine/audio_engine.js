@@ -29,6 +29,25 @@
   var threatLevel = 0; // 0..100
   var bulletTimeEnabled = false;
 
+  // Low-frequency oppressive ambient vibration (activates automatically when HUD threat > 12)
+  var LOW_FREQ_VIBRATION_THRESHOLD = 12;
+  var ambienceLowShelf = null;
+  var threatVibrationRig = null;
+  var threatVibrationState = {
+    active: false,
+    threshold: LOW_FREQ_VIBRATION_THRESHOLD,
+    threatLevel: 0,
+    intensity: 0,
+    lowShelfGainDb: 0,
+    subDroneGain: 0,
+    lfoRateHz: 1.2,
+    lfoDepthRatio: 0,
+    lfoDepth: 0,
+    subBaseFreqHz: 42
+  };
+  var hudThreatObserver = null;
+  var hudThreatObservedEl = null;
+
   // Non-exam / shared scene lifecycle tracking
   var activeNodes = [];
   var activeIntervals = [];
@@ -240,6 +259,11 @@
       duckGain = ctx.createGain();
       duckGain.gain.setValueAtTime(1.0, now);
 
+      ambienceLowShelf = ctx.createBiquadFilter();
+      ambienceLowShelf.type = 'lowshelf';
+      ambienceLowShelf.frequency.setValueAtTime(105, now);
+      ambienceLowShelf.gain.setValueAtTime(0, now);
+
       ambienceFilter = ctx.createBiquadFilter();
       ambienceFilter.type = 'lowpass';
       ambienceFilter.frequency.setValueAtTime(3200, now);
@@ -254,7 +278,8 @@
       sfxBus = ctx.createGain();
       sfxBus.gain.setValueAtTime(1.0, now);
 
-      ambienceBus.connect(ambienceFilter);
+      ambienceBus.connect(ambienceLowShelf);
+      ambienceLowShelf.connect(ambienceFilter);
       ambienceFilter.connect(duckGain);
       spatialBus.connect(duckGain);
       duckGain.connect(bulletTimeFilter);
@@ -266,6 +291,8 @@
       masterGain.connect(ctx.destination);
 
       createNoiseBuffers(ctx);
+      ensureThreatVibrationRig();
+      applyThreatLowFreqVibration();
       return true;
     } catch (err) {
       ctx = null;
@@ -1113,6 +1140,227 @@
     safeSetTarget(ambienceFilter.Q, targetQ, now, 0.22);
   }
 
+  // =========================================================================
+  // 2B. OPPRESSIVE LOW-FREQUENCY VIBRATION LAYER (HUD THREAT LEVEL > 12)
+  // =========================================================================
+
+  function parseHudThreatLevel(text) {
+    if (text == null) return null;
+    var str = String(text).trim();
+    if (!str) return null;
+    // Matches HUD "#hud25d-threat-val" format "<sound> / <threat>" (e.g. "10 / 15")
+    var slashMatch = str.match(/\/\s*(-?\d+(?:\.\d+)?)/);
+    if (slashMatch) {
+      var parsedSlash = Number(slashMatch[1]);
+      return Number.isFinite(parsedSlash) ? clamp(parsedSlash, 0, 100) : null;
+    }
+    var numMatch = str.match(/(-?\d+(?:\.\d+)?)/);
+    if (numMatch) {
+      var parsedNum = Number(numMatch[1]);
+      return Number.isFinite(parsedNum) ? clamp(parsedNum, 0, 100) : null;
+    }
+    return null;
+  }
+
+  function computeThreatLowFreqVibration(level, sceneMode) {
+    var rawThreat = clamp(Number(level) || 0, 0, 100);
+    var nonExamScene = !!(sceneMode && !isExamScene(sceneMode));
+    var effThreat = sceneMode === 'crisis' ? Math.max(rawThreat, 84) : rawThreat;
+    var active = !nonExamScene && effThreat > LOW_FREQ_VIBRATION_THRESHOLD;
+
+    if (!active) {
+      return {
+        active: false,
+        threshold: LOW_FREQ_VIBRATION_THRESHOLD,
+        threatLevel: rawThreat,
+        intensity: 0,
+        lowShelfGainDb: 0,
+        subDroneGain: 0,
+        lfoRateHz: 1.2,
+        lfoDepthRatio: 0,
+        lfoDepth: 0,
+        subBaseFreqHz: 42
+      };
+    }
+
+    var normalized = clamp(
+      (effThreat - LOW_FREQ_VIBRATION_THRESHOLD) / (100 - LOW_FREQ_VIBRATION_THRESHOLD),
+      0,
+      1
+    );
+    // Clear physical onset as soon as HUD threat exceeds 12, escalating toward oppressive sub-tremor at 100
+    var intensity = clamp(0.18 + Math.pow(normalized, 0.78) * 0.82, 0, 1);
+    var lowShelfGainDb = Number((intensity * 11.0).toFixed(2));
+    var subDroneGain = Number((intensity * 0.23).toFixed(4));
+    var lfoRateHz = Number((1.35 + intensity * 3.15).toFixed(3));
+    var lfoDepthRatio = Number((0.20 + intensity * 0.42).toFixed(4));
+    var lfoDepth = Number((subDroneGain * lfoDepthRatio).toFixed(4));
+    var subBaseFreqHz = Number((42 - intensity * 8).toFixed(2));
+
+    return {
+      active: true,
+      threshold: LOW_FREQ_VIBRATION_THRESHOLD,
+      threatLevel: rawThreat,
+      intensity: Number(intensity.toFixed(4)),
+      lowShelfGainDb: lowShelfGainDb,
+      subDroneGain: subDroneGain,
+      lfoRateHz: lfoRateHz,
+      lfoDepthRatio: lfoDepthRatio,
+      lfoDepth: lfoDepth,
+      subBaseFreqHz: subBaseFreqHz
+    };
+  }
+
+  function ensureThreatVibrationRig() {
+    if (!ctx || !ambienceBus) return null;
+    if (threatVibrationRig) return threatVibrationRig;
+
+    var now = ctx.currentTime;
+
+    var subLp = ctx.createBiquadFilter();
+    subLp.type = 'lowpass';
+    subLp.frequency.setValueAtTime(110, now);
+    subLp.Q.setValueAtTime(1.6, now);
+
+    var modGain = ctx.createGain();
+    modGain.gain.setValueAtTime(1.0, now);
+
+    var outGain = ctx.createGain();
+    outGain.gain.setValueAtTime(0.0001, now);
+
+    subLp.connect(modGain);
+    modGain.connect(outGain);
+    outGain.connect(ambienceBus);
+
+    // Primary sub-bass fundamental + detuned beating oscillator for physical chest-pressure sensation
+    var subOsc1 = ctx.createOscillator();
+    var subOsc1Gain = ctx.createGain();
+    subOsc1.type = 'sine';
+    subOsc1.frequency.setValueAtTime(42, now);
+    subOsc1Gain.gain.setValueAtTime(0.68, now);
+    subOsc1.connect(subOsc1Gain);
+    subOsc1Gain.connect(subLp);
+    subOsc1.start(now);
+
+    var subOsc2 = ctx.createOscillator();
+    var subOsc2Gain = ctx.createGain();
+    subOsc2.type = 'triangle';
+    subOsc2.frequency.setValueAtTime(43.4, now);
+    subOsc2Gain.gain.setValueAtTime(0.28, now);
+    subOsc2.connect(subOsc2Gain);
+    subOsc2Gain.connect(subLp);
+    subOsc2.start(now);
+
+    // Subterranean pink-noise low rumble bed
+    var noiseSrc = null;
+    var noiseLp = null;
+    var noiseGain = null;
+    if (pinkBuffer) {
+      noiseSrc = ctx.createBufferSource();
+      noiseSrc.buffer = pinkBuffer;
+      noiseSrc.loop = true;
+
+      noiseLp = ctx.createBiquadFilter();
+      noiseLp.type = 'lowpass';
+      noiseLp.frequency.setValueAtTime(80, now);
+      noiseLp.Q.setValueAtTime(1.8, now);
+
+      noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.32, now);
+
+      noiseSrc.connect(noiseLp);
+      noiseLp.connect(noiseGain);
+      noiseGain.connect(subLp);
+      noiseSrc.start(now);
+    }
+
+    // LFO modulating low-frequency vibration amplitude cleanly around unity gain
+    var lfo = ctx.createOscillator();
+    var lfoDepthGain = ctx.createGain();
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(1.2, now);
+    lfoDepthGain.gain.setValueAtTime(0, now);
+    lfo.connect(lfoDepthGain);
+    lfoDepthGain.connect(modGain.gain);
+    lfo.start(now);
+
+    threatVibrationRig = {
+      subLp: subLp,
+      modGain: modGain,
+      outGain: outGain,
+      subOsc1: subOsc1,
+      subOsc2: subOsc2,
+      noiseSrc: noiseSrc,
+      noiseLp: noiseLp,
+      noiseGain: noiseGain,
+      lfo: lfo,
+      lfoDepthGain: lfoDepthGain
+    };
+    return threatVibrationRig;
+  }
+
+  function applyThreatLowFreqVibration() {
+    var profile = computeThreatLowFreqVibration(threatLevel, currentScene);
+    threatVibrationState = profile;
+
+    if (!ctx) return profile;
+    var now = ctx.currentTime;
+    var rig = ensureThreatVibrationRig();
+
+    if (ambienceLowShelf) {
+      safeSetTarget(ambienceLowShelf.gain, profile.lowShelfGainDb, now, 0.24);
+    }
+
+    if (rig) {
+      var targetGain = profile.active ? Math.max(0.0001, profile.subDroneGain) : 0.0001;
+      safeSetTarget(rig.outGain.gain, targetGain, now, 0.24);
+      safeSetTarget(rig.lfo.frequency, profile.lfoRateHz, now, 0.22);
+      safeSetTarget(rig.lfoDepthGain.gain, profile.active ? profile.lfoDepthRatio : 0, now, 0.22);
+      safeSetTarget(rig.subOsc1.frequency, profile.subBaseFreqHz, now, 0.28);
+      safeSetTarget(rig.subOsc2.frequency, profile.subBaseFreqHz + 1.4 + profile.intensity * 1.1, now, 0.28);
+      safeSetTarget(rig.subLp.frequency, 95 + profile.intensity * 55, now, 0.25);
+      if (rig.noiseLp) {
+        safeSetTarget(rig.noiseLp.frequency, 72 + profile.intensity * 48, now, 0.25);
+      }
+    }
+
+    return profile;
+  }
+
+  function syncThreatFromHudElement(el) {
+    if (!el) return false;
+    var parsed = parseHudThreatLevel(el.textContent);
+    if (parsed == null) return false;
+    if (Math.abs(parsed - threatLevel) < 0.01) return false;
+    threatLevel = parsed;
+    applyThreatFilter();
+    applyExamStemMix();
+    applyThreatLowFreqVibration();
+    return true;
+  }
+
+  function attachHudThreatObserver() {
+    if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
+    var el = document.getElementById('hud25d-threat-val');
+    if (!el || el === hudThreatObservedEl) return;
+
+    if (hudThreatObserver) {
+      try { hudThreatObserver.disconnect(); } catch (_) {}
+      hudThreatObserver = null;
+    }
+
+    hudThreatObservedEl = el;
+    hudThreatObserver = new MutationObserver(function () {
+      if (currentScene && !isExamScene(currentScene)) return;
+      syncThreatFromHudElement(el);
+    });
+    hudThreatObserver.observe(el, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  }
+
   function buildScene(mode) {
     if (!ctx) return;
     var now = ctx.currentTime;
@@ -1130,6 +1378,7 @@
       } else {
         applyThreatFilter();
       }
+      applyThreatLowFreqVibration();
       return;
     }
 
@@ -1138,6 +1387,7 @@
     if (isExamScene(mode)) {
       buildExamSoundscape();
       syncExamSecondaryTimers();
+      attachHudThreatObserver();
       if (mode === 'crisis') {
         try {
           ambienceFilter.frequency.cancelScheduledValues(now);
@@ -1147,6 +1397,7 @@
       } else {
         applyThreatFilter();
       }
+      applyThreatLowFreqVibration();
       // Restore any pending spatial sources
       if (spatialPending.inspector && spatialPending.inspector.intensity > 0) {
         applySpatialUpdate('inspector', spatialPending.inspector.dx, spatialPending.inspector.dz, spatialPending.inspector.intensity);
@@ -1214,6 +1465,7 @@
     }
 
     applyThreatFilter();
+    applyThreatLowFreqVibration();
   }
 
   // =========================================================================
@@ -2486,8 +2738,11 @@
         ctx.resume().catch(function () {});
       }
       applyBulletTimeFilter();
+      attachHudThreatObserver();
       if (currentScene && !activeSceneGain) {
         buildScene(currentScene);
+      } else {
+        applyThreatLowFreqVibration();
       }
       if (pendingZoneAmbience && pendingZoneAmbience.zoneId && activeZoneAmbienceId !== pendingZoneAmbience.zoneId) {
         startZoneAmbienceInternal(pendingZoneAmbience.zoneId, pendingZoneAmbience.profile);
@@ -2530,6 +2785,7 @@
       if (!mode) return;
       if (currentScene === mode && activeSceneGain) return;
       currentScene = mode;
+      applyThreatLowFreqVibration();
       if (!unlocked) return;
       if (!ensureContext()) return;
       if (ctx.state === 'suspended') {
@@ -2542,7 +2798,28 @@
       threatLevel = clamp(Number(level) || 0, 0, 100);
       applyThreatFilter();
       applyExamStemMix();
+      applyThreatLowFreqVibration();
     },
+
+    LOW_FREQ_VIBRATION_THRESHOLD: LOW_FREQ_VIBRATION_THRESHOLD,
+
+    getLowFreqVibrationState: function () {
+      return {
+        active: threatVibrationState.active,
+        threshold: threatVibrationState.threshold,
+        threatLevel: threatVibrationState.threatLevel,
+        intensity: threatVibrationState.intensity,
+        lowShelfGainDb: threatVibrationState.lowShelfGainDb,
+        subDroneGain: threatVibrationState.subDroneGain,
+        lfoRateHz: threatVibrationState.lfoRateHz,
+        lfoDepthRatio: threatVibrationState.lfoDepthRatio,
+        lfoDepth: threatVibrationState.lfoDepth,
+        subBaseFreqHz: threatVibrationState.subBaseFreqHz
+      };
+    },
+
+    computeThreatLowFreqVibration: computeThreatLowFreqVibration,
+    parseHudThreatLevel: parseHudThreatLevel,
 
     updateSpatialSource: function (id, dx, dz, intensity) {
       if (id !== 'inspector' && id !== 'train') return;
@@ -2612,4 +2889,12 @@
       playSfxInternal(name);
     }
   };
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', attachHudThreatObserver, { once: true });
+    } else {
+      attachHudThreatObserver();
+    }
+  }
 })();
