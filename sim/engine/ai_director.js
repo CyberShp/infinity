@@ -1973,12 +1973,18 @@
 
     // 4. Situation / Inspector / Objective / Clues report using LIVE 2.5D snapshot!
     if (/检票员|怪物|在哪|位置|距离|状态|情况|进度|怎么赢|办法|线索|报告|汇报|报点/.test(text)) {
+      var mutNote = insp.mutated ? '（已进入二阶段变异，警惕瞬移奇袭！）' : '';
+      var wpNote = insp.weakpointExposed ? '【核心弱点暴露中！快集火！】' : '';
       var inspLine = insp.hp <= 0 || insp.sealedPct >= 100
         ? '“检票员已经失能，直接推进目标或者去0号站台撤离！”'
-        : '“检票员在' + inspZone + '，距你约' + inspDist + '米（' + (insp.state === 'chase' ? '正在追猎！' : '巡逻警戒中') + '）。轨控改写 ' + overridePct + '%，线索 ' + cluesCount + '/' + cluesTotal + '。”';
+        : (insp.intelKnown === false
+          ? '“检票员当前在盲区，未捕获确切位置——先开声纹侦察。轨控改写 ' + overridePct + '%，线索 ' + cluesCount + '/' + cluesTotal + '。”'
+          : '“检票员在' + inspZone + '，距你约' + inspDist + '米' + mutNote + wpNote + '（' + (insp.state === 'HUNT' || insp.state === 'chase' ? '正在追猎！' : '巡逻警戒中') + '）。轨控改写 ' + overridePct + '%，线索 ' + cluesCount + '/' + cluesTotal + '。”');
       addDialogue('xutan', inspLine, 2, -1, 1);
       if (overridePct < 100) {
-        addDialogue('yanci', '“调度室与变电间双端改写满100%即可在0号站台撤离；或者集中火力击杀/封印检票员。”', 2, -1, 0);
+        addDialogue('yanci', insp.mutated
+          ? '“它变异后会按威胁值循环发动瞬移与压制波，每次大招收尾或弹反后胸口核心会暴露弱点，抓住窗口集火！”'
+          : '“调度室与变电间双端改写满100%即可在0号站台撤离；或者集中火力击杀/封印检票员。”', 2, -1, 0);
       }
       return sanitizeLiveRadioResult({
         replyNpcId: 'xutan',
@@ -2116,17 +2122,300 @@
   }
 
   /* --------------------------------------------------------------------------
+   * Inspector Boss Phase-2 Mutation, Threat-Driven Skill Cycle & Weakpoint Director
+   * -------------------------------------------------------------------------- */
+  var INSPECTOR_MUTATION_CONFIG = {
+    hpThreshold: 0.55,
+    highThreatThreshold: 85,
+    highThreatHpThreshold: 0.72,
+    threatTiers: {
+      lowMax: 34,
+      highMax: 69
+    },
+    cycles: {
+      phase1: {
+        low: ['lunge', 'cleave', 'gaze'],
+        high: ['lunge', 'cleave', 'slam', 'gaze'],
+        critical: ['slam', 'lunge', 'cleave', 'gaze']
+      },
+      phase2: {
+        low: ['lunge', 'blink_ambush', 'cleave', 'gaze'],
+        high: ['blink_ambush', 'cleave', 'slam', 'lunge', 'gaze'],
+        critical: ['blink_ambush', 'slam', 'lunge', 'cleave', 'blink_ambush', 'gaze']
+      }
+    },
+    weakpoint: {
+      baseDamageMult: 1.75,
+      critOrFlankMult: 2.0,
+      bonusSealPct: 5,
+      energyRefund: 10,
+      windows: {
+        blink_overheat: { duration: 3.2, callout: '✦ 瞬移过载 · 核心弱点暴露!' },
+        slam_recovery: { duration: 3.4, callout: '✦ 压制波泄能 · 核心弱点暴露!' },
+        gaze_evaded: { duration: 2.8, callout: '✦ 探灯反冲 · 核心弱点暴露!' },
+        wall_crash: { duration: 3.6, callout: '✦ 撞墙失衡 · 核心弱点暴露!' },
+        parry_shatter: { duration: 4.5, callout: '✦ 弹反碎核 · 弱点全开!' },
+        emp_shatter: { duration: 4.5, callout: '✦ EMP过载 · 弱点全开!' },
+        seal_shatter: { duration: 4.0, callout: '✦ 封印撕裂 · 核心暴露!' }
+      }
+    }
+  };
+
+  function getThreatTier(threatLevel) {
+    var t = Number(threatLevel);
+    if (!isFinite(t)) t = 0;
+    if (t >= INSPECTOR_MUTATION_CONFIG.threatTiers.highMax + 1) return 'critical';
+    if (t >= INSPECTOR_MUTATION_CONFIG.threatTiers.lowMax + 1) return 'high';
+    return 'low';
+  }
+
+  function evaluateInspectorMutation(state) {
+    var st = state || {};
+    var maxHp = Math.max(1, Number(st.maxHp) || 520);
+    var hp = Math.max(0, Number(st.hp != null ? st.hp : maxHp));
+    var hpRatio = hp / maxHp;
+    var threat = Number(st.threatLevel) || 0;
+    var threatTier = getThreatTier(threat);
+    var alreadyMutated = Boolean(st.alreadyMutated || Number(st.currentPhase) >= 2);
+
+    var shouldMutate = alreadyMutated ||
+      (hpRatio <= INSPECTOR_MUTATION_CONFIG.hpThreshold) ||
+      (threat >= INSPECTOR_MUTATION_CONFIG.highThreatThreshold && hpRatio <= INSPECTOR_MUTATION_CONFIG.highThreatHpThreshold);
+
+    var justMutated = !alreadyMutated && shouldMutate;
+    var mutationTier = !shouldMutate
+      ? 'dormant'
+      : (threatTier === 'critical' ? 'overdrive' : 'mutated');
+
+    var speedMult = !shouldMutate
+      ? (threatTier === 'critical' ? 1.12 : (threatTier === 'high' ? 1.05 : 1.0))
+      : (threatTier === 'critical' ? 1.36 : (threatTier === 'high' ? 1.28 : 1.22));
+    var damageMult = !shouldMutate
+      ? (threatTier === 'critical' ? 1.12 : 1.0)
+      : (threatTier === 'critical' ? 1.34 : (threatTier === 'high' ? 1.25 : 1.18));
+    var cooldownMult = !shouldMutate
+      ? (threatTier === 'critical' ? 0.88 : 1.0)
+      : (threatTier === 'critical' ? 0.64 : (threatTier === 'high' ? 0.74 : 0.82));
+    var blinkCooldownSec = threatTier === 'critical' ? 4.2 : (threatTier === 'high' ? 5.8 : 7.2);
+
+    var radioAlert = null;
+    if (justMutated) {
+      radioAlert = threat >= INSPECTOR_MUTATION_CONFIG.highThreatThreshold && hpRatio > INSPECTOR_MUTATION_CONFIG.hpThreshold
+        ? '【高危异变 · 提前变异】站台威胁度突破临界阈值，零号检票员强行撕裂外壳进入二阶段变异！警惕高频瞬移奇袭，盯紧其大招收尾暴露的胸口发射核！'
+        : '【死考警戒 · 二阶段变异】零号检票员胸口43.2Hz发信核畸变过载！已解锁威胁度联动技能循环与「空间瞬移奇袭」——每次大招泄能或弹反后会暴露弱点核心，务必抓住窗口集火！';
+    }
+
+    return {
+      phase: shouldMutate ? 2 : 1,
+      mutated: shouldMutate,
+      justMutated: justMutated,
+      mutationTier: mutationTier,
+      threatTier: threatTier,
+      speedMult: speedMult,
+      damageMult: damageMult,
+      cooldownMult: cooldownMult,
+      blinkCooldownSec: blinkCooldownSec,
+      radioAlert: radioAlert
+    };
+  }
+
+  function isSkillValidForContext(skill, dist, hasLos, cds, mutated) {
+    var cd = Number(cds && cds[skill]) || 0;
+    if (cd > 0) return false;
+    if (!hasLos && skill !== 'blink_ambush') return false;
+    if (skill === 'blink_ambush') {
+      return mutated && dist >= 4.2 && dist <= 22.0;
+    }
+    if (skill === 'slam') {
+      return dist <= 7.2;
+    }
+    if (skill === 'lunge') {
+      return dist <= 5.8;
+    }
+    if (skill === 'cleave') {
+      return dist <= 3.6;
+    }
+    if (skill === 'gaze') {
+      return dist >= 4.8 && dist <= 17.5;
+    }
+    return false;
+  }
+
+  function selectInspectorSkillCycle(ctx) {
+    var c = ctx || {};
+    var threat = Number(c.threatLevel) || 0;
+    var threatTier = getThreatTier(threat);
+    var mutated = Boolean(c.mutated || Number(c.phase) >= 2);
+    var dist = Number(c.distToTarget);
+    if (!isFinite(dist)) dist = 99;
+    var hasLos = Boolean(c.hasLos);
+    var cds = c.cooldowns || {};
+    var cycleIdx = Math.max(0, Math.floor(Number(c.cycleIndex) || 0));
+
+    if (c.isStunned) {
+      return {
+        skill: 'stunned',
+        nextCycleIndex: cycleIdx,
+        threatTier: threatTier,
+        exposeWeakpointAfter: false,
+        weakpointReason: null,
+        weakpointWindowSec: 0,
+        telegraphSec: 0,
+        callout: null
+      };
+    }
+
+    var phaseKey = mutated ? 'phase2' : 'phase1';
+    var rotation = INSPECTOR_MUTATION_CONFIG.cycles[phaseKey][threatTier] || INSPECTOR_MUTATION_CONFIG.cycles.phase1.low;
+    var chosen = null;
+    var nextIdx = cycleIdx;
+
+    // Try up to rotation.length entries starting from cycleIdx to respect the deterministic threat cycle
+    for (var step = 0; step < rotation.length; step++) {
+      var idx = (cycleIdx + step) % rotation.length;
+      var candidate = rotation[idx];
+      if (isSkillValidForContext(candidate, dist, hasLos, cds, mutated)) {
+        chosen = candidate;
+        nextIdx = (idx + 1) % rotation.length;
+        break;
+      }
+    }
+
+    if (!chosen) {
+      return {
+        skill: 'pursue',
+        nextCycleIndex: cycleIdx,
+        threatTier: threatTier,
+        exposeWeakpointAfter: false,
+        weakpointReason: null,
+        weakpointWindowSec: 0,
+        telegraphSec: 0,
+        callout: null
+      };
+    }
+
+    var telegraphMap = {
+      blink_ambush: threatTier === 'critical' ? 0.38 : 0.48,
+      slam: mutated ? 0.92 : 1.05,
+      lunge: mutated ? (threatTier === 'critical' ? 0.62 : 0.68) : 0.85,
+      cleave: mutated ? 0.48 : 0.55,
+      gaze: mutated ? 1.10 : 1.25
+    };
+    var calloutMap = {
+      blink_ambush: threatTier === 'critical' ? '空间折跃奇袭!' : '瞬移截击!',
+      slam: '轨道压制波! 快撤出红圈',
+      lunge: '处决突刺! (可弹反/破甲)',
+      cleave: '铁剪横扫!',
+      gaze: '查票凝视! 找掩体/潜行'
+    };
+
+    var exposeAfter = mutated && (chosen === 'blink_ambush' || chosen === 'slam');
+    var wpReason = chosen === 'blink_ambush' ? 'blink_overheat' : (chosen === 'slam' ? 'slam_recovery' : null);
+    var wpCfg = wpReason ? INSPECTOR_MUTATION_CONFIG.weakpoint.windows[wpReason] : null;
+
+    return {
+      skill: chosen,
+      nextCycleIndex: nextIdx,
+      threatTier: threatTier,
+      exposeWeakpointAfter: exposeAfter,
+      weakpointReason: wpReason,
+      weakpointWindowSec: wpCfg ? wpCfg.duration : 0,
+      telegraphSec: telegraphMap[chosen] || 0.7,
+      callout: calloutMap[chosen] || null
+    };
+  }
+
+  function computeWeakpointTrigger(eventType, state) {
+    var st = state || {};
+    var win = INSPECTOR_MUTATION_CONFIG.weakpoint.windows[eventType] || null;
+    if (!win) return null;
+    // In critical threat overdrive, weakpoint windows are slightly tighter (-12%) for higher skill ceiling
+    var threatTier = getThreatTier(st.threatLevel);
+    var dur = threatTier === 'critical' ? Number((win.duration * 0.88).toFixed(2)) : win.duration;
+    return {
+      reason: eventType,
+      duration: dur,
+      callout: win.callout
+    };
+  }
+
+  function evaluateWeakpointExposure(ctx) {
+    var c = ctx || {};
+    var rem = Math.max(0, Number(c.weakpointTimer) || 0);
+    var baseDmg = Math.max(1, Number(c.baseDamage) || 1);
+    if (rem <= 0) {
+      return {
+        exposed: false,
+        remainingSec: 0,
+        damageMult: 1.0,
+        finalDamage: Math.round(baseDmg),
+        bonusSealPct: 0,
+        energyRefund: 0,
+        callout: null
+      };
+    }
+    var wp = INSPECTOR_MUTATION_CONFIG.weakpoint;
+    var mult = (c.isCrit || c.isFlank) ? wp.critOrFlankMult : wp.baseDamageMult;
+    var finalDmg = Math.max(1, Math.round(baseDmg * mult));
+    return {
+      exposed: true,
+      remainingSec: Number(rem.toFixed(2)),
+      damageMult: mult,
+      finalDamage: finalDmg,
+      bonusSealPct: wp.bonusSealPct,
+      energyRefund: wp.energyRefund,
+      callout: '✦ 弱点贯通 -' + finalDmg
+    };
+  }
+
+  function createInspectorDirector() {
+    var cycleIndex = 0;
+    var mutated = false;
+    return {
+      evaluateMutation: function (state) {
+        var res = evaluateInspectorMutation(Object.assign({}, state || {}, { alreadyMutated: mutated }));
+        if (res.mutated) mutated = true;
+        return res;
+      },
+      selectSkill: function (ctx) {
+        var res = selectInspectorSkillCycle(Object.assign({}, ctx || {}, {
+          mutated: mutated || Boolean(ctx && ctx.mutated),
+          cycleIndex: cycleIndex
+        }));
+        cycleIndex = res.nextCycleIndex;
+        return res;
+      },
+      triggerWeakpoint: computeWeakpointTrigger,
+      evaluateWeakpoint: evaluateWeakpointExposure,
+      getState: function () {
+        return { mutated: mutated, cycleIndex: cycleIndex };
+      },
+      reset: function () {
+        cycleIndex = 0;
+        mutated = false;
+      }
+    };
+  }
+
+  /* --------------------------------------------------------------------------
    * Attach Public API to window.INFINITY.AI
    * -------------------------------------------------------------------------- */
   INFINITY.AI = {
     STORAGE_KEY: STORAGE_KEY,
     PRESETS: PRESETS,
+    INSPECTOR_MUTATION_CONFIG: INSPECTOR_MUTATION_CONFIG,
     getConfig: getConfig,
     saveConfig: saveConfig,
     testConnection: testConnection,
     adjudicateExamAction: adjudicateExamAction,
     generateHallInteraction: generateHallInteraction,
     adjudicateCrisis: adjudicateCrisis,
-    handleLiveRadio: handleLiveRadio
+    handleLiveRadio: handleLiveRadio,
+    getThreatTier: getThreatTier,
+    evaluateInspectorMutation: evaluateInspectorMutation,
+    selectInspectorSkillCycle: selectInspectorSkillCycle,
+    computeWeakpointTrigger: computeWeakpointTrigger,
+    evaluateWeakpointExposure: evaluateWeakpointExposure,
+    createInspectorDirector: createInspectorDirector
   };
 })(typeof window !== 'undefined' ? window : globalThis);

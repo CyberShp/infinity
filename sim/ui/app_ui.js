@@ -1214,6 +1214,33 @@
 
     var mm = snapshot.minimap;
 
+    // 0. Room Fog-of-War shroud on minimap when player lacks recon capability
+    if (!mm.hasRecon && mapMod && mapMod.ZONE_BOUNDS) {
+      var visitedList = Array.isArray(mm.visitedZones) ? mm.visitedZones : [];
+      var curZone = mm.currentZone || snapshot.zoneId || 'concourse';
+      var zKeys = Object.keys(mapMod.ZONE_BOUNDS);
+      for (var zk = 0; zk < zKeys.length; zk++) {
+        var zId = zKeys[zk];
+        if (zId === curZone) continue;
+        var zb = mapMod.ZONE_BOUNDS[zId];
+        if (!zb) continue;
+        var isVisited = visitedList.indexOf(zId) !== -1;
+        ctx.fillStyle = isVisited ? 'rgba(6, 8, 13, 0.56)' : 'rgba(4, 5, 9, 0.88)';
+        ctx.fillRect(
+          zb.x0 * scale,
+          zb.z0 * scale,
+          (zb.x1 - zb.x0) * scale,
+          (zb.z1 - zb.z0) * scale
+        );
+      }
+    } else if (mm.reconActive) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(88, 230, 216, 0.55)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+      ctx.restore();
+    }
+
     // 1. Active Wards
     if (Array.isArray(mm.wards)) {
       for (var w = 0; w < mm.wards.length; w++) {
@@ -1730,8 +1757,8 @@
     var insp = snapshot && snapshot.inspector;
     var dist = insp && isFinite(Number(insp.distToPlayer)) ? Number(insp.distToPlayer) : 999;
     var isOffscreen = (insp && typeof insp.offscreen === 'boolean') ? insp.offscreen : (dist >= 5.5);
-    // Show off-screen edge indicator only when Inspector is alive, off-screen, and within 44m
-    if (inspDone || !insp || !isOffscreen || dist > 44) {
+    // Show off-screen edge indicator only when Inspector is alive, intel is known (visible or recon), off-screen, and within 44m
+    if (inspDone || !insp || insp.intelKnown === false || !isOffscreen || dist > 44) {
       el.classList.add('hidden');
       return;
     }
@@ -1820,16 +1847,20 @@
     if ($('hud25d-override-bar')) $('hud25d-override-bar').style.width = ovPct + '%';
     if ($('hud25d-obj-override')) $('hud25d-obj-override').classList.toggle('done', ovPct >= 100);
 
-    var insp = snapshot.inspector || { hp: 160, maxHp: 160, sealedPct: 0, state: 'patrol', distToPlayer: 30 };
+    var insp = snapshot.inspector || { hp: 520, maxHp: 520, sealedPct: 0, state: 'UNKNOWN', intelKnown: false, distToPlayer: 30 };
     var inspHp = Math.max(0, Math.round(Number(insp.hp || 0)));
-    var inspMaxHp = Math.max(1, Number(insp.maxHp || 160));
+    var inspMaxHp = Math.max(1, Number(insp.maxHp || 520));
     var sealedPct = clamp(Math.round(Number(insp.sealedPct || 0)), 0, 100);
     var inspDone = inspHp <= 0 || sealedPct >= 100;
 
     if ($('hud25d-inspector-metric')) {
+      var wpSec = Number(insp.weakpointRemainingSec || 0);
+      var statusTag = (!inspDone && insp.weakpointExposed && wpSec > 0)
+        ? (' · ⚡弱点暴露 ' + wpSec.toFixed(1) + 's')
+        : ((!inspDone && (insp.mutated || Number(insp.phase) >= 2)) ? ' · 二阶段变异' : '');
       $('hud25d-inspector-metric').textContent = inspHp <= 0
         ? '已击杀'
-        : (sealedPct >= 100 ? '已封印' : ('HP ' + inspHp + ' · 封 ' + sealedPct + '%'));
+        : (sealedPct >= 100 ? '已封印' : ('HP ' + inspHp + statusTag + ' · 封 ' + sealedPct + '%'));
     }
     if ($('hud25d-inspector-bar')) {
       $('hud25d-inspector-bar').style.width = (inspDone ? 0 : clamp((inspHp / inspMaxHp) * 100, 0, 100)) + '%';
@@ -1888,12 +1919,16 @@
         sealed: '已封印',
         defeated: '已击杀'
       };
-      var stateKey = String(insp.state || 'patrol').toLowerCase();
+      var stateKey = String(insp.state || 'unknown').toLowerCase();
+      var intelKnown = insp.intelKnown !== false && stateKey !== 'unknown';
       var distTxt = isFinite(Number(insp.distToPlayer)) ? (Math.round(Number(insp.distToPlayer)) + 'm') : '--m';
+      var wpHint = (!inspDone && intelKnown && insp.weakpointExposed) ? ' · ⚡核心弱点暴露!' : '';
       inspStatusEl.textContent = inspDone
         ? '检票员：已肃清'
-        : ('检票员：' + (stateLabels[stateKey] || '巡逻中') + ' · ' + distTxt);
-      inspStatusEl.classList.toggle('danger', !inspDone && (stateKey === 'chase' || stateKey === 'hunt' || Number(insp.distToPlayer) <= 10));
+        : (!intelKnown
+          ? '检票员：行踪未知（需侦察）'
+          : ('检票员：' + (stateLabels[stateKey] || '巡逻中') + ' · ' + distTxt + wpHint));
+      inspStatusEl.classList.toggle('danger', !inspDone && intelKnown && (stateKey === 'chase' || stateKey === 'hunt' || Number(insp.distToPlayer) <= 10 || Boolean(insp.weakpointExposed)));
       inspStatusEl.classList.toggle('neutralized', inspDone);
     }
 

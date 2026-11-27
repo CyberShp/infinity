@@ -314,6 +314,36 @@
       };
     }
 
+    if (key === 'weakpoint') {
+      var wpCol = overrideColor || '#ffe875';
+      return {
+        tier: 'weakpoint',
+        fontSize: '18px',
+        fontWeight: '900',
+        color: wpCol,
+        letterSpacing: '1.3px',
+        textShadow: '0 0 14px rgba(255,232,117,0.95), 0 0 26px rgba(77,248,255,0.65), 0 2px 6px #000',
+        ttl: 1.75,
+        vy: 0.92,
+        scalePop: 1.32
+      };
+    }
+
+    if (key === 'mutation') {
+      var mutCol = overrideColor || '#ff3b52';
+      return {
+        tier: 'mutation',
+        fontSize: '18px',
+        fontWeight: '900',
+        color: mutCol,
+        letterSpacing: '1.4px',
+        textShadow: '0 0 16px rgba(255,41,66,0.95), 0 0 28px rgba(255,140,156,0.62), 0 2px 6px #000',
+        ttl: 1.85,
+        vy: 0.85,
+        scalePop: 1.30
+      };
+    }
+
     if (key === 'crit') {
       var critCol = overrideColor || (sem ? sem.warning : '#ffaa3b');
       return {
@@ -342,12 +372,319 @@
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // 4. Boss Phase-2 Mutation Feel, Phantom Teleport VFX & Weakpoint Feedback
+  // ---------------------------------------------------------------------------
+  var BOSS_PHASE2_FEEL = {
+    mutation_awakening: {
+      hitStopSec: 0.11,
+      impactInvertSec: 0.085,
+      shakeAmp: 0.50,
+      shakeDur: 0.42,
+      shakeFreq: 42,
+      glitchAmount: 0.78,
+      fovPunch: -3.6,
+      primaryColor: 0xff2238,
+      secondaryColor: 0xffb3c1
+    },
+    phase2_blink: {
+      hitStopSec: 0.035,
+      shakeAmp: 0.34,
+      shakeDur: 0.26,
+      shakeFreq: 46,
+      glitchAmount: 0.46,
+      fovPunch: -2.2,
+      trailSteps: 4,
+      primaryColor: 0xff1e38,
+      secondaryColor: 0xffdce2,
+      sparkCount: 18
+    },
+    weakpoint_expose: {
+      shakeAmp: 0.22,
+      shakeDur: 0.18,
+      shakeFreq: 32,
+      primaryColor: 0xffe875,
+      secondaryColor: 0x4df8ff,
+      ringRadius: 3.1
+    },
+    weakpoint_hit: {
+      hitStopSec: 0.085,
+      impactInvertSec: 0.075,
+      shakeAmp: 0.42,
+      shakeDur: 0.28,
+      shakeFreq: 44,
+      fovPunch: -2.6,
+      primaryColor: 0xffe875,
+      secondaryColor: 0x4df8ff,
+      sparkCount: 24
+    }
+  };
+
+  function getBossPhase2Feel(eventKey) {
+    return BOSS_PHASE2_FEEL[eventKey] || BOSS_PHASE2_FEEL.phase2_blink;
+  }
+
+  // Builds a chest-mounted Exposed Core Weakpoint Reticle attached to Inspector group
+  function buildBossWeakpointVisual(THREE, parentGroup, trackGeo, trackMat) {
+    if (!THREE || !parentGroup) return null;
+    var wrapGeo = typeof trackGeo === 'function' ? trackGeo : function (g) { return g; };
+    var wrapMat = typeof trackMat === 'function' ? trackMat : function (m) { return m; };
+
+    var group = new THREE.Group();
+    group.position.set(0, 1.48, 0.28);
+    group.visible = false;
+
+    // Pulsing golden-crimson core diamond
+    var coreGeo = wrapGeo(new THREE.OctahedronGeometry(0.24, 0));
+    var coreMat = wrapMat(new THREE.MeshBasicMaterial({
+      color: 0xffe875,
+      transparent: true,
+      opacity: 0.94,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    coreMesh.scale.set(0.85, 1.35, 0.85);
+    group.add(coreMesh);
+
+    // Outer target-lock reticle ring (rotates rapidly during exposure)
+    var outerGeo = wrapGeo(new THREE.RingGeometry(0.42, 0.52, 6));
+    var outerMat = wrapMat(new THREE.MeshBasicMaterial({
+      color: 0x4df8ff,
+      transparent: true,
+      opacity: 0.88,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var outerRing = new THREE.Mesh(outerGeo, outerMat);
+    group.add(outerRing);
+
+    // Inner counter-rotating crimson fracture halo
+    var innerGeo = wrapGeo(new THREE.RingGeometry(0.28, 0.34, 4));
+    var innerMat = wrapMat(new THREE.MeshBasicMaterial({
+      color: 0xff3b52,
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var innerRing = new THREE.Mesh(innerGeo, innerMat);
+    group.add(innerRing);
+
+    // Ground highlight ring beneath boss so weakpoint exposure reads clearly from 2.5D top-down camera
+    var floorGeo = wrapGeo(new THREE.RingGeometry(1.05, 1.32, 28));
+    floorGeo.rotateX(-Math.PI / 2);
+    var floorMat = wrapMat(new THREE.MeshBasicMaterial({
+      color: 0xffe875,
+      transparent: true,
+      opacity: 0.65,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var floorRing = new THREE.Mesh(floorGeo, floorMat);
+    floorRing.position.set(0, -1.36, -0.28);
+    group.add(floorRing);
+
+    parentGroup.add(group);
+    return {
+      group: group,
+      coreMesh: coreMesh,
+      coreMat: coreMat,
+      outerRing: outerRing,
+      outerMat: outerMat,
+      innerRing: innerRing,
+      innerMat: innerMat,
+      floorRing: floorRing,
+      floorMat: floorMat
+    };
+  }
+
+  function updateBossWeakpointVisual(vis, state, elapsedReal) {
+    if (!vis || !vis.group) return;
+    var rem = Number(state && state.weakpointTimer) || 0;
+    var maxT = Math.max(0.1, Number(state && state.weakpointMaxTimer) || 3.5);
+    var visible = rem > 0 && !(state && state.alive === false);
+    vis.group.visible = visible;
+    if (!visible) return;
+
+    var t = Number(elapsedReal) || 0;
+    var urgency = clamp(1 - rem / maxT, 0, 1);
+    var blinkFast = rem < 1.0 ? (0.55 + Math.abs(Math.sin(t * 28)) * 0.45) : 1.0;
+    var pulse = 1.0 + Math.sin(t * 14) * 0.16;
+
+    vis.coreMesh.rotation.y = t * 4.2;
+    vis.coreMesh.scale.set(0.85 * pulse, 1.35 * pulse, 0.85 * pulse);
+    vis.coreMat.opacity = clamp(0.92 * blinkFast, 0.25, 1.0);
+
+    vis.outerRing.rotation.z = t * (3.2 + urgency * 3.5);
+    vis.outerRing.scale.set(1.0 + Math.sin(t * 10) * 0.12, 1.0 + Math.sin(t * 10) * 0.12, 1);
+    vis.outerMat.opacity = clamp(0.86 * blinkFast, 0.2, 0.96);
+
+    vis.innerRing.rotation.z = -t * (4.8 + urgency * 3.0);
+    vis.innerMat.opacity = clamp(0.82 * blinkFast, 0.2, 0.94);
+
+    var floorSc = 0.92 + Math.sin(t * 9.5) * 0.14;
+    vis.floorRing.scale.set(floorSc, floorSc, 1);
+    vis.floorMat.opacity = clamp((0.52 + (1 - urgency) * 0.28) * blinkFast, 0.18, 0.85);
+  }
+
+  // Dramatic Phase-2 Phantom Teleport VFX: departure implosion -> rift trail -> arrival shockwave
+  function spawnBossTeleportVfx(session, fromX, fromZ, toX, toZ, opts) {
+    if (!session) return { triggered: false };
+    var spec = BOSS_PHASE2_FEEL.phase2_blink;
+    var o = opts || {};
+    var facingLeft = Boolean(o.facingLeft);
+    var steps = Math.max(2, Number(o.trailSteps) || spec.trailSteps);
+    var primaryCol = o.primaryColor || spec.primaryColor;
+    var secCol = o.secondaryColor || spec.secondaryColor;
+
+    // 1. Departure implosion & phantom silhouette
+    if (typeof session.spawnAfterimage === 'function') {
+      session.spawnAfterimage(fromX, fromZ, 'inspector', facingLeft, primaryCol, 0.52, 'dash');
+    }
+    if (typeof session.spawnShockRing === 'function') {
+      session.spawnShockRing(fromX, fromZ, 2.6, primaryCol, 0.32);
+    }
+    if (typeof session.spawnSparkBurst === 'function') {
+      session.spawnSparkBurst(fromX, 1.25, fromZ, primaryCol, Math.round(spec.sparkCount * 0.7));
+    }
+
+    // 2. Spatial distortion rift beam & intermediate glitch ghosts
+    if (typeof session.spawnLightningBolt === 'function') {
+      session.spawnLightningBolt(fromX, 1.35, fromZ, toX, 1.35, toZ, primaryCol, 0.30, 8);
+      session.spawnLightningBolt(fromX, 1.10, fromZ, toX, 1.10, toZ, secCol, 0.22, 6);
+    }
+    if (typeof session.spawnLaserBeam === 'function') {
+      session.spawnLaserBeam(fromX, fromZ, toX, toZ, primaryCol, 0.26, {
+        primaryColor: '#ff1e38',
+        secondaryColor: '#ffdce2'
+      });
+    }
+    if (typeof session.spawnAfterimage === 'function') {
+      for (var i = 1; i < steps; i++) {
+        var frac = i / steps;
+        var gx = fromX + (toX - fromX) * frac;
+        var gz = fromZ + (toZ - fromZ) * frac;
+        session.spawnAfterimage(gx, gz, 'inspector', facingLeft, i % 2 === 0 ? secCol : primaryCol, 0.34 - frac * 0.08, 'dash');
+      }
+    }
+
+    // 3. Arrival burst, camera trauma & glitch pulse
+    if (typeof session.spawnShockRing === 'function') {
+      session.spawnShockRing(toX, toZ, 3.8, primaryCol, 0.42);
+      session.spawnShockRing(toX, toZ, 2.1, secCol, 0.26);
+    }
+    if (typeof session.spawnImpactStar === 'function') {
+      session.spawnImpactStar(toX, 1.45, toZ, primaryCol, 2.6, 0.28);
+    }
+    if (typeof session.spawnSparkBurst === 'function') {
+      session.spawnSparkBurst(toX, 1.3, toZ, primaryCol, spec.sparkCount);
+    }
+    if (typeof session.addCameraShake === 'function') {
+      session.addCameraShake(spec.shakeAmp, spec.shakeDur, spec.shakeFreq);
+    }
+    if (typeof session.glitchAmount === 'number') {
+      session.glitchAmount = Math.max(session.glitchAmount, spec.glitchAmount);
+    }
+    if (typeof session.camFovPunch === 'number') {
+      session.camFovPunch = Math.min(session.camFovPunch, spec.fovPunch);
+    }
+    if (typeof session.hitStopTimer === 'number') {
+      session.hitStopTimer = Math.max(session.hitStopTimer, spec.hitStopSec);
+    }
+
+    return {
+      triggered: true,
+      trailSteps: steps,
+      shakeAmp: spec.shakeAmp,
+      glitchAmount: spec.glitchAmount
+    };
+  }
+
+  function triggerBossMutationAwakeningFeel(session, x, z, opts) {
+    if (!session) return { triggered: false };
+    var spec = BOSS_PHASE2_FEEL.mutation_awakening;
+    var label = (opts && opts.callout) || '【二阶段变异 · 频段过载】';
+    if (typeof session.addCameraShake === 'function') {
+      session.addCameraShake(spec.shakeAmp, spec.shakeDur, spec.shakeFreq);
+    }
+    if (typeof session.triggerImpactFrame === 'function') {
+      session.triggerImpactFrame(spec.impactInvertSec);
+    }
+    if (typeof session.hitStopTimer === 'number') {
+      session.hitStopTimer = Math.max(session.hitStopTimer, spec.hitStopSec);
+    }
+    if (typeof session.glitchAmount === 'number') {
+      session.glitchAmount = Math.max(session.glitchAmount, spec.glitchAmount);
+    }
+    if (typeof session.camFovPunch === 'number') {
+      session.camFovPunch = spec.fovPunch;
+    }
+    if (typeof session.spawnShockRing === 'function') {
+      session.spawnShockRing(x, z, 6.2, spec.primaryColor, 0.65);
+      session.spawnShockRing(x, z, 3.6, spec.secondaryColor, 0.40);
+    }
+    if (typeof session.spawnImpactStar === 'function') {
+      session.spawnImpactStar(x, 1.55, z, spec.primaryColor, 3.6, 0.42);
+    }
+    if (typeof session.spawnSparkBurst === 'function') {
+      session.spawnSparkBurst(x, 1.4, z, spec.primaryColor, 28);
+    }
+    if (typeof session.spawnFloatingText === 'function') {
+      session.spawnFloatingText(x, 3.15, z, label, '#ff3b52', 'mutation');
+    }
+    return { triggered: true, hitStopSec: spec.hitStopSec, glitchAmount: spec.glitchAmount };
+  }
+
+  function triggerBossWeakpointHitFeel(session, x, z, dmg, opts) {
+    if (!session) return { triggered: false };
+    var spec = BOSS_PHASE2_FEEL.weakpoint_hit;
+    var label = (opts && opts.callout) || ('✦ 弱点贯通 -' + Math.round(Number(dmg) || 0));
+    if (typeof session.addCameraShake === 'function') {
+      session.addCameraShake(spec.shakeAmp, spec.shakeDur, spec.shakeFreq);
+    }
+    if (typeof session.triggerImpactFrame === 'function') {
+      session.triggerImpactFrame(spec.impactInvertSec);
+    }
+    if (typeof session.hitStopTimer === 'number') {
+      session.hitStopTimer = Math.max(session.hitStopTimer, spec.hitStopSec);
+    }
+    if (typeof session.camFovPunch === 'number') {
+      session.camFovPunch = Math.min(session.camFovPunch, spec.fovPunch);
+    }
+    if (typeof session.spawnImpactStar === 'function') {
+      session.spawnImpactStar(x, 1.5, z, spec.primaryColor, 3.0, 0.34);
+    }
+    if (typeof session.spawnShockRing === 'function') {
+      session.spawnShockRing(x, z, 3.6, spec.secondaryColor, 0.42);
+      session.spawnShockRing(x, z, 2.2, spec.primaryColor, 0.28);
+    }
+    if (typeof session.spawnSparkBurst === 'function') {
+      session.spawnSparkBurst(x, 1.45, z, spec.primaryColor, spec.sparkCount);
+    }
+    if (typeof session.spawnFloatingText === 'function') {
+      session.spawnFloatingText(x, 2.85, z, label, '#ffe875', 'weakpoint');
+    }
+    return { triggered: true, hitStopSec: spec.hitStopSec };
+  }
+
   INFINITY.CombatFeel = {
     ARCHETYPE_FEEL: ARCHETYPE_FEEL,
     SHAKE_BUDGET_DEFAULTS: SHAKE_BUDGET_DEFAULTS,
+    BOSS_PHASE2_FEEL: BOSS_PHASE2_FEEL,
     getArchetypeFeel: getArchetypeFeel,
+    getBossPhase2Feel: getBossPhase2Feel,
     supportsAimPreview: supportsAimPreview,
     createShakeBudget: createShakeBudget,
-    getFloatingTextStyle: getFloatingTextStyle
+    getFloatingTextStyle: getFloatingTextStyle,
+    buildBossWeakpointVisual: buildBossWeakpointVisual,
+    updateBossWeakpointVisual: updateBossWeakpointVisual,
+    spawnBossTeleportVfx: spawnBossTeleportVfx,
+    triggerBossMutationAwakeningFeel: triggerBossMutationAwakeningFeel,
+    triggerBossWeakpointHitFeel: triggerBossWeakpointHitFeel
   };
 })(typeof window !== 'undefined' ? window : globalThis);
+

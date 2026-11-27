@@ -50,6 +50,106 @@
   // Station fixtures within this radius of an EMP detonation black out.
   var EMP_BLACKOUT_RADIUS = 22.0;
 
+  // Death Exam Boss ("零号检票员") authoritative tuning & counterplay parameters
+  var BOSS_DEATH_EXAM_CONFIG = {
+    maxHp: 520,
+    phase2Threshold: 0.55,
+    ruleArmorMult: 0.58,
+    ruleArmorOverride50Mult: 0.75,
+    armorBrokenMult: 1.45,
+    armorBreakDuration: 4.5,
+    stunImmuneDuration: 2.2,
+    lungeDamageP1: 56,
+    lungeDamageP2: 68,
+    lungeSanityP2: 14,
+    lungeAllyDamageP1: 42,
+    lungeAllyDamageP2: 52,
+    cleaveDamageP1: 40,
+    cleaveDamageP2: 48,
+    cleaveSanityP2: 8,
+    gazeDamage: 34,
+    gazeSanityLoss: 18,
+    gazeBindSec: 1.4,
+    slamDamage: 46,
+    slamSanityLoss: 16,
+    slamRadius: 7.8
+  };
+
+  function computePlayerOrbiterCount(ownedItems, charVis) {
+    if (!Array.isArray(ownedItems) || ownedItems.length === 0) {
+      return 0;
+    }
+    var raw = Number(charVis && charVis.orbiterCount);
+    if (!isFinite(raw)) raw = 1;
+    return Math.max(0, Math.min(4, Math.round(raw)));
+  }
+
+  function hasPassiveReconItem(ownedItems) {
+    if (!Array.isArray(ownedItems) || ownedItems.length === 0) return false;
+    var reconTagSet = {
+      '侦察': true, '洞察': true, '雷达': true, '热成像': true, '阴阳眼': true,
+      '声呐': true, '透视': true, '预知': true, '神识': true, '天眼': true,
+      '望气': true, '灵视': true, '探测': true, '扫描': true, '全知': true
+    };
+    var reconNameRx = /(侦察|声呐|雷达|热成像|阴阳眼|天眼|灵视|透视|洞察|望气|预知|扫描|探测|写轮眼|白眼|直死|千里眼|心眼)/;
+    for (var i = 0; i < ownedItems.length; i++) {
+      var it = ownedItems[i];
+      if (!it) continue;
+      if (it.activeSkill && it.activeSkill.role === 'recon') return true;
+      if (it.archetype === 'recon_pulse') return true;
+      if (Array.isArray(it.tags)) {
+        for (var t = 0; t < it.tags.length; t++) {
+          if (reconTagSet[String(it.tags[t])]) return true;
+        }
+      }
+      if (typeof it.name === 'string' && reconNameRx.test(it.name)) return true;
+    }
+    return false;
+  }
+
+  function evaluatePointVisibility(params) {
+    if (!params) return false;
+    var dx = (Number(params.tx) || 0) - (Number(params.px) || 0);
+    var dz = (Number(params.tz) || 0) - (Number(params.pz) || 0);
+    var dist = Math.sqrt(dx * dx + dz * dz);
+    if (params.reconActive) {
+      return dist <= 40.0;
+    }
+    if (params.hasPassiveRecon) {
+      return dist <= 26.0;
+    }
+    var sameZone = !params.playerZone || !params.targetZone || (params.playerZone === params.targetZone);
+    if (!sameZone) {
+      // Strictly block seeing into next rooms unless literally peering through an open doorway right in front
+      return dist <= 6.2 && !!params.hasLineOfSight;
+    }
+    return dist <= 22.0 && !!params.hasLineOfSight;
+  }
+
+  function computeBossDamageTaken(rawAmount, state) {
+    var base = Math.max(1, Number(rawAmount) || 1);
+    var st = state || {};
+    if (st.ignoreRuleArmor) {
+      return { damage: Math.max(1, Math.round(base)), armorMitigated: false, armorVulnerable: false };
+    }
+    var broken = (Number(st.armorBrokenTimer) || 0) > 0 || (Number(st.stunTimer) || 0) > 0;
+    if (broken) {
+      return {
+        damage: Math.max(1, Math.round(base * BOSS_DEATH_EXAM_CONFIG.armorBrokenMult)),
+        armorMitigated: false,
+        armorVulnerable: true
+      };
+    }
+    var mult = (Number(st.overridePct) || 0) >= 50
+      ? BOSS_DEATH_EXAM_CONFIG.ruleArmorOverride50Mult
+      : BOSS_DEATH_EXAM_CONFIG.ruleArmorMult;
+    return {
+      damage: Math.max(1, Math.round(base * mult)),
+      armorMitigated: true,
+      armorVulnerable: false
+    };
+  }
+
   // Sub-stepped swept collision against StationMap walls (grid=1) and rail_trench (grid=4).
   // Prevents fast dashes, lunges or knockback from tunneling across walls or vaulting onto tracks.
   function resolveSweptMovement(mapApi, fromX, fromZ, toX, toZ, radius) {
@@ -2183,6 +2283,7 @@
       dashVz: 0,
       dashColor: semanticInt('dashTrailInt', 0x52e5ff),
       channelTimer: 0,
+      ruleBindTimer: 0,
       lowHpPulseCd: 0,
       footstepAccum: 0,
       stepRippleAccum: 0,
@@ -2364,6 +2465,60 @@
     sealGroup.add(sealBand);
     bossVis.group.add(sealGroup);
 
+    // Close Shear Cleave crimson floor arc telegraph
+    var cleaveGeo = this.trackGeo(new THREE.RingGeometry(0.9, 3.85, 24, 1, -Math.PI * 0.45, Math.PI * 0.9));
+    cleaveGeo.rotateX(-Math.PI / 2);
+    var cleaveMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xff2238,
+      transparent: true,
+      opacity: 0.48,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var cleaveMesh = new THREE.Mesh(cleaveGeo, cleaveMat);
+    cleaveMesh.position.y = 0.12;
+    cleaveMesh.visible = false;
+    bossVis.group.add(cleaveMesh);
+
+    // Ticket Audit Gaze lock-on beam (world-space positioned from Inspector to target)
+    var gazeBeamGeo = this.trackGeo(new THREE.PlaneGeometry(0.24, 1.0));
+    gazeBeamGeo.rotateX(-Math.PI / 2);
+    gazeBeamGeo.translate(0, 0, 0.5);
+    var gazeBeamMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xffd2d8,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var gazeBeam = new THREE.Mesh(gazeBeamGeo, gazeBeamMat);
+    gazeBeam.position.y = 1.32;
+    gazeBeam.visible = false;
+    this.scene.add(gazeBeam);
+
+    // Rule Shockwave Slam expanding ring telegraph
+    var slamRingGeo = this.trackGeo(new THREE.RingGeometry(0.86, 1.0, 36));
+    slamRingGeo.rotateX(-Math.PI / 2);
+    var slamRingMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xff2640,
+      transparent: true,
+      opacity: 0.75,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var slamRing = new THREE.Mesh(slamRingGeo, slamRingMat);
+    slamRing.position.y = 0.13;
+    slamRing.visible = false;
+    bossVis.group.add(slamRing);
+
+    // Phase-2 / Vulnerability Exposed Core Weakpoint Reticle
+    var weakpointVis = (INFINITY.CombatFeel && typeof INFINITY.CombatFeel.buildBossWeakpointVisual === 'function')
+      ? INFINITY.CombatFeel.buildBossWeakpointVisual(THREE, bossVis.group, this.trackGeo.bind(this), this.trackMat.bind(this))
+      : null;
+
     this.inspector = {
       id: 'inspector',
       name: '零号检票员',
@@ -2372,8 +2527,13 @@
       vx: 0,
       vz: 0,
       radius: 0.56,
-      hp: 260,
-      maxHp: 260,
+      hp: BOSS_DEATH_EXAM_CONFIG.maxHp,
+      maxHp: BOSS_DEATH_EXAM_CONFIG.maxHp,
+      phase: 1,
+      mutated: false,
+      mutationTier: 'dormant',
+      threatTier: 'low',
+      skillCycleIndex: 0,
       sealedPct: 0,
       alive: true,
       state: 'PATROL', // 'PATROL' | 'INVESTIGATE' | 'HUNT'
@@ -2387,19 +2547,49 @@
       pathIndex: 0,
       repathTimer: 0.3,
       stunTimer: 0,
+      stunImmuneTimer: 0,
+      armorBrokenTimer: 0,
+      armorMsgCd: 0,
+      weakpointTimer: 0,
+      weakpointMaxTimer: 0,
+      weakpointReason: null,
+      pendingWeakpoint: null,
+      weakpointVis: weakpointVis,
       chainTimer: 0,
       chainMeshes: [],
+      blinkCd: 4.5,
+      blinkTelegraph: 0,
+      blinkTelegraphMax: 0.48,
+      blinkTargetX: bossPos.x,
+      blinkTargetZ: bossPos.z,
       lungeCd: 2.0,
       lungeTelegraph: 0,
+      lungeTelegraphMax: 0.85,
       lungeWindup: 0,
       lungeActive: 0,
       lungeDirX: 0,
       lungeDirZ: 1,
       lungeHitDone: false,
+      cleaveCd: 1.4,
+      cleaveTelegraph: 0,
+      cleaveDirX: 0,
+      cleaveDirZ: 1,
+      gazeCd: 5.5,
+      gazeTelegraph: 0,
+      gazeTargetId: 'player',
+      slamCd: 9.5,
+      slamTelegraph: 0,
+      kiteTimer: 0,
       teleMesh: teleMesh,
       teleFill: teleFill,
       teleParryGlint: teleParryGlint,
       teleParryGlintMat: glintMat,
+      cleaveMesh: cleaveMesh,
+      cleaveMat: cleaveMat,
+      gazeBeam: gazeBeam,
+      gazeBeamMat: gazeBeamMat,
+      slamRing: slamRing,
+      slamRingMat: slamRingMat,
       lanternCone: lanternCone,
       lanternConeMat: lConeMat,
       sealGroup: sealGroup,
@@ -2433,7 +2623,10 @@
     var accentHex = hexToInt(charVis && charVis.accentColor, 0xf0c46c);
     var sigilKey = 'sigil_' + ((charVis && charVis.sigilStyle) || 'bagua');
     var orbiterType = (charVis && charVis.orbiterType) || 'sword';
-    var orbiterCount = clamp(Number(charVis && charVis.orbiterCount) || 2, 1, 4);
+    var ownedItems = (this.state && this.state.player && Array.isArray(this.state.player.ownedItems))
+      ? this.state.player.ownedItems
+      : [];
+    var orbiterCount = computePlayerOrbiterCount(ownedItems, charVis);
 
     // Subtle etched under-foot build sigil (restrained idle presence, flares on cast pulse)
     var sigilGeo = this.trackGeo(new THREE.PlaneGeometry(1.28, 1.28));
@@ -2442,7 +2635,7 @@
       map: this.getPropTex(sigilKey, '#6fd8ea'),
       color: primaryHex,
       transparent: true,
-      opacity: 0.12 + Math.min(0.08, (Number(charVis && charVis.tierRank) || 0) * 0.02),
+      opacity: ownedItems.length === 0 ? 0.06 : (0.12 + Math.min(0.08, (Number(charVis && charVis.tierRank) || 0) * 0.02)),
       depthWrite: false,
       blending: THREE.AdditiveBlending
     }));
@@ -2453,7 +2646,7 @@
     // Optional S-tier / A-tier / Fused harmonic tilted halo ring
     var haloMesh = null;
     var haloMat = null;
-    if ((charVis && charVis.tierRank >= 3) || (charVis && charVis.hasFused)) {
+    if (ownedItems.length > 0 && ((charVis && charVis.tierRank >= 3) || (charVis && charVis.hasFused))) {
       var haloGeo = this.trackGeo(new THREE.TorusGeometry(0.84, 0.024, 6, 32));
       haloMat = this.trackMat(new THREE.MeshBasicMaterial({
         color: charVis.hasFused ? accentHex : primaryHex,
@@ -2468,7 +2661,7 @@
       auraGroup.add(haloMesh);
     }
 
-    // Orbiting relics (flying swords, golden talismans, cyber drone bits, blood shards, void prisms, etc.)
+    // Orbiting relics (only manifested once the player actually equips items/bloodlines)
     var orbiters = [];
     for (var i = 0; i < orbiterCount; i++) {
       var orbColor = (i % 2 === 1 && (charVis && charVis.hasFused)) ? accentHex : primaryHex;
@@ -2476,12 +2669,12 @@
       var mat;
       if (orbiterType === 'sword' || orbiterType === 'talisman' || orbiterType === 'drone_bit') {
         var spriteKey = orbiterType === 'sword' ? 'vfx_sword_bit' : (orbiterType === 'talisman' ? 'vfx_talisman' : 'vfx_drone_bit');
-        var oGeo = this.trackGeo(new THREE.PlaneGeometry(0.46, 0.46));
+        var oGeo = this.trackGeo(new THREE.PlaneGeometry(0.42, 0.42));
         mat = this.trackMat(new THREE.MeshBasicMaterial({
           map: this.getPropTex(spriteKey, '#ffffff'),
           color: orbiterType === 'talisman' ? 0xffffff : orbColor,
           transparent: true,
-          opacity: 0.85,
+          opacity: 0.78,
           depthWrite: false,
           side: THREE.DoubleSide,
           blending: THREE.AdditiveBlending
@@ -2489,44 +2682,47 @@
         mesh = new THREE.Mesh(oGeo, mat);
         mesh.rotation.x = -0.28;
       } else if (orbiterType === 'blood_shard' || orbiterType === 'void_prism') {
-        var cGeo = this.trackGeo(new THREE.OctahedronGeometry(0.15, 0));
+        var cGeo = this.trackGeo(new THREE.OctahedronGeometry(0.13, 0));
         mat = this.trackMat(new THREE.MeshBasicMaterial({
           color: orbColor,
           wireframe: orbiterType === 'void_prism',
           transparent: true,
-          opacity: 0.85,
+          opacity: 0.78,
           blending: THREE.AdditiveBlending
         }));
         mesh = new THREE.Mesh(cGeo, mat);
-        mesh.scale.set(0.85, 1.5, 0.85);
+        mesh.scale.set(0.85, 1.4, 0.85);
       } else if (orbiterType === 'bio_helix') {
-        var bGeo = this.trackGeo(new THREE.PlaneGeometry(0.36, 0.36));
+        var bGeo = this.trackGeo(new THREE.PlaneGeometry(0.34, 0.34));
         mat = this.trackMat(new THREE.MeshBasicMaterial({
           map: this.getPropTex('vfx_heal_cross', '#58e89a'),
           color: orbColor,
           transparent: true,
-          opacity: 0.82,
+          opacity: 0.76,
           depthWrite: false,
           side: THREE.DoubleSide,
           blending: THREE.AdditiveBlending
         }));
         mesh = new THREE.Mesh(bGeo, mat);
       } else if (orbiterType === 'kinetic_plate') {
-        var kGeo = this.trackGeo(new THREE.BoxGeometry(0.24, 0.32, 0.06));
+        // Sleek translucent hex-glyph ring instead of a raw floating white box
+        var kGeo = this.trackGeo(new THREE.RingGeometry(0.10, 0.16, 6));
         mat = this.trackMat(new THREE.MeshBasicMaterial({
           color: orbColor,
           transparent: true,
-          opacity: 0.78,
+          opacity: 0.48,
+          side: THREE.DoubleSide,
+          depthWrite: false,
           blending: THREE.AdditiveBlending
         }));
         mesh = new THREE.Mesh(kGeo, mat);
       } else {
         // rune_orb
-        var rGeo = this.trackGeo(new THREE.SphereGeometry(0.12, 8, 8));
+        var rGeo = this.trackGeo(new THREE.SphereGeometry(0.10, 8, 8));
         mat = this.trackMat(new THREE.MeshBasicMaterial({
           color: orbColor,
           transparent: true,
-          opacity: 0.88,
+          opacity: 0.78,
           blending: THREE.AdditiveBlending
         }));
         mesh = new THREE.Mesh(rGeo, mat);
@@ -3136,23 +3332,60 @@
     };
   };
 
+  EngineSession.prototype.hasPassiveReconCapability = function () {
+    var owned = (this.state && this.state.player && Array.isArray(this.state.player.ownedItems))
+      ? this.state.player.ownedItems
+      : [];
+    return hasPassiveReconItem(owned);
+  };
+
+  EngineSession.prototype.hasActiveReconVision = function () {
+    return (this.reconRevealTimer || 0) > 0;
+  };
+
+  EngineSession.prototype.canSeeWorldPoint = function (x, z) {
+    var p = this.player;
+    var mapApi = this.mapApi;
+    if (!p || !mapApi) return true;
+    var pZone = mapApi.getZoneAt(p.x, p.z) || null;
+    var tZone = mapApi.getZoneAt(x, z) || null;
+    var hasLos = typeof mapApi.hasLineOfSight === 'function'
+      ? mapApi.hasLineOfSight(p.x, p.z, x, z)
+      : true;
+    return evaluatePointVisibility({
+      px: p.x,
+      pz: p.z,
+      tx: x,
+      tz: z,
+      playerZone: pZone,
+      targetZone: tZone,
+      hasLineOfSight: hasLos,
+      reconActive: this.hasActiveReconVision(),
+      hasPassiveRecon: this.hasPassiveReconCapability()
+    });
+  };
+
   EngineSession.prototype.updateFogOfWar = function (realDt) {
     var fog = this.fogOfWar;
     var p = this.player;
     if (!fog || !p) return;
+
+    var hasRecon = this.hasActiveReconVision() || this.hasPassiveReconCapability();
+    var reconChanged = (fog.lastHasRecon !== hasRecon);
 
     fog.accum += realDt;
     var aimAngle = Math.atan2(this.aimWorld.z - p.z, this.aimWorld.x - p.x);
     var movedSq = (p.x - fog.lastX) * (p.x - fog.lastX) + (p.z - fog.lastZ) * (p.z - fog.lastZ);
     var aimDiff = Math.abs(Math.atan2(Math.sin(aimAngle - fog.lastAimAngle), Math.cos(aimAngle - fog.lastAimAngle)));
 
-    var shouldUpdate = (fog.accum >= 0.06) || (movedSq > 0.04) || (aimDiff > 0.14 && fog.accum >= 0.032);
+    var shouldUpdate = reconChanged || (fog.accum >= 0.06) || (movedSq > 0.04) || (aimDiff > 0.14 && fog.accum >= 0.032);
     if (!shouldUpdate) return;
 
     fog.accum = 0;
     fog.lastX = p.x;
     fog.lastZ = p.z;
     fog.lastAimAngle = aimAngle;
+    fog.lastHasRecon = hasRecon;
 
     var ctx = fog.ctx;
     var sc = fog.scale;
@@ -3160,25 +3393,27 @@
     var gridH = fog.gridH;
     var grid = this.fogGrid;
     var pts = this.fogRayPts;
+    var mapApi = this.mapApi;
+    var playerZone = (mapApi && typeof mapApi.getZoneAt === 'function') ? mapApi.getZoneAt(p.x, p.z) : null;
     var rayCount = 72;
     var coneHalf = 0.61086524; // +-35 deg flashlight cone
     var coneOuter = 0.76794487; // smooth outer feather to ~44 deg
 
-    // 1. Fill deep obsidian shadow veil
+    // 1. Fill deep obsidian shadow veil (strictly opaque for unrevealed next rooms unless recon active)
     ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, fog.w, fog.h);
-    ctx.fillStyle = 'rgba(6, 7, 11, 0.78)';
+    ctx.fillStyle = hasRecon ? 'rgba(6, 7, 11, 0.80)' : 'rgba(3, 4, 7, 0.99)';
     ctx.fillRect(0, 0, fog.w, fog.h);
 
-    // 2. Cast 72 true 2D DDA rays from player position against StationMap walls
+    // 2. Cast 72 true 2D DDA rays from player position against StationMap walls & room boundaries
     for (var i = 0; i < rayCount; i++) {
       var angle = (i / rayCount) * Math.PI * 2;
       var diff = Math.abs(Math.atan2(Math.sin(angle - aimAngle), Math.cos(angle - aimAngle)));
-      var maxDist = 21.0;
+      var maxDist = hasRecon ? 24.0 : 18.5;
       if (diff <= coneHalf) {
-        maxDist = 28.0;
+        maxDist = hasRecon ? 30.0 : 23.0;
       } else if (diff < coneOuter) {
-        maxDist = lerp(28.0, 21.0, (diff - coneHalf) / (coneOuter - coneHalf));
+        maxDist = lerp(hasRecon ? 30.0 : 23.0, hasRecon ? 24.0 : 18.5, (diff - coneHalf) / (coneOuter - coneHalf));
       }
 
       var rdx = Math.cos(angle);
@@ -3227,9 +3462,17 @@
           break;
         }
         if (readGridCell(grid, mapX, mapZ, gridW, gridH) === 1) {
-          // Reveal front lit face of visible wall while keeping behind-wall spaces dark
-          hitDist = Math.min(maxDist, currDist + 0.35);
+          // Reveal front lit face of visible wall while keeping behind-wall spaces completely dark
+          hitDist = Math.min(maxDist, currDist + 0.30);
           break;
+        }
+        // Without recon skills, do not let vision spill deep into the next room/zone
+        if (!hasRecon && playerZone && currDist > 5.0 && mapApi && typeof mapApi.getZoneAt === 'function') {
+          var cellZone = mapApi.getZoneAt(mapX + 0.5, mapZ + 0.5);
+          if (cellZone && cellZone !== playerZone) {
+            hitDist = Math.min(maxDist, currDist);
+            break;
+          }
         }
       }
 
@@ -3242,7 +3485,7 @@
     var pz = p.z * sc;
     ctx.globalCompositeOperation = 'destination-out';
 
-    var visGrad = ctx.createRadialGradient(px, pz, 1.5 * sc, px, pz, 23.5 * sc);
+    var visGrad = ctx.createRadialGradient(px, pz, 1.5 * sc, px, pz, (hasRecon ? 26.0 : 21.0) * sc);
     visGrad.addColorStop(0.0, 'rgba(0, 0, 0, 1.0)');
     visGrad.addColorStop(0.55, 'rgba(0, 0, 0, 0.96)');
     visGrad.addColorStop(0.80, 'rgba(0, 0, 0, 0.72)');
@@ -3258,33 +3501,30 @@
     ctx.fill();
 
     // Guaranteed personal visibility halo around player silhouette
-    var haloGrad = ctx.createRadialGradient(px, pz, 0.5 * sc, px, pz, 3.2 * sc);
+    var haloGrad = ctx.createRadialGradient(px, pz, 0.5 * sc, px, pz, 3.0 * sc);
     haloGrad.addColorStop(0.0, 'rgba(0, 0, 0, 1.0)');
     haloGrad.addColorStop(0.7, 'rgba(0, 0, 0, 0.85)');
     haloGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
     ctx.beginPath();
-    ctx.arc(px, pz, 3.2 * sc, 0, Math.PI * 2);
+    ctx.arc(px, pz, 3.0 * sc, 0, Math.PI * 2);
     ctx.fillStyle = haloGrad;
     ctx.fill();
 
-    // 4. Ominous crimson lantern dim cutout around Inspector ONLY when within 16 tiles
+    // 4. Crimson lantern cutout around Inspector ONLY when player can actually see/sense Inspector!
     var ins = this.inspector;
-    if (ins && ins.alive) {
-      var dIns = dist2D(p.x, p.z, ins.x, ins.z);
-      if (dIns <= 16.0) {
-        var ix = ins.x * sc;
-        var iz = ins.z * sc;
-        var ir = 3.5 * sc;
-        var lanternAlpha = ins.stunTimer > 0 ? 0.18 : 0.45;
-        var lanGrad = ctx.createRadialGradient(ix, iz, 0.2 * sc, ix, iz, ir);
-        lanGrad.addColorStop(0.0, 'rgba(0, 0, 0, ' + lanternAlpha + ')');
-        lanGrad.addColorStop(0.55, 'rgba(0, 0, 0, ' + (lanternAlpha * 0.48).toFixed(3) + ')');
-        lanGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
-        ctx.beginPath();
-        ctx.arc(ix, iz, ir, 0, Math.PI * 2);
-        ctx.fillStyle = lanGrad;
-        ctx.fill();
-      }
+    if (ins && ins.alive && this.canSeeWorldPoint(ins.x, ins.z)) {
+      var ix = ins.x * sc;
+      var iz = ins.z * sc;
+      var ir = 3.5 * sc;
+      var lanternAlpha = ins.stunTimer > 0 ? 0.18 : 0.45;
+      var lanGrad = ctx.createRadialGradient(ix, iz, 0.2 * sc, ix, iz, ir);
+      lanGrad.addColorStop(0.0, 'rgba(0, 0, 0, ' + lanternAlpha + ')');
+      lanGrad.addColorStop(0.55, 'rgba(0, 0, 0, ' + (lanternAlpha * 0.48).toFixed(3) + ')');
+      lanGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+      ctx.beginPath();
+      ctx.arc(ix, iz, ir, 0, Math.PI * 2);
+      ctx.fillStyle = lanGrad;
+      ctx.fill();
     }
 
     ctx.globalCompositeOperation = 'source-over';
@@ -4239,7 +4479,12 @@
       this.spawnWallImpactDebris(impactX, impactZ, res.normalX, res.normalZ);
       this.addCameraShake(0.16, 0.14);
       if (opts && opts.announceWallSlam) {
-        this.spawnFloatingText(actor.x, actor.id === 'inspector' ? 2.75 : 2.15, actor.z, '撞墙震荡!', '#ffbe6b');
+        if (actor.id === 'inspector') {
+          actor.armorBrokenTimer = Math.max(actor.armorBrokenTimer || 0, 3.8);
+          this.exposeInspectorWeakpoint('wall_crash', 3.6);
+        } else {
+          this.spawnFloatingText(actor.x, 2.15, actor.z, '撞墙震荡!', '#ffbe6b');
+        }
       }
     }
     return res;
@@ -4363,6 +4608,7 @@
     if (p.invulnTimer > 0) p.invulnTimer = Math.max(0, p.invulnTimer - simDt);
     if (p.actionTimer > 0) p.actionTimer = Math.max(0, p.actionTimer - simDt);
     if (p.channelTimer > 0) p.channelTimer = Math.max(0, p.channelTimer - simDt);
+    if (p.ruleBindTimer > 0) p.ruleBindTimer = Math.max(0, p.ruleBindTimer - simDt);
     if (p.hitFlash > 0) p.hitFlash = Math.max(0, p.hitFlash - realDt);
     if (p.whiteFlash > 0) p.whiteFlash = Math.max(0, p.whiteFlash - realDt);
     if (this.exitWarnTimer > 0) this.exitWarnTimer = Math.max(0, this.exitWarnTimer - realDt);
@@ -4486,7 +4732,8 @@
       if (this.keys['d'] || this.keys['KeyD'] || this.keys['ArrowRight']) mx += 1;
     }
 
-    var speed = 8.8 * this.passives.moveSpeedMult * (isOverclock ? 1.65 : 1.0);
+    var bindMult = (p.ruleBindTimer > 0) ? 0.45 : 1.0;
+    var speed = 8.8 * this.passives.moveSpeedMult * (isOverclock ? 1.65 : 1.0) * bindMult;
     if (p.dashTimer > 0) {
       p.dashTimer = Math.max(0, p.dashTimer - simDt);
       p.vx = p.dashVx;
@@ -4931,24 +5178,34 @@
         playSfxSafe('sword_slash');
         this.emitSoundRipple(p.x, p.z, 46 * this.passives.noiseMult, 'skill');
 
-        // Check PERFECT PARRY during Inspector red lunge telegraph (lungeWindup > 0) or active lunge!
+        // Check PERFECT PARRY during Inspector red lunge or close shear cleave telegraph!
         var dIns = dist2D(p.x, p.z, ins.x, ins.z);
-        if (ins.alive && (ins.lungeWindup > 0 || ins.lungeTelegraph > 0 || ins.lungeActive > 0) && dIns <= arcRange + 1.1) {
+        var parryableWindow = (ins.lungeWindup > 0 || ins.lungeTelegraph > 0 || ins.lungeActive > 0 || ins.cleaveTelegraph > 0);
+        if (ins.alive && parryableWindow && dIns <= arcRange + 1.2) {
           ins.lungeTelegraph = 0;
           ins.lungeWindup = 0;
           ins.lungeActive = 0;
+          ins.cleaveTelegraph = 0;
+          ins.blinkTelegraph = 0;
+          ins.pendingWeakpoint = null;
           ins.teleMesh.visible = false;
           ins.teleFill.visible = false;
+          if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
           if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
-          ins.stunTimer = Math.max(ins.stunTimer, 2.8);
+          ins.stunTimer = Math.max(ins.stunTimer, 2.6);
+          ins.armorBrokenTimer = Math.max(ins.armorBrokenTimer || 0, BOSS_DEATH_EXAM_CONFIG.armorBreakDuration);
           p.energy = Math.min(p.maxEnergy, p.energy + 25);
           this.stats.parries += 1;
-          var parryDmg = Math.round(power * 1.8);
+          var parryDmg = Math.round(power * 1.9);
           this.damageInspector(parryDmg, dir.x * 6.5, dir.z * 6.5, true, {
             playerImpact: true,
             hitStop: 0.08,
-            impactColor: 0xffe484
+            impactColor: 0xffe484,
+            ignoreRuleArmor: true
           });
+          if (ins.alive) {
+            this.exposeInspectorWeakpoint('parry_shatter', 4.5);
+          }
           this.hitStopTimer = 0.08;
           this.parryFlashTimer = 0.24;
           this.triggerImpactFrame(0.085);
@@ -4960,11 +5217,11 @@
           this.spawnShockRing(ins.x, ins.z, 2.8, 0xffffff, 0.28);
           this.spawnSparkBurst(ins.x, 1.35, ins.z, 0xffe07d, 26);
           playSfxSafe('parry_clang');
-          this.spawnFloatingText(ins.x, 3.0, ins.z, '✦ 完美弹反! ' + (sl.name || '宵练断势'), '#ffd86b', 'parry');
+          this.spawnFloatingText(ins.x, 3.0, ins.z, '✦ 完美弹反 · 规则破甲! ' + (sl.name || '宵练断势'), '#ffd86b', 'parry');
           this.emitRadio({
             type: 'spark',
             speaker: '系统校验',
-            text: '【完美弹反】你以「' + (sl.name || '宵练剑弧') + '」截断了零号检票员的处决突刺，使其陷入 2.8 秒硬直并返还 25 点能量！'
+            text: '【完美弹反 · 弱点暴露】你以「' + (sl.name || '宵练剑弧') + '」截断了零号检票员的处决攻势，震碎规则护甲并暴露胸口核心 4.5 秒，返还 25 点能量！'
           });
         } else if (ins.alive && this.isPointInArc(p.x, p.z, dir.x, dir.z, ins.x, ins.z, arcRange + ins.radius, 0.15)) {
           this.damageInspector(power, dir.x * 5.0, dir.z * 5.0, vfx.isHighTier, {
@@ -5166,13 +5423,17 @@
         var chainRange = Math.max(feelMin, radius);
         var dToBoss = dist2D(p.x, p.z, ins.x, ins.z);
         if (ins.alive && dToBoss <= chainRange) {
-          var sealAdd = 28 + (activeResonance && activeResonance.bonuses ? (activeResonance.bonuses.sealBonusPct || 0) : 0);
+          var sealAdd = 24 + (activeResonance && activeResonance.bonuses ? (activeResonance.bonuses.sealBonusPct || 0) : 0);
           ins.chainTimer = Math.max(ins.chainTimer, Math.max(5.0, duration));
+          ins.armorBrokenTimer = Math.max(ins.armorBrokenTimer || 0, 4.2);
           ins.sealedPct = Math.min(100, ins.sealedPct + sealAdd);
           this.spawnSealChainsVfx(p.x, p.z, ins.x, ins.z, colorHex, vfx);
-          this.damageInspector(Math.round(power * 0.75), 0, 0, false, { impactColor: colorHex });
+          this.damageInspector(Math.round(power * 0.75), 0, 0, false, { impactColor: colorHex, ignoreRuleArmor: true });
+          if (ins.alive && ins.sealedPct < 100) {
+            this.exposeInspectorWeakpoint('seal_shatter', 4.0);
+          }
           this.spawnImpactStar(ins.x, 1.4, ins.z, colorHex, 2.1, 0.30);
-          this.spawnFloatingText(ins.x, 2.8, ins.z, '规则封印 +' + sealAdd + '% (' + Math.round(ins.sealedPct) + '%)', vfx.primaryColor || '#f0c46c');
+          this.spawnFloatingText(ins.x, 2.8, ins.z, '规则封印 +' + sealAdd + '% · 破甲!', vfx.primaryColor || '#f0c46c');
           playSfxSafe('fusion');
           this.addCameraShake(0.28, 0.25);
 
@@ -6014,24 +6275,37 @@
     this.glitchAmount = Math.max(this.glitchAmount, 0.5);
     playSfxSafe('emp_boom');
 
-    // Stun Inspector if in radius + snap direct lightning arc onto Inspector!
+    // Stun Inspector if in radius + snap direct lightning arc onto Inspector & shatter Rule Armor!
     var ins = this.inspector;
     if (ins.alive && dist2D(x, z, ins.x, ins.z) <= radius + ins.radius) {
-      ins.stunTimer = Math.max(ins.stunTimer, stunSec);
+      var effectiveStun = (ins.stunImmuneTimer || 0) > 0 ? Math.min(1.2, stunSec * 0.4) : stunSec;
+      ins.stunTimer = Math.max(ins.stunTimer, effectiveStun);
+      ins.armorBrokenTimer = Math.max(ins.armorBrokenTimer || 0, BOSS_DEATH_EXAM_CONFIG.armorBreakDuration);
       ins.lungeTelegraph = 0;
       ins.lungeWindup = 0;
       ins.lungeActive = 0;
+      ins.cleaveTelegraph = 0;
+      ins.gazeTelegraph = 0;
+      ins.slamTelegraph = 0;
+      ins.blinkTelegraph = 0;
+      ins.pendingWeakpoint = null;
       ins.teleMesh.visible = false;
       ins.teleFill.visible = false;
+      if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
+      if (ins.gazeBeam) ins.gazeBeam.visible = false;
+      if (ins.slamRing) ins.slamRing.visible = false;
       if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
       this.spawnLightningBolt(x, 1.1, z, ins.x, 1.45, ins.z, 0xffffff, 0.42, 7);
       this.spawnImpactStar(ins.x, 1.45, ins.z, mainCol, 2.5, 0.30);
-      this.damageInspector(power, 0, 0, true, { impactColor: mainCol });
-      this.spawnFloatingText(ins.x, 2.8, ins.z, 'EMP瘫痪 ' + stunSec.toFixed(1) + 's!', (vfx && vfx.primaryColor) || '#4de8ff');
+      this.damageInspector(power, 0, 0, true, { impactColor: mainCol, ignoreRuleArmor: true });
+      if (ins.alive) {
+        this.exposeInspectorWeakpoint('emp_shatter', 4.5);
+      }
+      this.spawnFloatingText(ins.x, 2.8, ins.z, 'EMP破甲瘫痪 ' + effectiveStun.toFixed(1) + 's!', (vfx && vfx.primaryColor) || '#4de8ff');
       this.recordMissionEvent(
         'branch',
         'EMP 电磁瘫痪零号检票员',
-        '成功干扰其胸口对讲机频段，检票员陷入 ' + stunSec.toFixed(1) + ' 秒感知僵直。',
+        '成功干扰其胸口对讲机频段，击碎规则护甲并使其陷入 ' + effectiveStun.toFixed(1) + ' 秒感知僵直。',
         { branchId: 'inspector_hunt' }
       );
     }
@@ -6929,28 +7203,138 @@
 
       var moving = (Math.abs(vx) + Math.abs(vz)) > 0.35;
       this.updateActorSprite(npc, simDt, moving);
+      npc.vis.group.visible = this.canSeeWorldPoint(npc.x, npc.z);
     }
   };
 
   // ---------------------------------------------------------------------------
-  // Inspector Boss AI (PATROL -> INVESTIGATE -> HUNT + 0.9s Crimson Lunge)
+  // Inspector Boss AI — Death Exam Grade Multi-Mechanic Boss
+  // (Rule Armor + Execution Lunge + Close Shear Cleave + Audit Gaze + Rule Slam + Phase 2)
   // ---------------------------------------------------------------------------
+  EngineSession.prototype.exposeInspectorWeakpoint = function (eventType, fallbackDuration) {
+    var ins = this.inspector;
+    if (!ins || !ins.alive) return null;
+    var trigger = (INFINITY.AI && typeof INFINITY.AI.computeWeakpointTrigger === 'function')
+      ? INFINITY.AI.computeWeakpointTrigger(eventType, { threatLevel: this.threatLevel })
+      : null;
+    var dur = trigger ? trigger.duration : (Number(fallbackDuration) || 3.2);
+    var callout = trigger ? trigger.callout : '✦ 核心弱点暴露!';
+    ins.weakpointTimer = Math.max(ins.weakpointTimer || 0, dur);
+    ins.weakpointMaxTimer = Math.max(ins.weakpointMaxTimer || 0, dur);
+    ins.weakpointReason = eventType || 'exposed';
+    ins.armorBrokenTimer = Math.max(ins.armorBrokenTimer || 0, dur);
+
+    var wpSpec = (INFINITY.CombatFeel && typeof INFINITY.CombatFeel.getBossPhase2Feel === 'function')
+      ? INFINITY.CombatFeel.getBossPhase2Feel('weakpoint_expose')
+      : { shakeAmp: 0.22, shakeDur: 0.18, shakeFreq: 32, primaryColor: 0xffe875, secondaryColor: 0x4df8ff, ringRadius: 3.1 };
+    this.addCameraShake(wpSpec.shakeAmp, wpSpec.shakeDur, wpSpec.shakeFreq);
+    this.spawnShockRing(ins.x, ins.z, wpSpec.ringRadius || 3.1, wpSpec.secondaryColor || 0x4df8ff, 0.42);
+    this.spawnShockRing(ins.x, ins.z, (wpSpec.ringRadius || 3.1) * 0.62, wpSpec.primaryColor || 0xffe875, 0.28);
+    this.spawnFloatingText(ins.x, 3.05, ins.z, callout, '#ffe875', 'weakpoint');
+    playSfxSafe('blade_ring');
+    return { reason: ins.weakpointReason, duration: dur, callout: callout };
+  };
+
   EngineSession.prototype.updateInspector = function (simDt) {
     var ins = this.inspector;
     if (!ins.alive) {
       ins.vis.group.visible = false;
+      if (ins.gazeBeam) ins.gazeBeam.visible = false;
+      if (ins.weakpointVis && ins.weakpointVis.group) ins.weakpointVis.group.visible = false;
       if (this.inspectorLantern) this.inspectorLantern.intensity = 0;
       return;
     }
 
     var p = this.player;
     var mapApi = this.mapApi;
+    var cfg = BOSS_DEATH_EXAM_CONFIG;
+    var canSeeIns = this.canSeeWorldPoint(ins.x, ins.z);
+    ins.vis.group.visible = canSeeIns;
 
     if (ins.hitFlash > 0) ins.hitFlash = Math.max(0, ins.hitFlash - simDt);
     if (ins.whiteFlash > 0) ins.whiteFlash = Math.max(0, ins.whiteFlash - simDt);
     if (ins.actionTimer > 0) ins.actionTimer = Math.max(0, ins.actionTimer - simDt);
+    if (ins.blinkCd > 0) ins.blinkCd = Math.max(0, ins.blinkCd - simDt);
     if (ins.lungeCd > 0) ins.lungeCd = Math.max(0, ins.lungeCd - simDt);
+    if (ins.cleaveCd > 0) ins.cleaveCd = Math.max(0, ins.cleaveCd - simDt);
+    if (ins.gazeCd > 0) ins.gazeCd = Math.max(0, ins.gazeCd - simDt);
+    if (ins.slamCd > 0) ins.slamCd = Math.max(0, ins.slamCd - simDt);
     if (ins.chainTimer > 0) ins.chainTimer = Math.max(0, ins.chainTimer - simDt);
+    if (ins.armorBrokenTimer > 0) ins.armorBrokenTimer = Math.max(0, ins.armorBrokenTimer - simDt);
+    if (ins.stunImmuneTimer > 0) ins.stunImmuneTimer = Math.max(0, ins.stunImmuneTimer - simDt);
+    if (ins.armorMsgCd > 0) ins.armorMsgCd = Math.max(0, ins.armorMsgCd - simDt);
+    if (ins.weakpointTimer > 0) {
+      ins.weakpointTimer = Math.max(0, ins.weakpointTimer - simDt);
+      if (ins.weakpointTimer <= 0) {
+        ins.weakpointReason = null;
+        ins.weakpointMaxTimer = 0;
+      }
+    }
+
+    if (ins.weakpointVis && INFINITY.CombatFeel && typeof INFINITY.CombatFeel.updateBossWeakpointVisual === 'function') {
+      INFINITY.CombatFeel.updateBossWeakpointVisual(ins.weakpointVis, ins, this.elapsedReal);
+    }
+
+    // Phase-2 Mutation evaluation driven by HP threshold & live station threat level
+    var mutEval = (INFINITY.AI && typeof INFINITY.AI.evaluateInspectorMutation === 'function')
+      ? INFINITY.AI.evaluateInspectorMutation({
+        hp: ins.hp,
+        maxHp: ins.maxHp,
+        threatLevel: this.threatLevel,
+        alreadyMutated: ins.mutated,
+        currentPhase: ins.phase
+      })
+      : {
+        phase: (ins.phase >= 2 || (ins.hp / Math.max(1, ins.maxHp)) <= cfg.phase2Threshold) ? 2 : 1,
+        mutated: (ins.phase >= 2 || (ins.hp / Math.max(1, ins.maxHp)) <= cfg.phase2Threshold),
+        justMutated: ins.phase < 2 && ((ins.hp / Math.max(1, ins.maxHp)) <= cfg.phase2Threshold),
+        mutationTier: ins.phase >= 2 ? 'mutated' : 'dormant',
+        threatTier: 'low',
+        speedMult: ins.phase >= 2 ? 1.22 : 1.0,
+        damageMult: ins.phase >= 2 ? 1.18 : 1.0,
+        cooldownMult: ins.phase >= 2 ? 0.82 : 1.0,
+        blinkCooldownSec: 6.0,
+        radioAlert: '【死考警戒 · 二阶段变异】零号检票员撕裂规则外壳，解锁瞬移奇袭与弱点核心机制！'
+      };
+
+    ins.mutationTier = mutEval.mutationTier;
+    ins.threatTier = mutEval.threatTier;
+    var isPhase2 = Boolean(mutEval.mutated || ins.phase >= 2);
+    if (mutEval.justMutated) {
+      ins.phase = 2;
+      ins.mutated = true;
+      ins.lungeTelegraph = 0;
+      ins.lungeWindup = 0;
+      ins.lungeActive = 0;
+      ins.cleaveTelegraph = 0;
+      ins.gazeTelegraph = 0;
+      ins.blinkTelegraph = 0;
+      if (ins.teleMesh) ins.teleMesh.visible = false;
+      if (ins.teleFill) ins.teleFill.visible = false;
+      if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
+      if (ins.gazeBeam) ins.gazeBeam.visible = false;
+      if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
+      ins.slamTelegraph = 0.92;
+      ins.slamCd = Math.max(4.5, 8.5 * mutEval.cooldownMult);
+      ins.blinkCd = Math.min(ins.blinkCd || 4.5, 2.2);
+      ins.pendingWeakpoint = 'slam_recovery';
+      playSfxSafe('alert');
+      if (INFINITY.CombatFeel && typeof INFINITY.CombatFeel.triggerBossMutationAwakeningFeel === 'function') {
+        INFINITY.CombatFeel.triggerBossMutationAwakeningFeel(this, ins.x, ins.z, {
+          callout: mutEval.mutationTier === 'overdrive' ? '【高危异变 · 过载二阶段】' : '【二阶段变异 · 频段过载】'
+        });
+      } else {
+        this.addCameraShake(0.48, 0.35);
+        this.glitchAmount = Math.max(this.glitchAmount, 0.72);
+        this.spawnFloatingText(ins.x, 3.05, ins.z, '【二阶段变异 · 频段过载】', '#ff2942', 'mutation');
+      }
+      if (mutEval.radioAlert) {
+        this.emitRadio({
+          type: 'system',
+          text: mutEval.radioAlert
+        });
+      }
+    }
 
     // Boss volumetric crimson lantern sway, golden containment seal ring, & phase-2 rage fissures
     if (ins.lanternCone) {
@@ -6973,21 +7357,21 @@
         ins.sealGroup.visible = false;
       }
     }
-    // Phase-2 enraged crimson arcs when HP drops below 55%
-    if (ins.hp / Math.max(1, ins.maxHp) < 0.55) {
+    // Phase-2 enraged crimson arcs (intensifies in overdrive threat tier)
+    if (isPhase2 && canSeeIns) {
       ins.rageArcAccum = (ins.rageArcAccum || 0) - simDt;
       if (ins.rageArcAccum <= 0) {
-        ins.rageArcAccum = 0.42;
+        ins.rageArcAccum = mutEval.mutationTier === 'overdrive' ? 0.22 : 0.36;
         var ra = Math.random() * Math.PI * 2;
         this.spawnLightningBolt(
           ins.x, 1.4, ins.z,
-          ins.x + Math.cos(ra) * 1.35, 0.3 + Math.random() * 1.4, ins.z + Math.sin(ra) * 1.35,
-          0xff2942, 0.18, 4
+          ins.x + Math.cos(ra) * 1.55, 0.3 + Math.random() * 1.4, ins.z + Math.sin(ra) * 1.55,
+          mutEval.mutationTier === 'overdrive' ? 0xff4760 : 0xff2942, 0.18, 4
         );
       }
     }
     // Dark-red trailing mist & boot sparks while hunting
-    if (ins.state === 'HUNT' && ins.stunTimer <= 0) {
+    if (ins.state === 'HUNT' && ins.stunTimer <= 0 && canSeeIns) {
       ins.mistAccum = (ins.mistAccum || 0) - simDt;
       if (ins.mistAccum <= 0) {
         ins.mistAccum = 0.24;
@@ -6995,52 +7379,265 @@
       }
     }
 
-    // Stunned (from EMP or Perfect Parry!)
+    // Stunned (from EMP or Perfect Parry!) with brief stun-DR immunity on recovery
     if (ins.stunTimer > 0) {
       ins.stunTimer = Math.max(0, ins.stunTimer - simDt);
+      if (ins.stunTimer <= 0) {
+        ins.stunImmuneTimer = Math.max(ins.stunImmuneTimer || 0, cfg.stunImmuneDuration);
+      }
       ins.teleMesh.visible = false;
       ins.teleFill.visible = false;
+      if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
+      if (ins.gazeBeam) ins.gazeBeam.visible = false;
+      if (ins.slamRing) ins.slamRing.visible = false;
       if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
       this.updateActorSprite(ins, simDt, false);
       this.enforceWardBlockOnInspector();
       return;
     }
 
+    // Mechanic 0 (Phase-2 Mutation): Phantom Spatial Blink Ambush -> Chains into Parryable Shear Cleave + Core Overheat Weakpoint
+    if (ins.blinkTelegraph > 0) {
+      ins.blinkTelegraph = Math.max(0, ins.blinkTelegraph - simDt);
+      ins.hitFlash = Math.max(ins.hitFlash, 0.08);
+      ins.actionTimer = 0.22;
+      if (canSeeIns && Math.random() < 0.42) {
+        this.spawnSparkBurst(ins.x, 1.35, ins.z, 0xff2942, 3);
+      }
+      if (ins.blinkTelegraph <= 0) {
+        var bTgt = (ins.huntTargetId === 'player') ? p : (this.squadById[ins.huntTargetId] || p);
+        if (!bTgt || bTgt.alive === false) bTgt = p;
+        var oldX = ins.x;
+        var oldZ = ins.z;
+        var bAng = Math.atan2(ins.z - bTgt.z, ins.x - bTgt.x) + Math.PI;
+        var desiredX = bTgt.x + Math.cos(bAng) * 3.0;
+        var desiredZ = bTgt.z + Math.sin(bAng) * 3.0;
+        var blinkSafe = mapApi.resolveCircleWallCollision(desiredX, desiredZ, ins.radius);
+        ins.x = blinkSafe.x;
+        ins.z = blinkSafe.z;
+        ins.facingLeft = bTgt.x < ins.x;
+        ins.blinkCd = mutEval.blinkCooldownSec || 5.8;
+        this.enforceWardBlockOnInspector();
+
+        if (INFINITY.CombatFeel && typeof INFINITY.CombatFeel.spawnBossTeleportVfx === 'function') {
+          INFINITY.CombatFeel.spawnBossTeleportVfx(this, oldX, oldZ, ins.x, ins.z, {
+            facingLeft: ins.facingLeft
+          });
+        } else {
+          this.spawnAfterimage(oldX, oldZ, 'inspector', ins.facingLeft, 0xff2238, 0.45, 'dash');
+          this.spawnShockRing(ins.x, ins.z, 3.4, 0xff2942, 0.38);
+        }
+        playSfxSafe('alert');
+        this.emitSoundRipple(ins.x, ins.z, 76, 'boss');
+
+        // Immediately chain into a parryable Shear Cleave, then expose weakpoint via blink_overheat!
+        var cdx = bTgt.x - ins.x;
+        var cdz = bTgt.z - ins.z;
+        var clen = Math.max(0.01, Math.sqrt(cdx * cdx + cdz * cdz));
+        ins.cleaveDirX = cdx / clen;
+        ins.cleaveDirZ = cdz / clen;
+        ins.cleaveTelegraph = 0.48;
+        ins.pendingWeakpoint = 'blink_overheat';
+      }
+      this.updateActorSprite(ins, simDt, false);
+      return;
+    }
+
+    // Mechanic A: Rule Shockwave Slam (expanding floor ring -> heavy AOE + SAN drain + ward shred + Phase-2 weakpoint exposure)
+    if (ins.slamTelegraph > 0) {
+      ins.slamTelegraph = Math.max(0, ins.slamTelegraph - simDt);
+      var sMax = isPhase2 ? 0.92 : 1.05;
+      var sProg = 1 - clamp(ins.slamTelegraph / sMax, 0, 1);
+      if (ins.slamRing && ins.slamRingMat) {
+        ins.slamRing.visible = true;
+        var srScale = Math.max(0.4, sProg * cfg.slamRadius);
+        ins.slamRing.scale.set(srScale, srScale, 1);
+        ins.slamRingMat.opacity = 0.35 + sProg * 0.55;
+      }
+      ins.actionTimer = 0.25;
+      if (ins.slamTelegraph <= 0) {
+        if (ins.slamRing) ins.slamRing.visible = false;
+        ins.slamCd = Math.max(4.5, (isPhase2 ? 8.5 : 11.5) * mutEval.cooldownMult);
+        this.addCameraShake(0.52, 0.34);
+        this.spawnShockRing(ins.x, ins.z, cfg.slamRadius, 0xff2238, 0.55);
+        this.spawnShockRing(ins.x, ins.z, cfg.slamRadius * 0.65, 0xffb3ba, 0.34);
+        this.spawnSparkBurst(ins.x, 1.0, ins.z, 0xff2942, 24);
+        playSfxSafe('emp_boom');
+        this.emitSoundRipple(ins.x, ins.z, 86, 'boss');
+
+        var slamDmg = Math.round(cfg.slamDamage * mutEval.damageMult);
+        // Hit player if within slam radius
+        var dSlamP = dist2D(ins.x, ins.z, p.x, p.z);
+        if (dSlamP <= cfg.slamRadius) {
+          var sdx = (p.x - ins.x) / Math.max(0.01, dSlamP);
+          var sdz = (p.z - ins.z) / Math.max(0.01, dSlamP);
+          p.sanity = Math.max(0, p.sanity - cfg.slamSanityLoss);
+          this.damagePlayer(slamDmg, sdx * 6.8, sdz * 6.8);
+        }
+        // Hit allies in slam radius
+        for (var sai = 0; sai < this.squad.length; sai++) {
+          var sAlly = this.squad[sai];
+          if (sAlly.alive && dist2D(ins.x, ins.z, sAlly.x, sAlly.z) <= cfg.slamRadius) {
+            this.damageAlly(sAlly, Math.round(34 * mutEval.damageMult));
+          }
+        }
+        // Degrade nearby protective wards
+        for (var swi = 0; swi < this.wards.length; swi++) {
+          var wObj = this.wards[swi];
+          if (dist2D(ins.x, ins.z, wObj.x, wObj.z) <= cfg.slamRadius + (wObj.radius || 3.0)) {
+            wObj.ttl = Math.max(0.2, wObj.ttl - 4.0);
+          }
+        }
+        // Phase-2 Slam vents core heat, exposing Inspector's chest weakpoint!
+        if (isPhase2 || ins.pendingWeakpoint === 'slam_recovery') {
+          ins.pendingWeakpoint = null;
+          this.exposeInspectorWeakpoint('slam_recovery', 3.4);
+        }
+      }
+      this.updateActorSprite(ins, simDt, false);
+      return;
+    }
+
+    // Mechanic B: Close Shear Cleave (wide crimson arc — parryable!)
+    if (ins.cleaveTelegraph > 0) {
+      ins.cleaveTelegraph = Math.max(0, ins.cleaveTelegraph - simDt);
+      var cMax = isPhase2 ? 0.48 : 0.55;
+      var cProg = 1 - clamp(ins.cleaveTelegraph / cMax, 0, 1);
+      var cAng = Math.atan2(ins.cleaveDirZ, ins.cleaveDirX);
+      if (ins.cleaveMesh && ins.cleaveMat) {
+        ins.cleaveMesh.visible = true;
+        ins.cleaveMesh.rotation.y = -cAng;
+        ins.cleaveMat.opacity = 0.32 + cProg * 0.52;
+      }
+      if (ins.teleParryGlint && ins.teleParryGlintMat) {
+        ins.teleParryGlint.visible = true;
+        ins.teleParryGlint.position.x = ins.facingLeft ? -0.68 : 0.68;
+        ins.teleParryGlint.rotation.z = this.elapsedReal * 9.0;
+        ins.teleParryGlint.scale.set(0.85 + cProg * 0.45, 0.85 + cProg * 0.45, 1);
+        ins.teleParryGlintMat.color.setHex(0xffe484);
+        ins.teleParryGlintMat.opacity = 0.92;
+      }
+      ins.actionTimer = 0.2;
+      if (ins.cleaveTelegraph <= 0) {
+        if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
+        if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
+        ins.cleaveCd = Math.max(1.5, (isPhase2 ? 2.4 : 3.2) * mutEval.cooldownMult);
+        this.triggerActorSquash(ins, 1.24, 0.82);
+        this.spawnSlashArc(ins.x, ins.z, cAng, 3.85, 0xff2238, 0.28, true, { primaryColor: '#ff2238', secondaryColor: '#ff99a4' });
+        playSfxSafe('sword_slash');
+
+        var cDmg = Math.round((isPhase2 ? cfg.cleaveDamageP2 : cfg.cleaveDamageP1) * mutEval.damageMult);
+        if (this.isPointInArc(ins.x, ins.z, ins.cleaveDirX, ins.cleaveDirZ, p.x, p.z, 3.9 + p.radius, -0.15)) {
+          if (isPhase2) p.sanity = Math.max(0, p.sanity - cfg.cleaveSanityP2);
+          this.damagePlayer(cDmg, ins.cleaveDirX * 5.8, ins.cleaveDirZ * 5.8);
+        }
+        for (var cai = 0; cai < this.squad.length; cai++) {
+          var cAlly = this.squad[cai];
+          if (cAlly.alive && this.isPointInArc(ins.x, ins.z, ins.cleaveDirX, ins.cleaveDirZ, cAlly.x, cAlly.z, 3.9 + cAlly.radius, -0.15)) {
+            this.damageAlly(cAlly, Math.round(cDmg * 0.78));
+          }
+        }
+        // Post-Blink Ambush overheat exposes Inspector's chest weakpoint!
+        if (ins.pendingWeakpoint === 'blink_overheat') {
+          ins.pendingWeakpoint = null;
+          this.exposeInspectorWeakpoint('blink_overheat', 3.2);
+        }
+      }
+      this.updateActorSprite(ins, simDt, false);
+      return;
+    }
+
+    // Mechanic C: Cold-White Lantern Ticket Audit Gaze (lock-on beam; break LOS or stealth to dodge & trigger weakpoint!)
+    if (ins.gazeTelegraph > 0) {
+      ins.gazeTelegraph = Math.max(0, ins.gazeTelegraph - simDt);
+      var gTgt = (ins.gazeTargetId === 'player') ? p : (this.squadById[ins.gazeTargetId] || p);
+      if (!gTgt || gTgt.alive === false) gTgt = p;
+      var gDist = dist2D(ins.x, ins.z, gTgt.x, gTgt.z);
+      var gLos = mapApi.hasLineOfSight(ins.x, ins.z, gTgt.x, gTgt.z) && !(gTgt === p && p.stealthTimer > 0);
+      var gMax = isPhase2 ? 1.10 : 1.25;
+      var gProg = 1 - clamp(ins.gazeTelegraph / gMax, 0, 1);
+
+      if (ins.gazeBeam && ins.gazeBeamMat) {
+        if (canSeeIns && gLos) {
+          ins.gazeBeam.visible = true;
+          ins.gazeBeam.position.set(ins.x, 1.32, ins.z);
+          ins.gazeBeam.rotation.y = Math.atan2(gTgt.x - ins.x, gTgt.z - ins.z);
+          ins.gazeBeam.scale.set(0.6 + gProg * 1.4, 1, Math.max(0.5, gDist));
+          ins.gazeBeamMat.color.setHex(gProg > 0.72 ? 0xff2942 : 0xffe4e8);
+          ins.gazeBeamMat.opacity = 0.45 + gProg * 0.48;
+        } else {
+          ins.gazeBeam.visible = false;
+        }
+      }
+      ins.facingLeft = gTgt.x < ins.x;
+      ins.actionTimer = 0.2;
+
+      if (ins.gazeTelegraph <= 0) {
+        if (ins.gazeBeam) ins.gazeBeam.visible = false;
+        ins.gazeCd = Math.max(4.0, (isPhase2 ? 6.5 : 8.5) * mutEval.cooldownMult);
+        if (gLos && gDist <= 18.0) {
+          this.spawnLaserBeam(ins.x, ins.z, gTgt.x, gTgt.z, 0xff2942, 0.36, { primaryColor: '#ff2942', secondaryColor: '#ffffff' });
+          playSfxSafe('rail_fire');
+          if (gTgt === p) {
+            p.sanity = Math.max(0, p.sanity - cfg.gazeSanityLoss);
+            p.ruleBindTimer = Math.max(p.ruleBindTimer || 0, cfg.gazeBindSec);
+            this.threatLevel = clamp(this.threatLevel + 24, 0, 100);
+            this.damagePlayer(Math.round(cfg.gazeDamage * mutEval.damageMult), 0, 0);
+            this.spawnFloatingText(p.x, 2.65, p.z, '查票锁定! 规则束缚 -' + cfg.gazeSanityLoss + ' SAN', '#ff6e7a');
+          } else {
+            this.damageAlly(gTgt, Math.round(30 * mutEval.damageMult));
+          }
+        } else {
+          this.spawnFloatingText(p.x, 2.35, p.z, '凝视规避!', '#58e6d8');
+          if (isPhase2) {
+            this.exposeInspectorWeakpoint('gaze_evaded', 2.8);
+          }
+        }
+      }
+      this.updateActorSprite(ins, simDt, false);
+      return;
+    }
+
     // Active Lunge Dash execution (swept collision + wall bounce + walkable-clamped shears scar)
     if (ins.lungeActive > 0) {
       ins.lungeActive = Math.max(0, ins.lungeActive - simDt);
-      var dashSpeed = 19.0;
+      var dashSpeed = isPhase2 ? 21.5 : 19.5;
       var nx = ins.x + ins.lungeDirX * dashSpeed * simDt;
       var nz = ins.z + ins.lungeDirZ * dashSpeed * simDt;
       var step = this.moveEntityWithCollision(ins.x, ins.z, nx, nz, ins.radius);
       ins.x = step.x;
       ins.z = step.z;
       this.enforceWardBlockOnInspector();
-      // Crimson phantom wake + boot sparks during execution lunge
-      this.spawnAfterimage(ins.x, ins.z, 'inspector', ins.facingLeft, 0xff2238, 0.24, 'dash');
+      if (canSeeIns) {
+        this.spawnAfterimage(ins.x, ins.z, 'inspector', ins.facingLeft, 0xff2238, 0.24, 'dash');
+      }
       if (step.hit && step.hitWall) {
         ins.lungeActive = 0;
-        ins.stunTimer = Math.max(ins.stunTimer, 0.55);
+        ins.stunTimer = Math.max(ins.stunTimer, 0.65);
+        ins.armorBrokenTimer = Math.max(ins.armorBrokenTimer || 0, 3.0);
         this.hitStopTimer = Math.max(this.hitStopTimer || 0, 0.035);
         this.triggerActorSquash(ins, 0.78, 1.24);
         this.spawnWallImpactDebris(step.x - step.normalX * ins.radius, step.z - step.normalZ * ins.radius, step.normalX, step.normalZ);
         this.addCameraShake(0.24, 0.18);
         this.spawnScorchDecal(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 1.9, 0xff2238);
+        this.exposeInspectorWeakpoint('wall_crash', 3.6);
       } else if (ins.lungeActive <= 0) {
         this.spawnScorchDecal(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 1.8, 0xff2238);
       }
 
-      // Check damage to player or squad during lunge
+      // Check Death Exam lethal damage to player or squad during lunge
       if (!ins.lungeHitDone) {
-        if (dist2D(ins.x, ins.z, p.x, p.z) <= ins.radius + p.radius + 0.55) {
+        if (dist2D(ins.x, ins.z, p.x, p.z) <= ins.radius + p.radius + 0.60) {
           ins.lungeHitDone = true;
-          this.damagePlayer(34, ins.lungeDirX * 5.2, ins.lungeDirZ * 5.2);
+          var lDmg = Math.round((isPhase2 ? cfg.lungeDamageP2 : cfg.lungeDamageP1) * mutEval.damageMult);
+          if (isPhase2) p.sanity = Math.max(0, p.sanity - cfg.lungeSanityP2);
+          this.damagePlayer(lDmg, ins.lungeDirX * 6.0, ins.lungeDirZ * 6.0);
         } else {
           for (var si = 0; si < this.squad.length; si++) {
             var al = this.squad[si];
-            if (al.alive && dist2D(ins.x, ins.z, al.x, al.z) <= ins.radius + al.radius + 0.5) {
+            if (al.alive && dist2D(ins.x, ins.z, al.x, al.z) <= ins.radius + al.radius + 0.55) {
               ins.lungeHitDone = true;
-              this.damageAlly(al, 26);
+              this.damageAlly(al, Math.round((isPhase2 ? cfg.lungeAllyDamageP2 : cfg.lungeAllyDamageP1) * mutEval.damageMult));
               break;
             }
           }
@@ -7052,11 +7649,12 @@
       return;
     }
 
-    // 0.9s Crimson Lunge Telegraph wind-up (with clear gold-white PARRY WINDOW glint!)
+    // Crimson Lunge Telegraph wind-up (with clear gold-white PARRY WINDOW glint!)
     if (ins.lungeTelegraph > 0) {
       ins.lungeTelegraph = Math.max(0, ins.lungeTelegraph - simDt);
       ins.lungeWindup = ins.lungeTelegraph;
-      var progress = 1 - clamp(ins.lungeTelegraph / 0.9, 0, 1);
+      var tMax = ins.lungeTelegraphMax || 0.85;
+      var progress = 1 - clamp(ins.lungeTelegraph / tMax, 0, 1);
       ins.teleMesh.visible = true;
       ins.teleFill.visible = true;
       var yaw = Math.atan2(ins.lungeDirX, ins.lungeDirZ);
@@ -7069,7 +7667,7 @@
         ins.teleParryGlint.visible = true;
         ins.teleParryGlint.position.x = ins.facingLeft ? -0.68 : 0.68;
         ins.teleParryGlint.rotation.z = this.elapsedReal * 7.5;
-        var inSweetSpot = progress >= 0.35;
+        var inSweetSpot = progress >= 0.32;
         var gScale = inSweetSpot ? (0.9 + Math.sin(progress * Math.PI * 3) * 0.45) : (0.45 + progress * 0.5);
         ins.teleParryGlint.scale.set(gScale, gScale, 1);
         ins.teleParryGlintMat.color.setHex(inSweetSpot ? 0xffe484 : 0xff3b4f);
@@ -7081,13 +7679,13 @@
         ins.teleMesh.visible = false;
         ins.teleFill.visible = false;
         if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
-        ins.lungeActive = 0.28;
+        ins.lungeActive = isPhase2 ? 0.31 : 0.28;
         ins.lungeHitDone = false;
-        ins.lungeCd = 3.2;
+        ins.lungeCd = Math.max(1.4, (isPhase2 ? 2.1 : 2.9) * mutEval.cooldownMult);
         this.triggerActorSquash(ins, 1.28, 0.78);
-        this.spawnSlashArc(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 3.4, 0xff2238, 0.24, true, { primaryColor: '#ff2238', secondaryColor: '#ff99a4' });
+        this.spawnSlashArc(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 3.6, 0xff2238, 0.24, true, { primaryColor: '#ff2238', secondaryColor: '#ff99a4' });
         playSfxSafe('sword_slash');
-        this.emitSoundRipple(ins.x, ins.z, 65, 'boss');
+        this.emitSoundRipple(ins.x, ins.z, 68, 'boss');
       }
       this.updateActorSprite(ins, simDt, false);
       return;
@@ -7101,18 +7699,18 @@
       ins.investigateTimer = 4.5;
     } else {
       // Check line-of-sight to player (Stealth Veil drastically cuts sight range)
-      var sightRange = p.stealthTimer > 0 ? 5.2 : 20.5;
+      var sightRange = p.stealthTimer > 0 ? 5.2 : 21.5;
       var dPlayer = dist2D(ins.x, ins.z, p.x, p.z);
       var seesPlayer = (dPlayer <= sightRange && mapApi.hasLineOfSight(ins.x, ins.z, p.x, p.z));
 
       if (seesPlayer) {
         if (ins.state !== 'HUNT') {
           playSfxSafe('alert');
-          this.spawnFloatingText(ins.x, 2.8, ins.z, '已锁定目标!', '#ff2c44');
+          this.spawnFloatingText(ins.x, 2.8, ins.z, '已锁定无票考生!', '#ff2c44');
         }
         ins.state = 'HUNT';
         ins.huntTargetId = 'player';
-        ins.huntLoseTimer = 6.5;
+        ins.huntLoseTimer = 7.0;
       } else {
         // Also check Lu Jin intercepting close by
         var lujin = this.squadById['lujin'];
@@ -7124,13 +7722,13 @@
       }
     }
 
-    // Determine movement target based on state (scaled for 224x152 mega-station arena)
+    // Determine movement target based on state (scaled by Phase-2 mutation & threat tier)
     var targetX = ins.x;
     var targetZ = ins.z;
-    var baseSpeed = 5.0;
+    var baseSpeed = (isPhase2 ? 5.8 : 5.2) * Math.min(1.22, mutEval.speedMult);
 
     if (ins.state === 'HUNT') {
-      baseSpeed = 7.0;
+      baseSpeed = 7.4 * mutEval.speedMult;
       var tgt = (ins.huntTargetId === 'player') ? p : (this.squadById[ins.huntTargetId] || p);
       if (tgt.alive === false) tgt = p;
       targetX = tgt.x;
@@ -7139,6 +7737,7 @@
       var dTgt = dist2D(ins.x, ins.z, tgt.x, tgt.z);
       var hasLos = mapApi.hasLineOfSight(ins.x, ins.z, tgt.x, tgt.z);
       if (!hasLos || (tgt === p && p.stealthTimer > 0 && dTgt > 4.5)) {
+        ins.kiteTimer = 0;
         ins.huntLoseTimer -= simDt;
         if (ins.huntLoseTimer <= 0) {
           ins.state = 'INVESTIGATE';
@@ -7146,24 +7745,96 @@
           ins.investigateTimer = 4.5;
         }
       } else {
-        ins.huntLoseTimer = 6.0;
-        // Initiate 0.9s Crimson Lunge Telegraph when in strike distance!
-        if (dTgt <= 4.9 && ins.lungeCd <= 0) {
-          var ldx = tgt.x - ins.x;
-          var ldz = tgt.z - ins.z;
-          var ll = Math.max(0.01, Math.sqrt(ldx * ldx + ldz * ldz));
-          ins.lungeDirX = ldx / ll;
-          ins.lungeDirZ = ldz / ll;
-          ins.lungeTelegraph = 0.9;
-          ins.lungeWindup = 0.9;
+        ins.huntLoseTimer = 6.5;
+
+        // Phase-2 Anti-Kite pressure accelerates Blink Ambush cooldown if player kites > 10.5m
+        if (isPhase2 && dTgt >= 10.5) {
+          ins.kiteTimer = (ins.kiteTimer || 0) + simDt;
+          if (ins.kiteTimer >= 3.0) {
+            ins.kiteTimer = 0;
+            ins.blinkCd = 0;
+          }
+        } else {
+          ins.kiteTimer = Math.max(0, (ins.kiteTimer || 0) - simDt * 1.5);
+        }
+
+        var ldx = tgt.x - ins.x;
+        var ldz = tgt.z - ins.z;
+        var ll = Math.max(0.01, Math.sqrt(ldx * ldx + ldz * ldz));
+        var ndx = ldx / ll;
+        var ndz = ldz / ll;
+
+        // Threat-level-driven skill cycle via INFINITY.AI.selectInspectorSkillCycle
+        var plan = (INFINITY.AI && typeof INFINITY.AI.selectInspectorSkillCycle === 'function')
+          ? INFINITY.AI.selectInspectorSkillCycle({
+            phase: ins.phase,
+            mutated: isPhase2,
+            threatLevel: this.threatLevel,
+            distToTarget: dTgt,
+            hasLos: hasLos,
+            cycleIndex: ins.skillCycleIndex || 0,
+            cooldowns: {
+              blink_ambush: ins.blinkCd || 0,
+              slam: ins.slamCd || 0,
+              lunge: ins.lungeCd || 0,
+              cleave: ins.cleaveCd || 0,
+              gaze: ins.gazeCd || 0
+            },
+            isStunned: ins.stunTimer > 0
+          })
+          : { skill: 'pursue', nextCycleIndex: ins.skillCycleIndex || 0 };
+
+        ins.skillCycleIndex = plan.nextCycleIndex || 0;
+
+        if (plan.skill === 'blink_ambush') {
+          ins.blinkTelegraphMax = plan.telegraphSec || 0.48;
+          ins.blinkTelegraph = ins.blinkTelegraphMax;
+          ins.blinkTargetX = tgt.x;
+          ins.blinkTargetZ = tgt.z;
+          ins.pendingWeakpoint = plan.weakpointReason || 'blink_overheat';
+          ins.facingLeft = ndx < 0;
+          this.spawnFloatingText(ins.x, 3.0, ins.z, plan.callout || '瞬移截击!', '#ff3b52', 'mutation');
+          playSfxSafe('alert');
+          return;
+        }
+        if (plan.skill === 'slam') {
+          ins.slamTelegraph = plan.telegraphSec || (isPhase2 ? 0.92 : 1.05);
+          ins.pendingWeakpoint = plan.exposeWeakpointAfter ? (plan.weakpointReason || 'slam_recovery') : null;
+          this.spawnFloatingText(ins.x, 3.0, ins.z, plan.callout || '轨道压制波! 快撤出红圈', '#ff2942');
+          playSfxSafe('alert');
+          return;
+        }
+        if (plan.skill === 'lunge') {
+          ins.lungeDirX = ndx;
+          ins.lungeDirZ = ndz;
+          ins.lungeTelegraphMax = plan.telegraphSec || (isPhase2 ? 0.68 : 0.85);
+          ins.lungeTelegraph = ins.lungeTelegraphMax;
+          ins.lungeWindup = ins.lungeTelegraph;
           ins.facingLeft = ins.lungeDirX < 0;
-          this.spawnFloatingText(ins.x, 2.9, ins.z, '处决蓄力! (可弹反/结界)', '#ff3b4f');
+          this.spawnFloatingText(ins.x, 2.9, ins.z, plan.callout || '处决突刺! (可弹反/破甲)', '#ff3b4f');
+          playSfxSafe('alert');
+          return;
+        }
+        if (plan.skill === 'cleave') {
+          ins.cleaveDirX = ndx;
+          ins.cleaveDirZ = ndz;
+          ins.cleaveTelegraph = plan.telegraphSec || (isPhase2 ? 0.48 : 0.55);
+          ins.facingLeft = ins.cleaveDirX < 0;
+          this.spawnFloatingText(ins.x, 2.85, ins.z, plan.callout || '铁剪横扫!', '#ff3b4f');
+          playSfxSafe('alert');
+          return;
+        }
+        if (plan.skill === 'gaze') {
+          ins.gazeTargetId = (tgt === p) ? 'player' : tgt.id;
+          ins.gazeTelegraph = plan.telegraphSec || (isPhase2 ? 1.10 : 1.25);
+          ins.facingLeft = ndx < 0;
+          this.spawnFloatingText(ins.x, 2.95, ins.z, plan.callout || '查票凝视! 找掩体/潜行', '#ffd2d8');
           playSfxSafe('alert');
           return;
         }
       }
     } else if (ins.state === 'INVESTIGATE' && ins.investigateTarget) {
-      baseSpeed = 6.0;
+      baseSpeed = isPhase2 ? 6.8 : 6.2;
       targetX = ins.investigateTarget.x;
       targetZ = ins.investigateTarget.z;
       ins.investigateTimer -= simDt;
@@ -7183,14 +7854,14 @@
       }
     }
 
-    // Apply slows (Overclock 45% slow, Seal Chain 65% slow)
+    // Apply slows (Overclock 45% slow, Seal Chain 60% slow)
     if (p.overclockTimer > 0) baseSpeed *= 0.55;
-    if (ins.chainTimer > 0) baseSpeed *= 0.35;
+    if (ins.chainTimer > 0) baseSpeed *= 0.40;
 
     // A* Pathfinding
     ins.repathTimer -= simDt;
     if (ins.repathTimer <= 0) {
-      ins.repathTimer = ins.state === 'HUNT' ? 0.55 : 1.3;
+      ins.repathTimer = ins.state === 'HUNT' ? 0.5 : 1.3;
       var bPath = mapApi.findPath(ins.x, ins.z, targetX, targetZ);
       ins.path = Array.isArray(bPath) ? bPath : [];
       ins.pathIndex = 0;
@@ -7217,7 +7888,7 @@
       ins.z = res.z;
       if (Math.abs(mx) > 0.2) ins.facingLeft = mx < 0;
       moving = true;
-      if (this.isPointInPuddle(ins.x, ins.z)) {
+      if (canSeeIns && this.isPointInPuddle(ins.x, ins.z)) {
         ins.puddleAccum = (ins.puddleAccum || 0) + baseSpeed * simDt;
         if (ins.puddleAccum >= 0.78) {
           ins.puddleAccum = 0;
@@ -7230,6 +7901,7 @@
     this.enforceWardBlockOnInspector();
 
     this.updateActorSprite(ins, simDt, moving);
+    ins.vis.group.visible = this.canSeeWorldPoint(ins.x, ins.z);
   };
 
   // ---------------------------------------------------------------------------
@@ -7238,18 +7910,50 @@
   EngineSession.prototype.damageInspector = function (amount, kbX, kbZ, isCrit, opts) {
     var ins = this.inspector;
     if (!ins.alive) return;
-    var dmg = Math.max(1, Math.round(amount));
+
+    var wpHit = false;
+    var wpEval = null;
+    if ((ins.weakpointTimer || 0) > 0 && INFINITY.AI && typeof INFINITY.AI.evaluateWeakpointExposure === 'function') {
+      var isFlank = (this.player && ((this.player.x < ins.x) !== Boolean(ins.facingLeft)));
+      wpEval = INFINITY.AI.evaluateWeakpointExposure({
+        weakpointTimer: ins.weakpointTimer,
+        weakpointMaxTimer: ins.weakpointMaxTimer,
+        isCrit: Boolean(isCrit),
+        isFlank: isFlank,
+        baseDamage: amount
+      });
+      if (wpEval && wpEval.exposed) {
+        wpHit = true;
+      }
+    }
+
+    var calc = computeBossDamageTaken(amount, {
+      armorBrokenTimer: ins.armorBrokenTimer,
+      stunTimer: ins.stunTimer,
+      overridePct: this.overridePct,
+      ignoreRuleArmor: wpHit || !!(opts && opts.ignoreRuleArmor)
+    });
+    var dmg = wpHit ? wpEval.finalDamage : calc.damage;
     ins.hp = Math.max(0, ins.hp - dmg);
     ins.hitFlash = 0.16;
     this.triggerActorSquash(ins, 0.84, 1.18);
     this.stats.damageDealt += dmg;
-    playSfxSafe('hit_impact');
+    playSfxSafe(wpHit ? 'parry_clang' : 'hit_impact');
 
-    var impactCol = (opts && opts.impactColor) || (isCrit ? 0xffe07d : 0xff3b4f);
+    if (wpHit) {
+      if (wpEval.energyRefund > 0 && this.player) {
+        this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + wpEval.energyRefund);
+      }
+      if (wpEval.bonusSealPct > 0) {
+        ins.sealedPct = Math.min(100, (ins.sealedPct || 0) + wpEval.bonusSealPct);
+      }
+    }
+
+    var impactCol = wpHit ? 0xffe875 : ((opts && opts.impactColor) || (isCrit ? 0xffe07d : 0xff3b4f));
     if (opts && opts.playerImpact) {
-      ins.whiteFlash = Math.max(ins.whiteFlash || 0, 0.09);
+      ins.whiteFlash = Math.max(ins.whiteFlash || 0, wpHit ? 0.14 : 0.09);
       this.hitStopTimer = Math.max(this.hitStopTimer, opts.hitStop || 0.05);
-      if (isCrit) {
+      if (isCrit || wpHit) {
         this.triggerImpactFrame(0.068);
       }
       if (kbX || kbZ) {
@@ -7263,17 +7967,27 @@
       this.enforceWardBlockOnInspector();
     }
 
-    this.spawnFloatingText(ins.x, 2.5, ins.z, (isCrit ? '★-' : '-') + dmg, isCrit ? '#ffd86b' : '#edf3fa', isCrit ? 'crit' : 'normal');
-    this.spawnSparkBurst(ins.x, 1.3, ins.z, impactCol, isCrit ? 16 : 9);
-    if (isCrit) {
-      this.spawnImpactStar(ins.x, 1.4, ins.z, impactCol, 2.0, 0.24);
+    if (wpHit && INFINITY.CombatFeel && typeof INFINITY.CombatFeel.triggerBossWeakpointHitFeel === 'function') {
+      INFINITY.CombatFeel.triggerBossWeakpointHitFeel(this, ins.x, ins.z, dmg, { callout: wpEval.callout });
+    } else {
+      var dmgLabel = (isCrit ? '★-' : '-') + dmg + (calc.armorVulnerable ? ' 破防' : '');
+      var dmgColor = calc.armorVulnerable ? '#ffd86b' : (calc.armorMitigated ? '#9fb3c8' : (isCrit ? '#ffd86b' : '#edf3fa'));
+      this.spawnFloatingText(ins.x, 2.5, ins.z, dmgLabel, dmgColor, (isCrit || calc.armorVulnerable) ? 'crit' : 'normal');
+      if (calc.armorMitigated && opts && opts.playerImpact && (ins.armorMsgCd || 0) <= 0) {
+        ins.armorMsgCd = 3.5;
+        this.spawnFloatingText(ins.x, 3.05, ins.z, '规则护甲减伤! (弹反/EMP/封印破甲)', '#a8c2d8');
+      }
+      this.spawnSparkBurst(ins.x, 1.3, ins.z, impactCol, isCrit ? 16 : 9);
+      if (isCrit) {
+        this.spawnImpactStar(ins.x, 1.4, ins.z, impactCol, 2.0, 0.24);
+      }
     }
 
     // Taking damage alerts Inspector toward player if not stunned
     if (ins.stunTimer <= 0 && this.player.stealthTimer <= 0) {
       ins.state = 'HUNT';
       ins.huntTargetId = 'player';
-      ins.huntLoseTimer = 7.0;
+      ins.huntLoseTimer = 7.5;
     }
 
     var hpDealtPct = Math.round(((ins.maxHp - ins.hp) / Math.max(1, ins.maxHp)) * 100);
@@ -7293,7 +8007,7 @@
       this.recordMissionEvent(
         'progress',
         '检票员生命削减过半 (' + hpDealtPct + '%)',
-        '零号检票员已进入重伤态，继续集火或衔接封印锁链即可彻底肃清。',
+        '零号检票员已进入二阶段变异态，抓住大招收尾或破甲后的弱点核心窗口集火！',
         { branchId: 'inspector_hunt' }
       );
     } else if (ins.hp > 0) {
@@ -7303,6 +8017,8 @@
 
     if (ins.hp <= 0) {
       this.defeatInspector(false);
+    } else if (ins.sealedPct >= 100) {
+      this.defeatInspector(true);
     }
   };
 
@@ -7311,9 +8027,18 @@
     if (!ins.alive) return;
     ins.alive = false;
     ins.hp = 0;
+    ins.weakpointTimer = 0;
+    ins.weakpointMaxTimer = 0;
+    ins.weakpointReason = null;
+    ins.blinkTelegraph = 0;
+    ins.pendingWeakpoint = null;
     ins.teleMesh.visible = false;
     ins.teleFill.visible = false;
+    if (ins.cleaveMesh) ins.cleaveMesh.visible = false;
+    if (ins.gazeBeam) ins.gazeBeam.visible = false;
+    if (ins.slamRing) ins.slamRing.visible = false;
     if (ins.teleParryGlint) ins.teleParryGlint.visible = false;
+    if (ins.weakpointVis && ins.weakpointVis.group) ins.weakpointVis.group.visible = false;
     ins.vis.group.visible = false;
 
     this.stats.inspectorDefeated = true;
@@ -7641,13 +8366,15 @@
     else if (sourceTag === 'boss' || sourceTag === 'yellow_line') color = 0xff2c44;
     else if (sourceTag === 'shenyan') color = 0xc9a66b;
 
-    var maxRad = 1.6 + s * 0.08;
-    var geo = new THREE.RingGeometry(0.84, 1.0, 28);
+    var isSubtleFootstep = (sourceTag === 'player' && s < 35);
+    var maxRad = isSubtleFootstep ? (1.1 + s * 0.04) : (1.6 + s * 0.08);
+    var baseOp = isSubtleFootstep ? 0.22 : 0.55;
+    var geo = new THREE.RingGeometry(0.86, 1.0, 28);
     geo.rotateX(-Math.PI / 2);
     var mat = new THREE.MeshBasicMaterial({
       color: color,
       transparent: true,
-      opacity: 0.55,
+      opacity: baseOp,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending
@@ -7661,8 +8388,9 @@
       mesh: mesh,
       geo: geo,
       mat: mat,
-      ttl: 0.72,
-      maxTtl: 0.72,
+      baseOp: baseOp,
+      ttl: isSubtleFootstep ? 0.45 : 0.72,
+      maxTtl: isSubtleFootstep ? 0.45 : 0.72,
       maxRad: maxRad
     });
 
@@ -7692,7 +8420,7 @@
       var p = 1 - clamp(sr.ttl / sr.maxTtl, 0, 1);
       var sc = 0.3 + p * sr.maxRad;
       sr.mesh.scale.set(sc, sc, 1);
-      sr.mat.opacity = 0.55 * (1 - p);
+      sr.mat.opacity = (sr.baseOp || 0.55) * (1 - p);
       if (sr.ttl <= 0) {
         this.scene.remove(sr.mesh);
         disposeOwned(sr.geo);
@@ -8245,10 +8973,14 @@
       this.playerGlow.color.setHex(p.overclockTimer > 0 ? 0x4df8ff : zoneGlowHex);
     }
 
-    // Inspector crimson lantern light (flickers dead when EMP-stunned!)
+    // Inspector crimson lantern light (hidden when Inspector is in an unseen room!)
     if (this.inspectorLantern && ins.alive) {
+      var insSeen = this.canSeeWorldPoint(ins.x, ins.z);
       this.inspectorLantern.position.set(ins.x + (ins.facingLeft ? -0.35 : 0.35), 1.65, ins.z + 0.25);
-      if (ins.stunTimer > 0) {
+      if (!insSeen) {
+        this.inspectorLantern.intensity = 0;
+        if (this.inspectorLanternOrb) this.inspectorLanternOrb.visible = false;
+      } else if (ins.stunTimer > 0) {
         this.inspectorLantern.intensity = (Math.sin(t * 48) > 0.65) ? 1.1 : 0.1;
         this.inspectorLanternOrb.visible = (Math.sin(t * 48) > 0.4);
       } else {
@@ -8504,10 +9236,19 @@
     this.floatersLayer.appendChild(el);
 
     var ttl = st.ttl || 1.15;
+    var spawnX = x + (tier === 'normal' ? (Math.random() - 0.5) * 0.4 : 0);
+    var spawnY = y;
+    for (var fi = 0, bumps = 0; fi < this.floatingTexts.length && bumps < 4; fi++) {
+      var prevFt = this.floatingTexts[fi];
+      if (Math.abs(prevFt.x - spawnX) < 2.2 && Math.abs(prevFt.z - z) < 2.2 && Math.abs(prevFt.y - spawnY) < 0.52) {
+        spawnY += 0.54;
+        bumps++;
+      }
+    }
     this.floatingTexts.push({
       el: el,
-      x: x + (tier === 'normal' ? (Math.random() - 0.5) * 0.4 : 0),
-      y: y,
+      x: spawnX,
+      y: spawnY,
       z: z,
       vy: st.vy || 1.25,
       ttl: ttl,
@@ -8544,7 +9285,7 @@
       }
     }
 
-    // World-space mini HP/Name tags for Squad & Inspector
+    // World-space mini HP/Name tags for Squad & Inspector (strictly gated by room/recon vision!)
     var tagIds = Object.keys(this.worldTags);
     for (var ti = 0; ti < tagIds.length; ti++) {
       var tid = tagIds[ti];
@@ -8556,7 +9297,7 @@
       }
       var yOff = tid === 'inspector' ? (ACTOR_DIMENSIONS.inspector.height + 0.14) : (ACTOR_DIMENSIONS.squad.height + 0.18);
       var scr = this.projectToScreen(actor.x, yOff, actor.z);
-      var visibleInFog = (tid !== 'inspector') || (dist2D(this.player.x, this.player.z, actor.x, actor.z) < 18 || this.reconRevealTimer > 0);
+      var visibleInFog = this.canSeeWorldPoint(actor.x, actor.z);
       if (!scr || !visibleInFog || scr.x < -60 || scr.x > w + 60 || scr.y < -40 || scr.y > h + 40) {
         tag.el.style.display = 'none';
       } else {
@@ -8570,7 +9311,7 @@
       }
     }
 
-    // Speech Bubbles projected cleanly above character heads
+    // Speech Bubbles projected cleanly above character heads (hidden if speaker is in an unseen room)
     var bIds = Object.keys(this.speechBubbles);
     for (var bi = 0; bi < bIds.length; bi++) {
       var bid = bIds[bi];
@@ -8586,6 +9327,10 @@
         b.el.style.display = 'none';
         continue;
       }
+      if (bid !== 'player' && !this.canSeeWorldPoint(bActor.x, bActor.z)) {
+        b.el.style.display = 'none';
+        continue;
+      }
       var bScr = this.projectToScreen(bActor.x, 2.65, bActor.z);
       if (!bScr) {
         b.el.style.display = 'none';
@@ -8597,7 +9342,7 @@
       }
     }
 
-    // Floating Damage / Status Numbers
+    // Floating Damage / Status Numbers (hidden if occurring in an unseen room)
     for (var fi = this.floatingTexts.length - 1; fi >= 0; fi--) {
       var ft = this.floatingTexts[fi];
       ft.ttl -= realDt;
@@ -8605,6 +9350,11 @@
       if (ft.ttl <= 0) {
         if (ft.el.parentNode) ft.el.parentNode.removeChild(ft.el);
         this.floatingTexts.splice(fi, 1);
+        continue;
+      }
+      var nearPlayer = dist2D(this.player.x, this.player.z, ft.x, ft.z) <= 2.2;
+      if (!nearPlayer && !this.canSeeWorldPoint(ft.x, ft.z)) {
+        ft.el.style.display = 'none';
         continue;
       }
       var fScr = this.projectToScreen(ft.x, ft.y, ft.z);
@@ -8662,11 +9412,9 @@
 
     var insZoneId = mapApi.getZoneAt(ins.x, ins.z) || 'platform0';
     var dBoss = dist2D(p.x, p.z, ins.x, ins.z);
-    var insVisible = ins.alive && (
-      this.reconRevealTimer > 0 ||
-      dBoss <= 11.5 ||
-      (dBoss <= 16 && mapApi.hasLineOfSight(p.x, p.z, ins.x, ins.z))
-    );
+    var reconActive = this.hasActiveReconVision();
+    var hasRecon = reconActive || this.hasPassiveReconCapability();
+    var insVisible = ins.alive && this.canSeeWorldPoint(ins.x, ins.z);
 
     var cluesTotal = 0;
     var consolesMini = [];
@@ -8675,7 +9423,10 @@
       var it = this.interactables[i];
       if (it.type === 'clue') cluesTotal++;
       if (it.type === 'console') {
-        consolesMini.push({ x: it.x, z: it.z, done: !!it.done });
+        var conZone = it.zoneId || mapApi.getZoneAt(it.x, it.z);
+        if (hasRecon || !conZone || conZone === pZoneId || this.visitedZones.indexOf(conZone) !== -1) {
+          consolesMini.push({ x: it.x, z: it.z, done: !!it.done });
+        }
         consolesDetail.push({
           id: it.id,
           zoneId: it.zoneId,
@@ -8730,7 +9481,9 @@
       };
     });
 
-    var squadMini = this.squad.filter(function (n) { return n.alive; }).map(function (n) {
+    var squadMini = this.squad.filter(function (n) {
+      return n.alive && (reconActive || this.canSeeWorldPoint(n.x, n.z));
+    }, this).map(function (n) {
       return { id: n.id, x: n.x, z: n.z, color: n.accentColor };
     });
 
@@ -8753,13 +9506,19 @@
     if (this.sceneTriggers && this.sceneTriggers.length) {
       for (var sti = 0; sti < this.sceneTriggers.length; sti++) {
         var stg = this.sceneTriggers[sti];
-        dynamicMini.push({ x: stg.x, z: stg.z, type: 'scene_trigger', done: !!stg.done });
+        var stgZone = stg.zoneId || mapApi.getZoneAt(stg.x, stg.z);
+        if (hasRecon || stgZone === pZoneId || this.visitedZones.indexOf(stgZone) !== -1) {
+          dynamicMini.push({ x: stg.x, z: stg.z, type: 'scene_trigger', done: !!stg.done });
+        }
       }
     }
     if (this.destructibleCovers && this.destructibleCovers.length) {
       for (var dci = 0; dci < this.destructibleCovers.length; dci++) {
         var dcv = this.destructibleCovers[dci];
-        dynamicMini.push({ x: dcv.x, z: dcv.z, type: 'destructible_cover', done: !!dcv.destroyed });
+        var dcvZone = dcv.zoneId || mapApi.getZoneAt(dcv.x, dcv.z);
+        if (hasRecon || dcvZone === pZoneId || this.visitedZones.indexOf(dcvZone) !== -1) {
+          dynamicMini.push({ x: dcv.x, z: dcv.z, type: 'destructible_cover', done: !!dcv.destroyed });
+        }
       }
     }
 
@@ -8833,9 +9592,19 @@
       inspector: {
         hp: Math.round(ins.hp),
         maxHp: Math.round(ins.maxHp),
+        phase: ins.phase || 1,
+        mutated: Boolean(ins.mutated),
+        mutationTier: ins.mutationTier || 'dormant',
+        threatTier: ins.threatTier || 'low',
+        weakpointExposed: Boolean(ins.alive && (ins.weakpointTimer || 0) > 0),
+        weakpointRemainingSec: Number(Math.max(0, ins.weakpointTimer || 0).toFixed(2)),
+        weakpointReason: (ins.weakpointTimer || 0) > 0 ? (ins.weakpointReason || null) : null,
+        skillCycleIndex: ins.skillCycleIndex || 0,
+        ruleArmorActive: ins.alive && ins.stunTimer <= 0 && (ins.armorBrokenTimer || 0) <= 0,
+        intelKnown: !ins.alive || insVisible,
         sealedPct: Math.round(ins.sealedPct),
-        state: ins.alive ? ins.state : 'DEFEATED',
-        zoneId: insZoneId,
+        state: ins.alive ? (insVisible ? ins.state : 'UNKNOWN') : 'DEFEATED',
+        zoneId: insVisible ? insZoneId : null,
         dx: Number((ins.x - p.x).toFixed(2)),
         dz: Number((ins.z - p.z).toFixed(2)),
         distToPlayer: Number(dBoss.toFixed(1)),
@@ -8854,6 +9623,10 @@
         wards: wardsMini,
         consoles: consolesMini,
         dynamicPoints: dynamicMini,
+        hasRecon: hasRecon,
+        reconActive: reconActive,
+        currentZone: pZoneId,
+        visitedZones: this.visitedZones.slice(),
         exitReady: (this.overridePct >= 100 || !ins.alive),
         focusWaypoint: this.focusWaypoint ? {
           x: this.focusWaypoint.x,
@@ -9137,6 +9910,11 @@
     ACTOR_DIMENSIONS: ACTOR_DIMENSIONS,
     CAMERA_25D_SPEC: CAMERA_25D_SPEC,
     ZONE_SCENE_CONFIGS: ZONE_SCENE_CONFIGS,
+    BOSS_DEATH_EXAM_CONFIG: BOSS_DEATH_EXAM_CONFIG,
+    computePlayerOrbiterCount: computePlayerOrbiterCount,
+    hasPassiveReconItem: hasPassiveReconItem,
+    evaluatePointVisibility: evaluatePointVisibility,
+    computeBossDamageTaken: computeBossDamageTaken,
     resolveZoneSceneConfig: resolveZoneSceneConfig,
     resolveSweptMovement: resolveSweptMovement,
     computeCameraScrollBounds: computeCameraScrollBounds,
