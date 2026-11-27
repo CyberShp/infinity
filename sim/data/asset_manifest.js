@@ -105,7 +105,31 @@
     hades_emp: 'assets/vfx/hades_emp.webp',
     hades_tao_ground: 'assets/vfx/hades_tao_ground.webp',
     hades_occult_chain: 'assets/vfx/hades_occult_chain.webp',
-    hades_heal_aegis: 'assets/vfx/hades_heal_aegis.webp'
+    hades_heal_aegis: 'assets/vfx/hades_heal_aegis.webp',
+    hades_cyan_16f: 'assets/vfx/hades_cyan_16f.webp',
+    hades_crimson_boss_16f: 'assets/vfx/hades_crimson_boss_16f.webp'
+  };
+
+  // Style-1 Painted Scene-A Plates & 30-deg Painted 2.5D Props (B1 Concourse Vertical Slice)
+  var SCENE_ASSETS = {
+    concourse_floor: 'assets/scenes/concourse_floor_plate.webp',
+    concourse_floor_normal: 'assets/scenes/concourse_floor_normal.webp',
+    concourse_floor_roughness: 'assets/scenes/concourse_floor_roughness.webp',
+    concourse_wall: 'assets/scenes/concourse_wall_plate.webp',
+    concourse_wall_normal: 'assets/scenes/concourse_wall_normal.webp',
+    prop_turnstile: 'assets/scenes/prop_turnstile.webp',
+    prop_bench: 'assets/scenes/prop_bench.webp',
+    prop_clock_totem: 'assets/scenes/prop_clock_totem.webp',
+    prop_clutter: 'assets/scenes/prop_clutter.webp'
+  };
+
+  // Dedicated 4-pose Limbus-style combat key-pose sheet (windup / smear / cleave / parry)
+  var COMBAT_POSE_SHEETS = {
+    player: {
+      sheet: 'assets/sprites/player_combat_sheet.webp',
+      normal: 'assets/sprites/player_combat_normal.webp',
+      emissive: 'assets/sprites/player_combat_emissive.webp'
+    }
   };
 
   function resolvePath(relPath) {
@@ -171,6 +195,25 @@
     return rel ? resolvePath(rel) : null;
   }
 
+  function getSceneAssetUrl(name) {
+    if (!name) return null;
+    var key = String(name).trim().toLowerCase();
+    var rel = SCENE_ASSETS[key];
+    return rel ? resolvePath(rel) : null;
+  }
+
+  function getCombatPoseSheetUrls(id) {
+    if (!id) return null;
+    var key = String(id).trim().toLowerCase();
+    var entry = COMBAT_POSE_SHEETS[key];
+    if (!entry) return null;
+    return {
+      sheet: entry.sheet ? resolvePath(entry.sheet) : null,
+      normal: entry.normal ? resolvePath(entry.normal) : null,
+      emissive: entry.emissive ? resolvePath(entry.emissive) : null
+    };
+  }
+
   INFINITY.ASSETS = {
     basePrefix: BASE_PREFIX,
     portraits: PORTRAITS,
@@ -178,12 +221,16 @@
     icons: ICONS,
     sprites: SPRITES,
     vfxFlipbooks: VFX_FLIPBOOKS,
+    sceneAssets: SCENE_ASSETS,
+    combatPoseSheets: COMBAT_POSE_SHEETS,
     resolvePath: resolvePath,
     getPortraitUrl: getPortraitUrl,
     getTileUrl: getTileUrl,
     getIconUrl: getIconUrl,
     getSpriteUrl: getSpriteUrl,
     getSpriteSheetUrls: getSpriteSheetUrls,
-    getVfxFlipbookUrl: getVfxFlipbookUrl
+    getVfxFlipbookUrl: getVfxFlipbookUrl,
+    getSceneAssetUrl: getSceneAssetUrl,
+    getCombatPoseSheetUrls: getCombatPoseSheetUrls
   };
 })(typeof window !== 'undefined' ? window : globalThis);

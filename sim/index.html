@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>无限·活体考场终端 // 零号回廊</title>
-  <link rel="stylesheet" href="sim.css?v=12">
+  <link rel="stylesheet" href="sim.css?v=13">
   <!-- Strict load order per world25d/CONTRACT_25D.md (classic defer scripts, zero ES-module CORS issues) -->
   <script defer src="vendor/three.min.js?v=4"></script>
   <script defer src="vendor/d3.min.js?v=1"></script>
@@ -15,17 +15,17 @@
   <script defer src="engine/rule_engine.js?v=4"></script>
   <script defer src="engine/ai_director.js?v=4"></script>
   <script defer src="engine/audio_engine.js?v=7"></script>
-  <script defer src="data/asset_manifest.js?v=6"></script>
-  <script defer src="world25d/pixel_sprites.js?v=9"></script>
+  <script defer src="data/asset_manifest.js?v=7"></script>
+  <script defer src="world25d/pixel_sprites.js?v=10"></script>
   <script defer src="world25d/station_map.js?v=5"></script>
   <script defer src="world25d/skill_archetypes.js?v=8"></script>
-  <script defer src="world25d/scene_architect.js?v=4"></script>
-  <script defer src="world25d/vfx_studio.js?v=5"></script>
-  <script defer src="world25d/combat_feel.js?v=1"></script>
-  <script defer src="world25d/engine_25d.js?v=15"></script>
+  <script defer src="world25d/scene_architect.js?v=5"></script>
+  <script defer src="world25d/vfx_studio.js?v=6"></script>
+  <script defer src="world25d/combat_feel.js?v=2"></script>
+  <script defer src="world25d/engine_25d.js?v=16"></script>
   <script defer src="ui/tactical_canvas.js?v=4"></script>
   <script defer src="ui/icon_synth.js?v=1"></script>
-  <script defer src="ui/app_ui.js?v=14"></script>
+  <script defer src="ui/app_ui.js?v=15"></script>
 </head>
 <body data-scene="hall">
   <!-- Top Wristwatch Telemetry Bar -->
@@ -153,8 +153,9 @@
               <strong id="hud25d-zone-name" class="hud25d-zone-name">B1 检票大厅</strong>
             </div>
             <div class="hud25d-tl-actions">
-              <button id="btn-toggle-mission-panel" class="hud25d-mini-btn active" type="button" title="展开/收起任务进度与分支日志 (L)">任务面板</button>
-              <button id="btn-show-clues" class="hud25d-mini-btn" type="button" title="查看已破译线索簿">线索簿</button>
+              <button id="btn-toggle-hud-recede" class="hud25d-mini-btn" type="button" title="切换纯净战斗视野 / 自动让位 (H)">视野</button>
+              <button id="btn-toggle-mission-panel" class="hud25d-mini-btn" type="button" title="展开/收起任务进度与分支日志 (L)">任务</button>
+              <button id="btn-show-clues" class="hud25d-mini-btn" type="button" title="查看已破译线索簿">线索</button>
               <button id="btn-extract-exam" class="hud25d-mini-btn accent" type="button" title="提前撤离并结算">结算</button>
             </div>
           </div>

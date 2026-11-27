@@ -47,7 +47,9 @@
     crisisTotalSec: 8,
     audioUnlocked: false,
     lastFeedCount: 0,
-    missionPanelOpen: true,
+    missionPanelOpen: false,
+    hudRecedeManual: false,
+    hudAutoRecede: true,
     missionPanelExpanded: false,
     missionPanelTab: 'progress',
     missionLogFilter: 'all',
@@ -1709,6 +1711,20 @@
     if (distEl) distEl.textContent = Math.round(dist) + 'm';
   }
 
+  function syncHudRecedeUi(snapshot) {
+    var snap = snapshot || uiState.lastSnapshot || null;
+    var stageEl = document.querySelector('#scene-exam .exam25d-stage');
+    if (!stageEl) return;
+    var combatRecede = Boolean(uiState.hudAutoRecede && snap && snap.inCombat && !uiState.radioFocused && !uiState.missionPanelExpanded);
+    var shouldRecede = Boolean(uiState.hudRecedeManual || combatRecede);
+    stageEl.classList.toggle('hud-receded', shouldRecede);
+    var recBtn = $('btn-toggle-hud-recede');
+    if (recBtn) {
+      recBtn.classList.toggle('active', Boolean(uiState.hudRecedeManual));
+      recBtn.textContent = uiState.hudRecedeManual ? '沉浸中' : '视野';
+    }
+  }
+
   function handleWorld25DHudTick(snapshot) {
     if (!snapshot || uiState.currentScene !== 'exam') return;
     uiState.lastSnapshot = snapshot;
@@ -1755,6 +1771,9 @@
     if ($('hud25d-obj-override')) $('hud25d-obj-override').classList.toggle('done', ovPct >= 100);
 
     var insp = snapshot.inspector || { hp: 160, maxHp: 160, sealedPct: 0, state: 'patrol', distToPlayer: 30 };
+
+    // Auto-recede peripheral HUD panels during active combat or manual immersive mode (>= 80% clear viewport)
+    syncHudRecedeUi(snapshot);
     var inspHp = Math.max(0, Math.round(Number(insp.hp || 0)));
     var inspMaxHp = Math.max(1, Number(insp.maxHp || 160));
     var sealedPct = clamp(Math.round(Number(insp.sealedPct || 0)), 0, 100);
@@ -3587,7 +3606,9 @@
     uiState.lastSnapshot = null;
     uiState.hotbarSig = '';
     uiState.lastAudioThreat = -1;
-    uiState.missionPanelOpen = !(global.innerWidth && global.innerWidth <= 1280);
+    uiState.missionPanelOpen = false;
+    uiState.hudRecedeManual = false;
+    uiState.hudAutoRecede = true;
     uiState.missionPanelExpanded = false;
     uiState.missionPanelTab = 'progress';
     uiState.missionLogFilter = 'all';
@@ -4429,6 +4450,13 @@
     });
 
     // Mission Progress & Historical Log Side Panel controls
+    if ($('btn-toggle-hud-recede')) {
+      $('btn-toggle-hud-recede').addEventListener('click', function () {
+        playSfx('ui_tick');
+        uiState.hudRecedeManual = !uiState.hudRecedeManual;
+        syncHudRecedeUi();
+      });
+    }
     if ($('btn-toggle-mission-panel')) {
       $('btn-toggle-mission-panel').addEventListener('click', function () {
         playSfx('ui_tick');
@@ -4551,6 +4579,17 @@
         if (uiState.missionPanelExpanded) {
           uiState.missionPanelExpanded = false;
           syncMissionPanelLayout();
+          return;
+        }
+      }
+
+      if ((e.key === 'h' || e.key === 'H') && !e.ctrlKey && !e.metaKey && !e.altKey && !isAnyModalOpen()) {
+        var tagH = document.activeElement && document.activeElement.tagName;
+        if (tagH !== 'INPUT' && tagH !== 'TEXTAREA' && tagH !== 'SELECT') {
+          e.preventDefault();
+          playSfx('ui_tick');
+          uiState.hudRecedeManual = !uiState.hudRecedeManual;
+          syncHudRecedeUi();
           return;
         }
       }

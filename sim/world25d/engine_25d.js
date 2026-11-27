@@ -457,6 +457,14 @@
 
     // Dynamic combat & VFX lists
     this.vfxList = [];          // temporary meshes/particles with update(dt)
+    this.directorTimeline = (INFINITY.CombatFeel && typeof INFINITY.CombatFeel.createDirectorTimeline === 'function')
+      ? INFINITY.CombatFeel.createDirectorTimeline()
+      : null;
+    this.directorState = { zoom: 1.0, letterbox: 0, chromatic: 0, inkEdge: 0 };
+    this.combatFocusTimer = 0;
+    this.cutInTimer = 0;
+    this.playerTrailPrev = null;
+    this.playerTrailAccum = 0;
     this.projectiles = [];      // bolts / emp orbs / decoy canisters
     this.wards = [];            // active physical-blocking ward circles
     this.drones = [];           // active turret drones
@@ -807,13 +815,13 @@
 
     this.renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(global.devicePixelRatio || 1, 2));
     this.renderer.setSize(width, height, false);
-    this.renderer.setClearColor(0x070a10, 1);
+    this.renderer.setClearColor(0x04060b, 1);
     if (THREE.sRGBEncoding !== undefined) {
       this.renderer.outputEncoding = THREE.sRGBEncoding;
     }
     if (THREE.ACESFilmicToneMapping !== undefined) {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 1.15;
+      this.renderer.toneMappingExposure = 0.96;
     }
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
@@ -826,8 +834,8 @@
 
     // Scene & Atmospheric Depth Fog
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x070a10);
-    this.scene.fog = new THREE.FogExp2(0x070a10, 0.030);
+    this.scene.background = new THREE.Color(0x04060b);
+    this.scene.fog = new THREE.FogExp2(0x04060b, 0.035);
 
     // Elevated angled 2.5D camera
     this.camera = new THREE.PerspectiveCamera(38, width / height, 0.5, 120);
@@ -939,6 +947,11 @@
       'letter-spacing:0.5px;border-radius:3px;box-shadow:0 0 14px rgba(111,216,234,0.35);white-space:nowrap;';
     root.appendChild(prompt);
 
+    var cutIn = document.createElement('div');
+    cutIn.className = 'w25d-cutin-banner';
+    cutIn.innerHTML = '<div class="w25d-cutin-sub"></div><div class="w25d-cutin-title"></div>';
+    root.appendChild(cutIn);
+
     this.containerEl.appendChild(root);
     this.overlayRoot = root;
     this.vignetteEl = vignette;
@@ -946,6 +959,30 @@
     this.bubblesLayer = bubbles;
     this.floatersLayer = floaters;
     this.promptEl = prompt;
+    this.cutInBannerEl = cutIn;
+  };
+
+  EngineSession.prototype.triggerSkillCutIn = function (title, subtitle, accentCss) {
+    if (!this.cutInBannerEl || !title) return;
+    var el = this.cutInBannerEl;
+    var accent = accentCss || '#5ce8ff';
+    var subEl = el.querySelector('.w25d-cutin-sub');
+    var titleEl = el.querySelector('.w25d-cutin-title');
+    if (subEl) subEl.textContent = subtitle || 'SKILL EXECUTION';
+    if (titleEl) {
+      titleEl.textContent = title;
+      titleEl.style.textShadow = '-2px -2px 0 #04060b, 2px 2px 0 #04060b, 0 0 18px ' + accent;
+    }
+    el.style.borderLeftColor = accent;
+    el.style.borderBottomColor = accent;
+    el.classList.remove('out');
+    el.classList.add('active');
+    this.cutInTimer = 0.72;
+  };
+
+  EngineSession.prototype.triggerOnomatopoeia = function (x, y, z, glyph, colorCss) {
+    if (!glyph) return;
+    this.spawnFloatingText(x, y, z, glyph, colorCss || '#fff3d1', 'onomatopoeia');
   };
 
   // ---------------------------------------------------------------------------
@@ -1078,41 +1115,41 @@
   EngineSession.prototype.buildLighting = function () {
     var THREE = this.THREE;
 
-    // Dark-horror balance: low global fill so the flashlight, zone lamps and the
-    // Inspector's lantern own the light. Values assume the sRGB-correct PostFX path.
-    var amb = new THREE.AmbientLight(0x3a4d6b, 0.26);
+    // Mignola high-contrast noir lighting: crush global ambient fill near pitch black
+    // so motivated light pools (overhead fluorescents, flashlight, crimson lantern) sculpt the scene.
+    var amb = new THREE.AmbientLight(0x101828, 0.08);
     this.scene.add(amb);
 
-    var hemi = new THREE.HemisphereLight(0x6e92bd, 0x161d2b, 0.32);
+    var hemi = new THREE.HemisphereLight(0x243854, 0x04060b, 0.11);
     this.scene.add(hemi);
 
-    var dirKey = new THREE.DirectionalLight(0xd8f0ff, 0.38);
+    var dirKey = new THREE.DirectionalLight(0xc2e6ff, 0.15);
     dirKey.position.set(14, 18, 16);
     this.scene.add(dirKey);
 
-    var dirRim = new THREE.DirectionalLight(0xffa060, 0.22);
+    var dirRim = new THREE.DirectionalLight(0xff9858, 0.12);
     dirRim.position.set(-18, 10, -14);
     this.scene.add(dirRim);
 
-    // Player directional flashlight (SpotLight) + soft personal halo
+    // Player directional flashlight (SpotLight) + tight personal rim glow
     var flashTarget = new THREE.Object3D();
     flashTarget.position.set(12, 0.2, 10);
     this.scene.add(flashTarget);
 
-    var flash = new THREE.SpotLight(0xdcf5ff, 3.1, 25, Math.PI / 3.8, 0.58, 1.3);
+    var flash = new THREE.SpotLight(0xdcf5ff, 4.4, 24, Math.PI / 4.2, 0.62, 1.35);
     flash.position.set(10, 2.15, 10);
     flash.target = flashTarget;
     this.scene.add(flash);
     this.flashLight = flash;
     this.flashTarget = flashTarget;
 
-    var pGlow = new THREE.PointLight(0x88d4f2, 1.25, 9.2, 1.55);
-    pGlow.position.set(10, 1.75, 10);
+    var pGlow = new THREE.PointLight(0x74cbe8, 0.95, 6.8, 1.7);
+    pGlow.position.set(10, 1.65, 10);
     this.scene.add(pGlow);
     this.playerGlow = pGlow;
 
     // Inspector's ominous crimson lantern (bleeds down corridors before sighting!)
-    var iLantern = new THREE.PointLight(0xff1e36, 4.0, 18.5, 1.4);
+    var iLantern = new THREE.PointLight(0xff162e, 5.6, 21.0, 1.35);
     iLantern.position.set(45, 1.7, 18);
     this.scene.add(iLantern);
     this.inspectorLantern = iLantern;
@@ -1127,8 +1164,8 @@
         x: Number(d.x) || 10,
         z: Number(d.z) || 10,
         color: hexToInt(d.color, 0x7fb8d8),
-        intensity: Number(d.intensity) || 1.35,
-        distance: Number(d.distance) || 13,
+        intensity: (Number(d.intensity) || 1.35) * 1.48,
+        distance: (Number(d.distance) || 13) * 0.92,
         flicker: typeof d.flicker === 'number' ? d.flicker : (d.flicker ? 0.22 : 0),
         seed: (idx + 1) * 1.73
       };
@@ -2770,6 +2807,9 @@
         'uniform float uLowHp;',
         'uniform float uFlash;',
         'uniform float uImpactInvert;',
+        'uniform float uChromatic;',
+        'uniform float uLetterbox;',
+        'uniform float uInkEdge;',
         'varying vec2 vUv;',
         '',
         '// Exact piecewise sRGB OETF. The RT holds linear color, so the post pass must',
@@ -2800,14 +2840,16 @@
         '    uv.x = clamp(uv.x + tear, 0.001, 0.999);',
         '  }',
         '',
-        '  // Base sample + RGB chromatic aberration split during glitch',
+        '  // Base sample + RGB chromatic aberration split during glitch or heavy hit pulse',
         '  vec4 baseSample = texture2D(tDiffuse, uv);',
         '  vec3 col = baseSample.rgb;',
-        '  if (glitch > 0.005) {',
-        '    float ca = (0.003 + 0.016 * glitch) * (0.65 + 0.35 * sin(uTime * 46.0));',
-        '    float rCh = texture2D(tDiffuse, clamp(uv + vec2(ca, 0.0), 0.001, 0.999)).r;',
-        '    float bCh = texture2D(tDiffuse, clamp(uv - vec2(ca, 0.0), 0.001, 0.999)).b;',
+        '  float caStrength = max(glitch > 0.005 ? (0.003 + 0.016 * glitch) * (0.65 + 0.35 * sin(uTime * 46.0)) : 0.0, uChromatic * 0.009);',
+        '  if (caStrength > 0.0005) {',
+        '    float rCh = texture2D(tDiffuse, clamp(uv + vec2(caStrength, 0.0), 0.001, 0.999)).r;',
+        '    float bCh = texture2D(tDiffuse, clamp(uv - vec2(caStrength, 0.0), 0.001, 0.999)).b;',
         '    col = vec3(rCh, col.g, bCh);',
+        '  }',
+        '  if (glitch > 0.005) {',
         '    float scanBar = 0.5 + 0.5 * sin(uv.y * uResolution.y * 1.5 + uTime * 30.0);',
         '    col += vec3(0.06, 0.09, 0.12) * scanBar * glitch * 0.45;',
         '  }',
@@ -2827,16 +2869,23 @@
         '  bloom += brightPass(texture2D(tDiffuse, clamp(uv + vec2(-o2.x, -o2.y), 0.0, 1.0)).rgb) * 0.07;',
         '  col += bloom * vec3(1.04, 1.01, 1.04) * 0.36;',
         '',
-        '  // Linear -> sRGB; vignette, grain and status tints below operate in display space',
+        '  // Linear -> sRGB; noir color grading, vignette, grain and status tints below operate in display space',
         '  col = linearToSRGB(col);',
+        '  col = clamp(col, 0.0, 1.0);',
         '',
-        '  // Obsidian vignette + subtle micro film grain',
+        '  // Mignola noir S-curve contrast & cold slate shadow pull (clamped input avoids bright-channel inversion)',
+        '  vec3 graded = col * col * (3.0 - 2.0 * col);',
+        '  col = mix(col, graded, 0.34);',
+        '  float lumaGrade = dot(col, vec3(0.299, 0.587, 0.114));',
+        '  col = mix(col * vec3(0.84, 0.94, 1.06), col, smoothstep(0.08, 0.52, lumaGrade));',
+        '',
+        '  // Deep obsidian Mignola vignette + impact ink-edge framing + micro film grain',
         '  vec2 centered = vUv * 2.0 - 1.0;',
         '  float distSq = dot(centered, centered);',
-        '  float vig = smoothstep(0.55, 1.95, distSq);',
-        '  col = mix(col, vec3(0.015, 0.018, 0.030), vig * 0.44);',
+        '  float vig = smoothstep(0.42, 1.75, distSq);',
+        '  col = mix(col, vec3(0.010, 0.013, 0.022), clamp(vig * (0.62 + uInkEdge * 0.34), 0.0, 0.94));',
         '',
-        '  float grain = (fract(sin(dot(vUv * uResolution + fract(uTime * 13.0) * 97.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.022;',
+        '  float grain = (fract(sin(dot(vUv * uResolution + fract(uTime * 13.0) * 97.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.024;',
         '  col += grain;',
         '',
         '  // Bullet-time cool cyan rim tint',
@@ -2865,6 +2914,12 @@
         '    col = mix(col, comicBw, clamp(uImpactInvert, 0.0, 1.0));',
         '  }',
         '',
+        '  // Cinematic skill cut-in letterbox bars (Limbus Company style beat framing)',
+        '  if (uLetterbox > 0.002) {',
+        '    float bar = step(vUv.y, uLetterbox) + step(1.0 - uLetterbox, vUv.y);',
+        '    col = mix(col, vec3(0.012, 0.015, 0.022), clamp(bar, 0.0, 1.0));',
+        '  }',
+        '',
         '  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);',
         '}'
       ].join('\n');
@@ -2879,7 +2934,10 @@
           uSlowMo: { value: 0 },
           uLowHp: { value: 0 },
           uFlash: { value: 0 },
-          uImpactInvert: { value: 0 }
+          uImpactInvert: { value: 0 },
+          uChromatic: { value: 0 },
+          uLetterbox: { value: 0 },
+          uInkEdge: { value: 0 }
         },
         vertexShader: vertShader,
         fragmentShader: fragShader,
@@ -2949,6 +3007,10 @@
           ? clamp(this.impactFrameTimer / impDur, 0.45, 1.0)
           : 0.0;
       }
+      var dirSt = this.directorState || { letterbox: 0, chromatic: 0, inkEdge: 0 };
+      if (u.uChromatic) u.uChromatic.value = clamp(dirSt.chromatic || 0, 0, 1);
+      if (u.uLetterbox) u.uLetterbox.value = clamp(dirSt.letterbox || 0, 0, 0.12);
+      if (u.uInkEdge) u.uInkEdge.value = clamp(dirSt.inkEdge || 0, 0, 1);
 
       // three r147 applies fog after output encoding and writes clear/background colors raw,
       // so all three are display-space values. Swap in their linear equivalents while
@@ -3192,6 +3254,16 @@
     if (this.impactFrameTimer > 0) {
       this.impactFrameTimer = Math.max(0, this.impactFrameTimer - realDt);
     }
+    if (this.combatFocusTimer > 0) {
+      this.combatFocusTimer = Math.max(0, this.combatFocusTimer - realDt);
+    }
+    if (this.cutInTimer > 0) {
+      this.cutInTimer = Math.max(0, this.cutInTimer - realDt);
+      if (this.cutInTimer <= 0 && this.cutInBannerEl) {
+        this.cutInBannerEl.classList.remove('active');
+        this.cutInBannerEl.classList.add('out');
+      }
+    }
     if (this.inspector && this.inspector.whiteFlash > 0) {
       this.inspector.whiteFlash = Math.max(0, this.inspector.whiteFlash - realDt);
     }
@@ -3199,6 +3271,9 @@
     this.updateVfx(simDt, realDt);
     this.updateSoundRipples(simDt);
     this.updateLights(realDt);
+    if (INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.updateAmbientDynamics === 'function') {
+      INFINITY.SceneArchitect.updateAmbientDynamics(this, realDt);
+    }
     this.updateFogOfWar(realDt);
     this.updateSpatialAudio();
     this.updateDust(simDt);
@@ -3355,6 +3430,7 @@
   };
 
   EngineSession.prototype.updateCamera = function (realDt) {
+    if (!this.camera || !this.player) return;
     var p = this.player;
     var leadX = clamp((this.aimWorld.x - p.x) * 0.22, -2.2, 2.2);
     var leadZ = clamp((this.aimWorld.z - p.z) * 0.18, -1.8, 1.8);
@@ -3385,16 +3461,25 @@
       this.shakeIntensity *= Math.exp(-6.0 * realDt);
     }
 
-    // Elevated angled 2.5D perspective offset calibrated to Art Bible Iron Rule 1
-    // (~42.8 deg pitch, Player ~12.6% viewport height, Inspector ~19.1% viewport height)
+    // Dynamic 3-tier camera staging (Explore 1.0 -> Combat 0.80 -> Skill Cut-In 0.58)
+    // Static CAMERA_25D_SPEC remains untouched per Art Bible Iron Rule 1.
+    var bossNear = Boolean(this.inspector && this.inspector.alive && dist2D(p.x, p.z, this.inspector.x, this.inspector.z) < 12.5);
+    var inCombat = (this.combatFocusTimer > 0) || bossNear;
+    if (this.directorTimeline && typeof this.directorTimeline.step === 'function') {
+      this.directorState = this.directorTimeline.step(realDt, inCombat);
+    }
+    var zoom = clamp((this.directorState && this.directorState.zoom) || 1.0, 0.54, 1.0);
+    // Slightly flatten pitch during close-up cut-ins so heavy-ink character silhouettes dominate
+    var pitchDrop = (1.0 - zoom) * 2.1;
+
     this.camera.position.set(
       this.camPos.x + sx + this.camKickX,
-      CAMERA_25D_SPEC.offsetY + sy,
-      this.camPos.z + CAMERA_25D_SPEC.offsetZ + this.camKickZ
+      Math.max(4.8, CAMERA_25D_SPEC.offsetY * zoom - pitchDrop) + sy,
+      this.camPos.z + CAMERA_25D_SPEC.offsetZ * zoom + this.camKickZ
     );
     this.camera.lookAt(
       this.camLook.x + this.camKickX * 0.35,
-      CAMERA_25D_SPEC.lookAtY,
+      CAMERA_25D_SPEC.lookAtY + (1.0 - zoom) * 0.45,
       this.camLook.z + this.camKickZ * 0.35
     );
 
@@ -3850,6 +3935,8 @@
     }
 
     if (p.vx !== 0 || p.vz !== 0) {
+      var prevX = p.x;
+      var prevZ = p.z;
       var nx = p.x + p.vx * simDt;
       var nz = p.z + p.vz * simDt;
       var res = this.moveEntityWithCollision(p.x, p.z, nx, nz, p.radius);
@@ -3860,18 +3947,38 @@
         this.spawnWallImpactDebris(res.x - res.normalX * p.radius, res.z - res.normalZ * p.radius, res.normalX, res.normalZ);
       }
 
-      var stepDist = Math.sqrt(p.vx * p.vx + p.vz * p.vz) * simDt;
-      // Grounded wet-slate puddle splashes & boot ripples
+      var stepDist = Math.sqrt((p.x - prevX) * (p.x - prevX) + (p.z - prevZ) * (p.z - prevZ));
+      // Stylistic graphic-novel ink brush ribbon trail behind dashes, overclock & rapid sprinting
+      this.playerTrailAccum = (this.playerTrailAccum || 0) + stepDist;
+      var trailStride = (p.dashTimer > 0 || isOverclock) ? 0.34 : 0.78;
+      if (this.playerTrailAccum >= trailStride && p.stealthTimer <= 0) {
+        this.playerTrailAccum = 0;
+        if (this.playerTrailPrev && INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnInkBrushTrail === 'function') {
+          var trailCol = p.dashTimer > 0
+            ? (p.dashColor || semanticInt('dashTrailInt', 0x52e5ff))
+            : (isOverclock ? (p.overclockColor || 0x4df8ff) : 0x3894b2);
+          INFINITY.VfxStudio.spawnInkBrushTrail(this, this.playerTrailPrev.x, this.playerTrailPrev.z, p.x, p.z, trailCol, {
+            width: (p.dashTimer > 0 || isOverclock) ? 0.76 : 0.42,
+            duration: (p.dashTimer > 0 || isOverclock) ? 0.38 : 0.24,
+            y: 0.08
+          });
+        }
+        this.playerTrailPrev = { x: p.x, z: p.z };
+      } else if (!this.playerTrailPrev) {
+        this.playerTrailPrev = { x: p.x, z: p.z };
+      }
+
+      // Grounded wet-slate puddle splashes & stylized cel ink step dust puffs
       var inPuddle = this.isPointInPuddle(p.x, p.z);
       p.stepRippleAccum = (p.stepRippleAccum || 0) + stepDist;
-      var rippleStride = inPuddle ? 0.62 : 1.35;
+      var rippleStride = inPuddle ? 0.62 : 1.18;
       if (p.stepRippleAccum >= rippleStride && p.stealthTimer <= 0) {
         p.stepRippleAccum = 0;
         if (inPuddle) {
           this.spawnPuddleSplash(p.x, p.z, false);
         } else {
-          var rippleCol = isOverclock ? (p.overclockColor || 0x4df8ff) : (p.x >= 41 ? 0x9aa9be : 0x56b6cc);
-          this.spawnFootstepRipple(p.x, p.z, rippleCol, isOverclock ? 0.62 : 0.42);
+          var rippleCol = isOverclock ? (p.overclockColor || 0x4df8ff) : (p.x >= 41 ? 0x8a9eb6 : 0x5eaec4);
+          this.spawnFootstepRipple(p.x, p.z, rippleCol, isOverclock ? 0.62 : 0.42, p.vx, p.vz);
         }
       }
 
@@ -3952,17 +4059,25 @@
 
     var isDash = (actor.dashTimer > 0) || (actor.id === 'inspector' && actor.lungeActive > 0);
     var isHurt = (actor.hitFlash > 0.09);
+    if (actor.combatPoseTimer > 0) {
+      actor.combatPoseTimer = Math.max(0, actor.combatPoseTimer - safeDt);
+    }
     var nextFrame = 'idle';
     if (isHurt) {
       nextFrame = 'hurt';
+    } else if (actor.id === 'player' && actor.combatPoseTimer > 0 && actor.combatPose) {
+      // Limbus-style hard pose-snapping sequence (windup -> smear -> cleave -> parry)
+      nextFrame = actor.combatPose;
     } else if (isDash) {
-      nextFrame = 'dash';
+      nextFrame = actor.id === 'player' ? 'smear' : 'dash';
     } else if (actor.actionTimer > 0) {
-      nextFrame = 'action';
+      nextFrame = actor.id === 'player'
+        ? (actor.actionTimer > 0.21 ? 'windup' : (actor.actionTimer > 0.13 ? 'smear' : 'cleave'))
+        : 'action';
     } else if (actor.channelTimer > 0) {
-      nextFrame = 'channel';
+      nextFrame = actor.id === 'player' ? 'windup' : 'channel';
     } else if (moving) {
-      actor.animTimer += safeDt * (actor.overclockTimer > 0 ? 10.5 : 7.4);
+      actor.animTimer += safeDt * (actor.overclockTimer > 0 ? 11.2 : 8.2);
       nextFrame = (Math.floor(actor.animTimer) % 2 === 0) ? 'walk1' : 'walk2';
     } else {
       actor.animTimer = 0;
@@ -4080,9 +4195,13 @@
     var basic = this.loadout.basicAttack;
     var vfx = basic.vfxProfile || null;
     p.attackCd = Math.max(0.22, Number(basic.cooldown) || 0.36);
-    p.actionTimer = 0.24;
+    p.actionTimer = 0.28;
     p.auraPulse = Math.max(p.auraPulse || 0, 0.35);
-    this.triggerActorSquash(p, 1.14, 0.90);
+    this.combatFocusTimer = Math.max(this.combatFocusTimer || 0, 4.5);
+    this.triggerActorSquash(p, 1.18, 0.88);
+    if (this.directorTimeline) {
+      this.directorTimeline.triggerBeat({ zoom: 0.78, holdSec: 0.20, inkEdge: 0.20 });
+    }
 
     var dir = this.getAimDir();
     var colorHex = hexToInt((vfx && vfx.primaryColor) || basic.color, 0x6fd8ea);
@@ -4164,10 +4283,28 @@
     if (!isBlinkRecall) {
       p.energy = Math.max(0, p.energy - sl.energyCost);
     }
-    p.actionTimer = 0.34;
+    p.actionTimer = 0.36;
     p.auraPulse = 1.0;
-    this.triggerActorSquash(p, 1.18, 0.86);
+    this.combatFocusTimer = Math.max(this.combatFocusTimer || 0, 5.5);
+    this.triggerActorSquash(p, 1.22, 0.84);
     this.stats.skillsCast += 1;
+
+    // Limbus-style Skill Cut-In Banner + Director Camera Push + Letterbox Beat
+    var isMajorCast = (sl.archetype === 'sword_arc' || sl.archetype === 'berserk_strike' || sl.archetype === 'emp_blast' || sl.archetype === 'rail_shot' || sl.archetype === 'seal_chain' || sl.archetype === 'overclock');
+    this.triggerSkillCutIn(
+      sl.name || '构筑释放',
+      String(sl.archetype || 'SKILL').toUpperCase().replace(/_/g, ' ') + ' // SLOT ' + (slotIdx + 1),
+      (sl.vfxProfile && sl.vfxProfile.primaryColor) || sl.color || '#5ce8ff'
+    );
+    if (this.directorTimeline) {
+      this.directorTimeline.triggerBeat({
+        zoom: isMajorCast ? 0.60 : 0.72,
+        holdSec: isMajorCast ? 0.44 : 0.28,
+        letterbox: isMajorCast ? 0.068 : 0.036,
+        chromatic: isMajorCast ? 0.52 : 0.24,
+        inkEdge: isMajorCast ? 0.58 : 0.32
+      });
+    }
 
     var dir = this.getAimDir();
     var vfx = sl.vfxProfile || {
@@ -4295,6 +4432,13 @@
           this.hitStopTimer = 0.08;
           this.parryFlashTimer = 0.24;
           this.triggerImpactFrame(0.085);
+          p.combatPose = 'parry';
+          p.combatPoseTimer = 0.34;
+          this.triggerSkillCutIn('完美弹反 · ' + (sl.name || '宵练断势'), 'CLASH WIN // COUNTER EXECUTION', '#ffd86b');
+          this.triggerOnomatopoeia(ins.x, 2.2, ins.z, '鏗!', '#ffe484');
+          if (this.directorTimeline) {
+            this.directorTimeline.triggerBeat({ zoom: 0.56, holdSec: 0.52, letterbox: 0.082, chromatic: 0.78, inkEdge: 0.75 });
+          }
           this.camFovPunch = -3.4;
           this.addCameraShake(0.48, 0.34);
           this.addCameraKick(dir.x * 0.62, dir.z * 0.62);
@@ -4399,6 +4543,8 @@
           var safeBlink = this.mapApi.resolveCircleWallCollision(bx, bz, p.radius);
           p.x = safeBlink.x;
           p.z = safeBlink.z;
+          this.playerTrailPrev = { x: p.x, z: p.z };
+          this.playerTrailAccum = 0;
           p.invulnTimer = 0.55;
           this.triggerActorSquash(p, 0.82, 1.24);
           this.camFovPunch = -2.2;
@@ -6160,7 +6306,17 @@
         ins.lungeHitDone = false;
         ins.lungeCd = 3.2;
         this.triggerActorSquash(ins, 1.28, 0.78);
-        this.spawnSlashArc(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 3.4, 0xff2238, 0.24, true, { primaryColor: '#ff2238', secondaryColor: '#ff99a4' });
+        this.combatFocusTimer = Math.max(this.combatFocusTimer || 0, 5.0);
+        this.spawnSlashArc(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 3.6, 0xff2238, 0.42, true, {
+          primaryColor: '#ff2238',
+          secondaryColor: '#ff7852',
+          coreColor: '#fff4f4',
+          isBossCrimson: true
+        });
+        this.triggerOnomatopoeia(ins.x, 2.35, ins.z, '裂!', '#ff3b52');
+        if (this.directorTimeline) {
+          this.directorTimeline.triggerBeat({ zoom: 0.72, holdSec: 0.30, chromatic: 0.42, inkEdge: 0.55 });
+        }
         playSfxSafe('sword_slash');
         this.emitSoundRipple(ins.x, ins.z, 65, 'boss');
       }
@@ -6339,6 +6495,17 @@
     }
 
     this.spawnFloatingText(ins.x, 2.5, ins.z, (isCrit ? '★-' : '-') + dmg, isCrit ? '#ffd86b' : '#edf3fa', isCrit ? 'crit' : 'normal');
+    if (opts && opts.playerImpact) {
+      this.combatFocusTimer = Math.max(this.combatFocusTimer || 0, 5.0);
+      if (isCrit) {
+        this.triggerOnomatopoeia(ins.x + (Math.random() - 0.5) * 0.6, 1.95, ins.z, dmg >= 45 ? '轟!' : '斬!', '#ffd86b');
+        if (this.directorTimeline) {
+          this.directorTimeline.triggerBeat({ chromatic: 0.65, inkEdge: 0.65 });
+        }
+      } else if (Math.random() < 0.55) {
+        this.triggerOnomatopoeia(ins.x + (Math.random() - 0.5) * 0.5, 1.85, ins.z, '斬!', '#78f0ff');
+      }
+    }
     this.spawnSparkBurst(ins.x, 1.3, ins.z, impactCol, isCrit ? 16 : 9);
     if (isCrit) {
       this.spawnImpactStar(ins.x, 1.4, ins.z, impactCol, 2.0, 0.24);
@@ -6916,16 +7083,17 @@
     var THREE = this.THREE;
     var isBoss = actorId === 'inspector';
     var dim = isBoss ? ACTOR_DIMENSIONS.inspector : (actorId === 'player' ? ACTOR_DIMENSIONS.player : ACTOR_DIMENSIONS.squad);
-    var tex = this.getCharTex(actorId, frame || 'action');
+    var resolvedFrame = (actorId === 'player' && frame === 'dash') ? 'smear' : (frame || 'action');
+    var tex = this.getCharTex(actorId, resolvedFrame);
     var geo = new THREE.PlaneGeometry(dim.width, dim.height);
+    // Ink-silhouette backing with crisp colored tint (eliminates washed-out white additive ghosts)
     var mat = new THREE.MeshBasicMaterial({
       map: tex,
       color: colorHex || 0x4df8ff,
       transparent: true,
-      opacity: 0.52,
+      opacity: 0.44,
       depthWrite: false,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending
+      side: THREE.DoubleSide
     });
     var mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, dim.height * 0.5 + 0.04, z);
@@ -6934,13 +7102,14 @@
     this.scene.add(mesh);
 
     var self = this;
-    var dur = duration || 0.35;
+    var dur = duration || 0.32;
     this.vfxList.push({
       ttl: dur,
       maxTtl: dur,
       update: function (dt) {
         this.ttl -= dt;
-        mat.opacity = 0.52 * clamp(this.ttl / this.maxTtl, 0, 1);
+        var frac = clamp(this.ttl / this.maxTtl, 0, 1);
+        mat.opacity = 0.44 * frac * frac;
       },
       dispose: function () {
         self.scene.remove(mesh);
@@ -6974,7 +7143,12 @@
     }
   };
 
-  EngineSession.prototype.spawnFootstepRipple = function (x, z, colorHex, maxRadius) {
+  EngineSession.prototype.spawnFootstepRipple = function (x, z, colorHex, maxRadius, vx, vz) {
+    var isPuddle = this.isPointInPuddle(x, z);
+    if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnInkStepPuff === 'function') {
+      INFINITY.VfxStudio.spawnInkStepPuff(this, x, z, vx || 0, vz || 0, colorHex, isPuddle);
+      return;
+    }
     var THREE = this.THREE;
     var maxR = maxRadius || 0.44;
     var geo = new THREE.RingGeometry(0.74, 1.0, 18);
@@ -7307,8 +7481,8 @@
       var dir = this.getAimDir();
       this.flashLight.position.set(p.x, 2.15, p.z);
       this.flashTarget.position.set(p.x + dir.x * 7.2, 0.15, p.z + dir.z * 7.2);
-      // Flashlight is the dominant key light under the dark-horror balance
-      this.flashLight.intensity = p.stealthTimer > 0 ? 1.3 : 3.1;
+      // Flashlight is the dominant key light under Mignola noir contrast
+      this.flashLight.intensity = p.stealthTimer > 0 ? 1.55 : 4.4;
     }
     if (this.playerGlow) {
       this.playerGlow.position.set(p.x, 1.55, p.z);
@@ -7557,8 +7731,12 @@
 
     var el = document.createElement('div');
     el.textContent = text;
+    var tilt = typeof st.tiltDeg === 'number' ? st.tiltDeg : 0;
+    var popScale = typeof st.scalePop === 'number' ? st.scalePop : 1.0;
     el.style.cssText =
-      'position:absolute;transform:translate(-50%,-50%);font-size:' + st.fontSize + ';font-weight:' + st.fontWeight + ';' +
+      'position:absolute;transform:translate(-50%,-50%) rotate(' + tilt + 'deg) scale(' + popScale + ');' +
+      'font-size:' + st.fontSize + ';font-weight:' + st.fontWeight + ';' +
+      (st.fontFamily ? 'font-family:' + st.fontFamily + ';' : '') +
       'color:' + st.color + ';text-shadow:' + st.textShadow + ';' +
       'white-space:nowrap;pointer-events:none;letter-spacing:' + st.letterSpacing + ';';
     this.floatersLayer.appendChild(el);
@@ -7570,6 +7748,8 @@
       y: y,
       z: z,
       vy: st.vy || 1.25,
+      tiltDeg: tilt,
+      scalePop: popScale,
       ttl: ttl,
       maxTtl: ttl
     });
@@ -7661,9 +7841,14 @@
       if (!fScr) {
         ft.el.style.display = 'none';
       } else {
+        var age = 1.0 - clamp(ft.ttl / ft.maxTtl, 0, 1);
+        var pop = ft.scalePop && ft.scalePop > 1.0
+          ? lerp(ft.scalePop, 1.0, clamp(age / 0.22, 0, 1))
+          : 1.0;
         ft.el.style.display = 'block';
         ft.el.style.left = Math.round(fScr.x) + 'px';
         ft.el.style.top = Math.round(fScr.y) + 'px';
+        ft.el.style.transform = 'translate(-50%,-50%) rotate(' + (ft.tiltDeg || 0) + 'deg) scale(' + pop.toFixed(2) + ')';
         ft.el.style.opacity = String(clamp(ft.ttl / (ft.maxTtl * 0.45), 0, 1));
       }
     }
@@ -7831,6 +8016,7 @@
       soundLevel: Math.round(this.soundLevel),
       threatLevel: Math.round(this.threatLevel),
       slowMo: this.slowMo || this.inputPaused,
+      inCombat: Boolean(this.combatFocusTimer > 0 || (ins && ins.alive && dBoss < 12.5)),
       inspector: {
         hp: Math.round(ins.hp),
         maxHp: Math.round(ins.maxHp),

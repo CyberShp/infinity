@@ -442,12 +442,14 @@
    *   - layer === 'slash' : 20-32 deg tilted 3D plane anchored to slot.radius
    * -------------------------------------------------------------------------- */
   var FLIPBOOK_PRESETS = {
-    hades_cyan:         { layer: 'slash',  tiltDeg: 26, duration: 0.30, cols: 2, rows: 2, primary: 0x5ce8ff, secondary: 0xf6d57a, core: 0xffffff, ink: 0x05080f },
-    hades_flame:        { layer: 'slash',  tiltDeg: 28, duration: 0.34, cols: 2, rows: 2, primary: 0xff8424, secondary: 0xc852ff, core: 0xfff8dc, ink: 0x0a050c },
-    hades_emp:          { layer: 'ground', tiltDeg: 0,  duration: 0.44, cols: 2, rows: 2, primary: 0x48c6ff, secondary: 0x9aa4ff, core: 0xf0ffff, ink: 0x050812 },
-    hades_tao_ground:   { layer: 'ground', tiltDeg: 0,  duration: 0.56, cols: 2, rows: 2, primary: 0xf5cf64, secondary: 0xfff0b2, core: 0xffffff, ink: 0x0a0805 },
-    hades_occult_chain: { layer: 'slash',  tiltDeg: 24, duration: 0.44, cols: 2, rows: 2, primary: 0xc852ff, secondary: 0xf5cf64, core: 0xf6e8ff, ink: 0x09050e },
-    hades_heal_aegis:   { layer: 'ground', tiltDeg: 0,  duration: 0.52, cols: 2, rows: 2, primary: 0x46e88a, secondary: 0x5ce8ff, core: 0xeafff2, ink: 0x050d09 }
+    hades_cyan:             { layer: 'slash',  tiltDeg: 26, duration: 0.30, cols: 2, rows: 2, primary: 0x5ce8ff, secondary: 0xf6d57a, core: 0xffffff, ink: 0x05080f },
+    hades_cyan_16f:         { layer: 'slash',  tiltDeg: 25, duration: 0.38, cols: 4, rows: 4, primary: 0x5ce8ff, secondary: 0xf6d57a, core: 0xffffff, ink: 0x04070e },
+    hades_crimson_boss_16f: { layer: 'slash',  tiltDeg: 24, duration: 0.44, cols: 4, rows: 4, primary: 0xff243c, secondary: 0xff7852, core: 0xfff4f4, ink: 0x0c0306 },
+    hades_flame:            { layer: 'slash',  tiltDeg: 28, duration: 0.34, cols: 2, rows: 2, primary: 0xff8424, secondary: 0xc852ff, core: 0xfff8dc, ink: 0x0a050c },
+    hades_emp:              { layer: 'ground', tiltDeg: 0,  duration: 0.44, cols: 2, rows: 2, primary: 0x48c6ff, secondary: 0x9aa4ff, core: 0xf0ffff, ink: 0x050812 },
+    hades_tao_ground:       { layer: 'ground', tiltDeg: 0,  duration: 0.56, cols: 2, rows: 2, primary: 0xf5cf64, secondary: 0xfff0b2, core: 0xffffff, ink: 0x0a0805 },
+    hades_occult_chain:     { layer: 'slash',  tiltDeg: 24, duration: 0.44, cols: 2, rows: 2, primary: 0xc852ff, secondary: 0xf5cf64, core: 0xf6e8ff, ink: 0x09050e },
+    hades_heal_aegis:       { layer: 'ground', tiltDeg: 0,  duration: 0.52, cols: 2, rows: 2, primary: 0x46e88a, secondary: 0x5ce8ff, core: 0xeafff2, ink: 0x050d09 }
   };
 
   function getFlipbookTex(name) {
@@ -750,20 +752,26 @@
     var r = clamp(radius || 3.2, 1.8, 4.0) * (0.94 + (c.intensity - 1.0) * 0.16);
     var slashTex = getTex(session, 'vfx_slash_crescent');
 
-    // Hades 3D Flipbook slash plane (tilted 26 deg, dual ink-smoke + bright cel layers)
-    var fbName = (c.motif === 'flame_solar' || c.motif === 'blood_sanguine' || c.motif === 'occult_meme')
-      ? 'hades_flame'
-      : 'hades_cyan';
+    // Hades 3D 16-Frame Flipbook slash plane (tilted 25 deg, dual ink-smoke + bright cel layers)
+    var isBossCrimson = !!(vfx && vfx.isBossCrimson);
+    var fbName = isBossCrimson
+      ? 'hades_crimson_boss_16f'
+      : ((c.motif === 'flame_solar' || c.motif === 'blood_sanguine' || c.motif === 'occult_meme')
+        ? 'hades_flame'
+        : 'hades_cyan_16f');
+    var fbPreset = FLIPBOOK_PRESETS[fbName] || FLIPBOOK_PRESETS.hades_cyan_16f;
     spawnFlipbookVfx(session, {
       name: fbName,
-      x: x + Math.cos(angle) * (r * 0.22),
-      z: z + Math.sin(angle) * (r * 0.22),
-      y: 0.92,
+      x: x + Math.cos(angle) * (r * 0.24),
+      z: z + Math.sin(angle) * (r * 0.24),
+      y: isBossCrimson ? 1.08 : 0.94,
       angle: angle,
-      radius: r * 0.88,
+      radius: r * (isBossCrimson ? 1.05 : 0.96),
       layer: 'slash',
-      tiltDeg: 26,
-      duration: 0.30,
+      tiltDeg: fbPreset.tiltDeg,
+      cols: fbPreset.cols,
+      rows: fbPreset.rows,
+      duration: fbPreset.duration,
       primaryColor: c.primary,
       secondaryColor: c.secondary,
       coreColor: c.core
@@ -776,14 +784,21 @@
     var planeGeo = getUnitFloorPlane(session);
     var slashSize = r * 1.92;
 
+    var is16f = (fbPreset.cols === 4 && fbPreset.rows === 4);
     var matMain = createSlashShaderMaterial(THREE, c.primary, c.secondary, c.core, slashTex);
+    if (is16f && matMain.uniforms && matMain.uniforms.uOpacity) {
+      matMain.uniforms.uOpacity.value = 0.28;
+    }
     var meshMain = new THREE.Mesh(planeGeo, matMain);
     meshMain.scale.set(slashSize, 1, slashSize);
     meshMain.rotation.z = 0.44; // ~25 deg tilted 3D cleave plane
     group.add(meshMain);
 
-    // Secondary crossed counter-slash for depth & weapon-art flair
+    // Secondary crossed counter-slash (subdued when 16-frame hand-inked flipbook carries the silhouette)
     var matEcho = createSlashShaderMaterial(THREE, c.secondary, c.primary, c.core, slashTex);
+    if (is16f && matEcho.uniforms && matEcho.uniforms.uOpacity) {
+      matEcho.uniforms.uOpacity.value = 0.18;
+    }
     var meshEcho = new THREE.Mesh(planeGeo, matEcho);
     meshEcho.position.y = 0.18;
     meshEcho.rotation.z = -0.38;
@@ -2339,12 +2354,198 @@
     berserk_strike: { shader: 'fissure_impact',    silhouette: 'erupting_3d_shards',     ground: 'magma_fissure_crater' }
   };
 
+  // ---------------------------------------------------------------------------
+  // Hard-Edge Cel Ink Brush Trail Ribbon & Grounded Step Dust/Splash Shaders
+  // Replaces bare RingGeometry circles & flat tinted copies with graphic-novel ink
+  // ---------------------------------------------------------------------------
+  function spawnInkBrushTrail(session, x0, z0, x1, z1, colorHex, opts) {
+    if (!session || !session.THREE || !session.scene) return;
+    var THREE = session.THREE;
+    var cfg = opts || {};
+    var dx = x1 - x0;
+    var dz = z1 - z0;
+    var dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < 0.08) return;
+
+    var ang = Math.atan2(dz, dx);
+    var width = clamp(Number(cfg.width) || 0.62, 0.25, 1.4);
+    var dur = clamp(Number(cfg.duration) || 0.34, 0.16, 0.75);
+    var yPos = typeof cfg.y === 'number' ? cfg.y : 0.14;
+    var pri = hexToInt(colorHex, 0x5ce8ff);
+    var ink = hexToInt(cfg.inkColor, 0x05070e);
+
+    var geo = getUnitFloorPlane(session);
+    var mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uProgress: { value: 0.0 },
+        uColor: { value: linearColor(THREE, pri) },
+        uInk: { value: linearColor(THREE, ink) },
+        uSeed: { value: Math.random() * 40.0 }
+      },
+      vertexShader: [
+        'varying vec2 vUv;',
+        'void main() {',
+        '  vUv = uv;',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'precision mediump float;',
+        'uniform float uProgress;',
+        'uniform vec3 uColor;',
+        'uniform vec3 uInk;',
+        'uniform float uSeed;',
+        'varying vec2 vUv;',
+        'float h21(vec2 p) {',
+        '  p = fract(p * vec2(123.34, 456.21));',
+        '  p += dot(p, p + 45.32);',
+        '  return fract(p.x * p.y);',
+        '}',
+        'void main() {',
+        '  float along = vUv.x;',
+        '  float across = abs(vUv.y - 0.5) * 2.0;',
+        '  float taper = smoothstep(0.0, 0.85, along) * (1.0 - smoothstep(0.88, 1.0, along));',
+        '  float n = h21(floor(vec2(along * 26.0 + uSeed, vUv.y * 12.0)));',
+        '  float bristle = across + n * 0.28;',
+        '  float dissolve = uProgress * 1.15;',
+        '  float inkEdge = step(bristle, taper * (1.05 - dissolve * 0.75));',
+        '  if (inkEdge < 0.5) discard;',
+        '  float coreMask = step(bristle, taper * (0.58 - dissolve * 0.65));',
+        '  float hotMask = step(bristle, taper * (0.24 - dissolve * 0.55));',
+        '  vec3 col = mix(uInk, uColor * 1.2, coreMask);',
+        '  col = mix(col, vec3(1.0), hotMask * 0.85);',
+        '  float alpha = (1.0 - uProgress * 0.92) * mix(0.76, 0.96, coreMask);',
+        '  gl_FragColor = vec4(col, alpha);',
+        '  gl_FragColor = linearToOutputTexel(gl_FragColor);',
+        '}'
+      ].join('\n'),
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set((x0 + x1) * 0.5, yPos, (z0 + z1) * 0.5);
+    mesh.rotation.y = -ang;
+    mesh.scale.set(Math.max(0.55, dist * 1.18), 1, width);
+    mesh.renderOrder = 2;
+    session.scene.add(mesh);
+
+    if (Array.isArray(session.vfxList)) {
+      session.vfxList.push({
+        ttl: dur,
+        maxTtl: dur,
+        update: function (dt) {
+          this.ttl -= dt;
+          mat.uniforms.uProgress.value = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
+        },
+        dispose: function () {
+          session.scene.remove(mesh);
+          disposeIfOwned(geo);
+          disposeIfOwned(mat);
+        }
+      });
+    }
+  }
+
+  function spawnInkStepPuff(session, x, z, vx, vz, colorHex, isPuddle) {
+    if (!session || !session.THREE || !session.scene) return;
+    var THREE = session.THREE;
+    var pri = hexToInt(colorHex, isPuddle ? 0x5ce8ff : 0x6f8498);
+    var dur = isPuddle ? 0.42 : 0.34;
+    var maxScale = isPuddle ? 1.18 : 0.78;
+    var geo = getUnitFloorPlane(session);
+
+    var mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uProgress: { value: 0.0 },
+        uColor: { value: linearColor(THREE, pri) },
+        uIsPuddle: { value: isPuddle ? 1.0 : 0.0 },
+        uSeed: { value: Math.random() * 97.0 }
+      },
+      vertexShader: [
+        'varying vec2 vUv;',
+        'void main() {',
+        '  vUv = uv;',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'precision mediump float;',
+        'uniform float uProgress;',
+        'uniform vec3 uColor;',
+        'uniform float uIsPuddle;',
+        'uniform float uSeed;',
+        'varying vec2 vUv;',
+        'void main() {',
+        '  vec2 p = vUv * 2.0 - 1.0;',
+        '  float r = length(p);',
+        '  float a = atan(p.y, p.x);',
+        '  float jagged = sin(a * 5.0 + uSeed) * 0.08 + cos(a * 9.0 - uSeed * 1.7) * 0.05;',
+        '  if (uIsPuddle > 0.5) {',
+        '    float rr = r + jagged * 0.45;',
+        '    float outer = step(abs(rr - (0.28 + uProgress * 0.62)), 0.075 * (1.0 - uProgress * 0.45));',
+        '    float inner = step(abs(rr - (0.14 + uProgress * 0.44)), 0.045 * (1.0 - uProgress * 0.5));',
+        '    float inkBand = step(abs(rr - (0.31 + uProgress * 0.62)), 0.11 * (1.0 - uProgress * 0.45));',
+        '    if (inkBand < 0.5 && inner < 0.5) discard;',
+        '    vec3 col = mix(vec3(0.02, 0.03, 0.05), uColor * 1.25, max(outer, inner));',
+        '    float alpha = (1.0 - uProgress) * mix(0.65, 0.92, max(outer, inner));',
+        '    gl_FragColor = vec4(col, alpha);',
+        '    gl_FragColor = linearToOutputTexel(gl_FragColor);',
+        '    return;',
+        '  }',
+        '  // Hard-edge stylized comic dust puff (ink outline + stepped slate cloud)',
+        '  float rad = 0.22 + uProgress * 0.56;',
+        '  float d = r + jagged;',
+        '  float outerMask = step(d, rad) * step(rad * 0.36 * uProgress, d);',
+        '  if (outerMask < 0.5) discard;',
+        '  float outline = step(rad - 0.10, d);',
+        '  vec3 col = mix(uColor * 0.58, vec3(0.02, 0.03, 0.05), outline);',
+        '  float alpha = (1.0 - uProgress * 0.95) * 0.66;',
+        '  gl_FragColor = vec4(col, alpha);',
+        '  gl_FragColor = linearToOutputTexel(gl_FragColor);',
+        '}'
+      ].join('\n'),
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0.042, z);
+    mesh.scale.set(maxScale, 1, maxScale);
+    mesh.renderOrder = 2;
+    session.scene.add(mesh);
+
+    var driftX = -(Number(vx) || 0) * 0.08;
+    var driftZ = -(Number(vz) || 0) * 0.08;
+    if (Array.isArray(session.vfxList)) {
+      session.vfxList.push({
+        ttl: dur,
+        maxTtl: dur,
+        update: function (dt) {
+          this.ttl -= dt;
+          mat.uniforms.uProgress.value = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
+          mesh.position.x += driftX * dt;
+          mesh.position.z += driftZ * dt;
+        },
+        dispose: function () {
+          session.scene.remove(mesh);
+          disposeIfOwned(geo);
+          disposeIfOwned(mat);
+        }
+      });
+    }
+  }
+
   INFINITY.VfxStudio = {
     resolveVfxColors: resolveVfxColors,
     ARCHETYPE_VFX_SIGNATURE: ARCHETYPE_VFX_SIGNATURE,
     FLIPBOOK_PRESETS: FLIPBOOK_PRESETS,
     clampGroundDecal: clampGroundDecal,
     spawnFlipbookVfx: spawnFlipbookVfx,
+    spawnInkBrushTrail: spawnInkBrushTrail,
+    spawnInkStepPuff: spawnInkStepPuff,
     spawnSlashArc: spawnSlashArc,
     spawnScorchDecal: spawnScorchDecal,
     buildWardCircle: buildWardCircle,

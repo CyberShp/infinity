@@ -738,8 +738,436 @@
       session.scene.add(pMesh, pPlinth, pBand, pRing, pCap);
     }
 
-    // --- 1D. ZONE-SPECIFIC 3D ARCHITECTURAL STORYTELLING PROPS ---
+    // --- 1D. PAINTED SCENE-A B1 CONCOURSE OVERLAY (Hand-inked Floor Plate, Wall Elevations & AO) ---
+    buildConcoursePaintedStage(session, {
+      WALL_HEIGHT: WALL_HEIGHT,
+      FLOOR_Y: FLOOR_Y
+    });
+
+    // --- 1E. ZONE-SPECIFIC 3D / PAINTED 2.5D ARCHITECTURAL STORYTELLING PROPS ---
     buildZoneProps(session, propSpecs);
+
+    // --- 1F. 6-LAYER AMBIENT LIVING WORLD DYNAMICS (Drips, Dust Shafts, Steam, CRT Glitch, Train Sweep) ---
+    buildConcourseAmbientDynamics(session);
+  }
+
+  function loadSceneTextureSafe(THREE, session, assetKey, isColor, repeatX, repeatY) {
+    if (typeof Image !== 'function' || !INFINITY.ASSETS || typeof INFINITY.ASSETS.getSceneAssetUrl !== 'function') {
+      return null;
+    }
+    var url = INFINITY.ASSETS.getSceneAssetUrl(assetKey);
+    if (!url || typeof THREE.TextureLoader !== 'function') return null;
+    try {
+      var loader = new THREE.TextureLoader();
+      var tex = loader.load(url);
+      session.trackTex(tex);
+      if (isColor && THREE.sRGBEncoding !== undefined) {
+        tex.encoding = THREE.sRGBEncoding;
+      }
+      if (repeatX && repeatY) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(repeatX, repeatY);
+      } else {
+        tex.wrapS = THREE.ClampToEdgeWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+      }
+      tex.anisotropy = 8;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      return tex;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function buildConcoursePaintedStage(session, cfg) {
+    var THREE = session.THREE;
+    var floorTex = loadSceneTextureSafe(THREE, session, 'concourse_floor', true, 0, 0);
+    if (!floorTex) return;
+
+    var floorNorm = loadSceneTextureSafe(THREE, session, 'concourse_floor_normal', false, 0, 0);
+    var floorRough = loadSceneTextureSafe(THREE, session, 'concourse_floor_roughness', false, 0, 0);
+    var wallTex = loadSceneTextureSafe(THREE, session, 'concourse_wall', true, 1, 1);
+    var wallNorm = loadSceneTextureSafe(THREE, session, 'concourse_wall_normal', false, 1, 1);
+
+    var WALL_H = cfg.WALL_HEIGHT || 2.6;
+    var FLOOR_Y = cfg.FLOOR_Y || 0.0;
+
+    // 1. Hand-inked full-room floor plate spanning B1 Concourse (x: 2..20, z: 2..19 -> 18m x 17m)
+    var plateGeo = session.trackGeo(new THREE.PlaneGeometry(18.02, 17.02));
+    plateGeo.rotateX(-Math.PI / 2);
+    var plateMat = session.trackMat(new THREE.MeshStandardMaterial({
+      map: floorTex,
+      normalMap: floorNorm || null,
+      normalScale: new THREE.Vector2(1.45, 1.45),
+      roughnessMap: floorRough || null,
+      roughness: 0.88,
+      metalness: 0.16
+    }));
+    var plateMesh = new THREE.Mesh(plateGeo, plateMat);
+    plateMesh.position.set(11.0, FLOOR_Y + 0.012, 10.5);
+    session.scene.add(plateMesh);
+
+    // 2. Heavy Mignola perimeter ink-shadow skirt & pillar base AO rings inside B1 Concourse
+    var aoCanvas = makeCanvas(128, 128);
+    var aoCtx = aoCanvas.getContext('2d');
+    if (aoCtx) {
+      var ag = aoCtx.createRadialGradient(64, 64, 14, 64, 64, 62);
+      ag.addColorStop(0, 'rgba(3, 5, 9, 0.92)');
+      ag.addColorStop(0.58, 'rgba(4, 7, 13, 0.56)');
+      ag.addColorStop(1, 'rgba(4, 7, 13, 0.0)');
+      aoCtx.fillStyle = ag;
+      aoCtx.fillRect(0, 0, 128, 128);
+    }
+    var aoTex = session.trackTex(new THREE.CanvasTexture(aoCanvas));
+    var aoGeo = session.trackGeo(new THREE.PlaneGeometry(1, 1));
+    aoGeo.rotateX(-Math.PI / 2);
+    var aoMat = session.trackMat(new THREE.MeshBasicMaterial({
+      map: aoTex,
+      transparent: true,
+      opacity: 0.88,
+      depthWrite: false
+    }));
+    var pillarCoords = [[6.5, 6.5], [14.5, 6.5]];
+    for (var pi = 0; pi < pillarCoords.length; pi++) {
+      var pAo = new THREE.Mesh(aoGeo, aoMat);
+      pAo.position.set(pillarCoords[pi][0], FLOOR_Y + 0.022, pillarCoords[pi][1]);
+      pAo.scale.set(2.85, 1, 2.85);
+      session.scene.add(pAo);
+    }
+
+    // 3. Hand-inked subway wall elevations facing into B1 Concourse (respecting doorways!)
+    if (wallTex) {
+      var makeWallStrip = function (w, h, px, py, pz, rotY, repX) {
+        var stripTex = wallTex.clone();
+        stripTex.needsUpdate = true;
+        stripTex.wrapS = THREE.RepeatWrapping;
+        stripTex.wrapT = THREE.ClampToEdgeWrapping;
+        stripTex.repeat.set(Math.max(1, repX || (w / 5.4)), 1);
+        session.trackTex(stripTex);
+
+        var stripNorm = null;
+        if (wallNorm) {
+          stripNorm = wallNorm.clone();
+          stripNorm.needsUpdate = true;
+          stripNorm.wrapS = THREE.RepeatWrapping;
+          stripNorm.wrapT = THREE.ClampToEdgeWrapping;
+          stripNorm.repeat.set(Math.max(1, repX || (w / 5.4)), 1);
+          session.trackTex(stripNorm);
+        }
+
+        var wMat = session.trackMat(new THREE.MeshStandardMaterial({
+          map: stripTex,
+          normalMap: stripNorm,
+          normalScale: new THREE.Vector2(1.35, 1.35),
+          roughness: 0.86,
+          metalness: 0.14
+        }));
+        var wMesh = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(w, h)), wMat);
+        wMesh.position.set(px, py, pz);
+        wMesh.rotation.y = rotY;
+        session.scene.add(wMesh);
+      };
+
+      // North wall (z = 2.02, spans x = 2..20 -> 18m)
+      makeWallStrip(18.0, WALL_H, 11.0, WALL_H * 0.5, 2.025, 0, 3.2);
+      // West wall (x = 2.02, spans z = 2..19 -> 17m)
+      makeWallStrip(17.0, WALL_H, 2.025, WALL_H * 0.5, 10.5, Math.PI * 0.5, 3.0);
+      // East wall north segment (x = 19.97, z = 2..14 -> 12m, doorway is z=14..18)
+      makeWallStrip(12.0, WALL_H, 19.975, WALL_H * 0.5, 8.0, -Math.PI * 0.5, 2.2);
+      // East wall south segment (x = 19.97, z = 18..19 -> 1m)
+      makeWallStrip(1.0, WALL_H, 19.975, WALL_H * 0.5, 18.5, -Math.PI * 0.5, 0.35);
+      // South wall west segment (z = 18.97, x = 2..8 -> 6m, doorway is x=8..12)
+      makeWallStrip(6.0, WALL_H, 5.0, WALL_H * 0.5, 18.975, Math.PI, 1.15);
+      // South wall east segment (z = 18.97, x = 12..20 -> 8m)
+      makeWallStrip(8.0, WALL_H, 16.0, WALL_H * 0.5, 18.975, Math.PI, 1.5);
+    }
+
+    // Store shared painted prop shadow geometry/material for Scene-A 30-deg sprite props
+    session._sceneAAoGeo = aoGeo;
+    session._sceneAAoMat = aoMat;
+    session._sceneAEnabled = true;
+  }
+
+  function createPaintedPropBillboard(THREE, session, assetKey, x, z, width, height, opts) {
+    var tex = loadSceneTextureSafe(THREE, session, assetKey, true, 0, 0);
+    if (!tex) return null;
+    var o = opts || {};
+    var group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    // Grounded contact shadow ellipse
+    if (session._sceneAAoGeo && session._sceneAAoMat) {
+      var sh = new THREE.Mesh(session._sceneAAoGeo, session._sceneAAoMat);
+      sh.position.set(0, 0.028, 0.06);
+      sh.scale.set(width * (o.shadowScaleX || 1.12), 1, width * (o.shadowScaleZ || 0.72));
+      group.add(sh);
+    }
+
+    var mat = session.trackMat(new THREE.MeshStandardMaterial({
+      map: tex,
+      transparent: true,
+      alphaTest: 0.14,
+      roughness: 0.82,
+      metalness: 0.16,
+      side: THREE.DoubleSide
+    }));
+    var mesh = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(width, height)), mat);
+    mesh.position.set(0, height * 0.48 + (o.yOffset || 0.02), 0);
+    mesh.rotation.x = -(o.tiltRad !== undefined ? o.tiltRad : 0.34);
+    if (o.flipX) mesh.scale.x = -1;
+    group.add(mesh);
+
+    if (o.emissiveColor) {
+      var led = new THREE.Mesh(
+        session.trackGeo(new THREE.SphereGeometry(0.055, 8, 8)),
+        session.trackMat(new THREE.MeshBasicMaterial({ color: o.emissiveColor }))
+      );
+      led.position.set(o.ledX || 0, o.ledY || (height * 0.72), o.ledZ || 0.14);
+      group.add(led);
+      group.userData.ledMat = led.material;
+    }
+
+    session.scene.add(group);
+    return group;
+  }
+
+  function buildConcourseAmbientDynamics(session) {
+    var THREE = session.THREE;
+    if (!THREE || !session.scene) return;
+
+    var dyn = {
+      drips: [],
+      steams: [],
+      dustPoints: null,
+      dustBaseY: null,
+      trainSweepMesh: null,
+      trainSweepMat: null,
+      trainSweepTimer: 7.5,
+      trainSweepActive: 0,
+      ledGroups: session._sceneALedGroups || []
+    };
+
+    // 1. Ceiling water drips falling onto B1 concourse puddles (triggers hard-edge water ripples on impact)
+    var dripSpots = [
+      { x: 8.6, z: 12.2, nextAt: 1.4 },
+      { x: 13.8, z: 9.4, nextAt: 3.1 },
+      { x: 5.8, z: 15.2, nextAt: 4.8 }
+    ];
+    var dripGeo = session.trackGeo(new THREE.BoxGeometry(0.035, 0.24, 0.035));
+    var dripMat = session.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xaef4ff,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false
+    }));
+    for (var di = 0; di < dripSpots.length; di++) {
+      var dm = new THREE.Mesh(dripGeo, dripMat);
+      dm.visible = false;
+      session.scene.add(dm);
+      dyn.drips.push({
+        x: dripSpots[di].x,
+        z: dripSpots[di].z,
+        y: 3.1,
+        vy: 0,
+        active: false,
+        cooldown: dripSpots[di].nextAt,
+        mesh: dm
+      });
+    }
+
+    // 2. Vent steam wisps rising near NW and SE walls (stylized cel smoke cards)
+    var steamCanvas = makeCanvas(64, 64);
+    var sctx = steamCanvas.getContext('2d');
+    if (sctx) {
+      sctx.clearRect(0, 0, 64, 64);
+      sctx.fillStyle = 'rgba(130, 165, 188, 0.34)';
+      sctx.strokeStyle = 'rgba(6, 10, 16, 0.65)';
+      sctx.lineWidth = 3;
+      sctx.beginPath();
+      sctx.arc(32, 34, 18, 0, Math.PI * 2);
+      sctx.arc(22, 36, 12, 0, Math.PI * 2);
+      sctx.arc(43, 32, 13, 0, Math.PI * 2);
+      sctx.fill();
+      sctx.stroke();
+    }
+    var steamTex = session.trackTex(new THREE.CanvasTexture(steamCanvas));
+    var steamGeo = session.trackGeo(new THREE.PlaneGeometry(1.15, 1.15));
+    var ventOrigins = [
+      { x: 2.55, z: 9.6 },
+      { x: 19.35, z: 11.2 }
+    ];
+    for (var vi = 0; vi < ventOrigins.length; vi++) {
+      for (var k = 0; k < 3; k++) {
+        var smat = session.trackMat(new THREE.MeshBasicMaterial({
+          map: steamTex,
+          transparent: true,
+          opacity: 0.0,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        }));
+        var sm = new THREE.Mesh(steamGeo, smat);
+        sm.rotation.x = -0.34;
+        session.scene.add(sm);
+        dyn.steams.push({
+          ox: ventOrigins[vi].x,
+          oz: ventOrigins[vi].z,
+          phase: (vi * 0.5 + k / 3.0) % 1.0,
+          speed: 0.24 + k * 0.04,
+          driftX: vi === 0 ? 0.45 : -0.45,
+          mesh: sm,
+          mat: smat
+        });
+      }
+    }
+
+    // 3. Drifting volumetric light-shaft dust motes under B1 ceiling lamps
+    var moteCount = 44;
+    var motePos = new Float32Array(moteCount * 3);
+    var moteSeeds = new Float32Array(moteCount);
+    for (var mi = 0; mi < moteCount; mi++) {
+      var lamp = mi % 2 === 0 ? { x: 7.5, z: 7.5 } : { x: 15.5, z: 14.5 };
+      var ang = Math.random() * Math.PI * 2;
+      var rad = Math.random() * 3.8;
+      motePos[mi * 3] = lamp.x + Math.cos(ang) * rad;
+      motePos[mi * 3 + 1] = 0.25 + Math.random() * 2.75;
+      motePos[mi * 3 + 2] = lamp.z + Math.sin(ang) * rad;
+      moteSeeds[mi] = Math.random() * 6.283;
+    }
+    var moteGeo = session.trackGeo(new THREE.BufferGeometry());
+    moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
+    var moteMat = session.trackMat(new THREE.PointsMaterial({
+      color: 0xa6e8f8,
+      size: 0.09,
+      transparent: true,
+      opacity: 0.48,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var motePts = new THREE.Points(moteGeo, moteMat);
+    session.scene.add(motePts);
+    dyn.dustPoints = motePts;
+    dyn.dustSeeds = moteSeeds;
+
+    // 4. Distant subterranean Ghost Train light-band sweeping across B1 Concourse floor every ~18s
+    var sweepGeo = session.trackGeo(new THREE.PlaneGeometry(3.2, 22.0));
+    sweepGeo.rotateX(-Math.PI / 2);
+    var sweepMat = session.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xff4638,
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var sweepMesh = new THREE.Mesh(sweepGeo, sweepMat);
+    sweepMesh.position.set(11.0, 0.048, 10.5);
+    sweepMesh.rotation.y = 0.36;
+    sweepMesh.visible = false;
+    session.scene.add(sweepMesh);
+    dyn.trainSweepMesh = sweepMesh;
+    dyn.trainSweepMat = sweepMat;
+
+    session.ambientDynamics = dyn;
+  }
+
+  function updateAmbientDynamics(session, realDt) {
+    var dyn = session && session.ambientDynamics;
+    if (!dyn) return;
+    var dt = Math.min(0.05, Math.max(0.001, realDt || 0.016));
+    var t = session.elapsedReal || 0;
+
+    // 1. Ceiling drips + puddle ripples
+    for (var di = 0; di < dyn.drips.length; di++) {
+      var d = dyn.drips[di];
+      if (!d.active) {
+        d.cooldown -= dt;
+        if (d.cooldown <= 0) {
+          d.active = true;
+          d.y = 3.15;
+          d.vy = -0.8;
+          d.mesh.position.set(d.x, d.y, d.z);
+          d.mesh.visible = true;
+        }
+      } else {
+        d.vy -= 14.5 * dt;
+        d.y += d.vy * dt;
+        d.mesh.position.y = d.y;
+        if (d.y <= 0.06) {
+          d.active = false;
+          d.mesh.visible = false;
+          d.cooldown = 2.1 + Math.random() * 2.8;
+          if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnInkStepPuff === 'function') {
+            INFINITY.VfxStudio.spawnInkStepPuff(session, d.x, d.z, 0, 0, 0x6eeaff, true);
+          }
+        }
+      }
+    }
+
+    // 2. Vent cel steam plumes
+    for (var si = 0; si < dyn.steams.length; si++) {
+      var st = dyn.steams[si];
+      st.phase = (st.phase + dt * st.speed) % 1.0;
+      var p = st.phase;
+      st.mesh.position.set(
+        st.ox + st.driftX * p + Math.sin(t * 1.8 + si) * 0.12,
+        0.38 + p * 1.95,
+        st.oz + Math.cos(t * 1.4 + si) * 0.1
+      );
+      var sc = 0.55 + p * 1.15;
+      st.mesh.scale.set(sc, sc, 1);
+      st.mat.opacity = Math.sin(p * Math.PI) * 0.28;
+    }
+
+    // 3. Drifting dust motes under lamp shafts
+    if (dyn.dustPoints && dyn.dustPoints.geometry && dyn.dustPoints.geometry.attributes.position) {
+      var arr = dyn.dustPoints.geometry.attributes.position.array;
+      var seeds = dyn.dustSeeds;
+      var cnt = seeds ? seeds.length : 0;
+      for (var mi = 0; mi < cnt; mi++) {
+        var idx = mi * 3;
+        arr[idx] += Math.sin(t * 0.7 + seeds[mi]) * 0.08 * dt;
+        arr[idx + 1] -= 0.14 * dt;
+        arr[idx + 2] += Math.cos(t * 0.6 + seeds[mi]) * 0.06 * dt;
+        if (arr[idx + 1] < 0.16) arr[idx + 1] = 2.95;
+      }
+      dyn.dustPoints.geometry.attributes.position.needsUpdate = true;
+    }
+
+    // 4. Turnstile / kiosk LED glitch pulse
+    if (dyn.ledGroups && dyn.ledGroups.length) {
+      for (var li = 0; li < dyn.ledGroups.length; li++) {
+        var lg = dyn.ledGroups[li];
+        if (lg && lg.userData && lg.userData.ledMat) {
+          var flk = Math.sin(t * 19.0 + li * 2.7) > -0.78;
+          lg.userData.ledMat.color.setHex(flk ? (li % 2 === 0 ? 0x5ce8ff : 0xff3b52) : 0x101822);
+        }
+      }
+    }
+
+    // 5. Subterranean Ghost Train rumble light-band sweep across B1 floor
+    if (dyn.trainSweepMesh && dyn.trainSweepMat) {
+      if (dyn.trainSweepActive > 0) {
+        dyn.trainSweepActive -= dt;
+        var sp = 1.0 - Math.max(0, dyn.trainSweepActive / 2.2);
+        dyn.trainSweepMesh.position.x = 2.5 + sp * 17.5;
+        dyn.trainSweepMat.opacity = Math.sin(sp * Math.PI) * 0.16;
+        if (dyn.trainSweepActive <= 0) {
+          dyn.trainSweepMesh.visible = false;
+          dyn.trainSweepMat.opacity = 0;
+        }
+      } else {
+        dyn.trainSweepTimer -= dt;
+        if (dyn.trainSweepTimer <= 0) {
+          dyn.trainSweepTimer = 18.0 + Math.random() * 6.0;
+          dyn.trainSweepActive = 2.2;
+          dyn.trainSweepMesh.visible = true;
+          if (typeof session.addCameraShake === 'function') {
+            session.addCameraShake(0.06, 0.9, 16);
+          }
+        }
+      }
+    }
   }
 
   function buildZoneProps(session, specs) {
@@ -766,8 +1194,21 @@
     }));
     var tsLedGeo = session.trackGeo(new THREE.BoxGeometry(0.18, 0.10, 0.04));
 
+    session._sceneALedGroups = [];
     for (var ti = 0; ti < specs.turnstiles.length; ti++) {
       var ts = specs.turnstiles[ti];
+      if (session._sceneAEnabled && ts.x <= 20 && ts.z <= 19) {
+        var tsCard = createPaintedPropBillboard(THREE, session, 'prop_turnstile', ts.x, ts.z, 1.48, 1.48, {
+          emissiveColor: ti % 2 === 0 ? 0x5aeaff : 0xff3b52,
+          ledX: 0.18,
+          ledY: 0.92,
+          ledZ: 0.18
+        });
+        if (tsCard) {
+          session._sceneALedGroups.push(tsCard);
+          continue;
+        }
+      }
       var g = new THREE.Group();
       g.position.set(ts.x, 0, ts.z);
       g.rotation.y = ts.rotY || 0;
@@ -789,6 +1230,15 @@
     var benchLegGeo = session.trackGeo(new THREE.BoxGeometry(0.10, 0.44, 0.50));
     for (var bi = 0; bi < specs.benches.length; bi++) {
       var bn = specs.benches[bi];
+      if (session._sceneAEnabled && bn.x <= 20 && bn.z <= 19) {
+        if (createPaintedPropBillboard(THREE, session, 'prop_bench', bn.x, bn.z, 2.25, 1.45, {
+          flipX: bn.x < 10,
+          shadowScaleX: 1.05,
+          shadowScaleZ: 0.55
+        })) {
+          continue;
+        }
+      }
       var bg = new THREE.Group();
       bg.position.set(bn.x, 0, bn.z);
       bg.rotation.y = bn.rotY || 0;
@@ -802,6 +1252,24 @@
       legR.position.set(0.82, 0.22, 0);
       bg.add(seat, back, legL, legR);
       session.scene.add(bg);
+    }
+
+    // 2B. B1 Concourse Painted Storytelling Clutter Clusters (wall/pillar-tucked, zero lane blocking)
+    if (session._sceneAEnabled) {
+      var clutterSpots = [
+        { x: 2.95, z: 3.15, w: 1.38, h: 1.24, flip: false },
+        { x: 18.85, z: 10.6, w: 1.32, h: 1.18, flip: true },
+        { x: 6.5, z: 7.42, w: 1.18, h: 1.06, flip: false },
+        { x: 14.5, z: 7.42, w: 1.22, h: 1.10, flip: true }
+      ];
+      for (var cl = 0; cl < clutterSpots.length; cl++) {
+        var cs = clutterSpots[cl];
+        createPaintedPropBillboard(THREE, session, 'prop_clutter', cs.x, cs.z, cs.w, cs.h, {
+          flipX: cs.flip,
+          shadowScaleX: 1.08,
+          shadowScaleZ: 0.68
+        });
+      }
     }
 
     // 3. Illuminated Subway Route Map Kiosk & Overhead Directional Transit Signage
@@ -974,6 +1442,16 @@
       g.add(floorHalo);
 
       if (lm.kind === 'clock_totem') {
+        if (session._sceneAEnabled && createPaintedPropBillboard(THREE, session, 'prop_clock_totem', lm.x, lm.z, 1.78, 2.85, {
+          emissiveColor: zCol,
+          ledX: 0.02,
+          ledY: 2.28,
+          ledZ: 0.16,
+          shadowScaleX: 0.85,
+          shadowScaleZ: 0.55
+        })) {
+          continue;
+        }
         var pillar = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.42, 2.35, 0.42)), steelMat);
         pillar.position.y = 1.24;
         var dialFrame = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.56, 0.56, 0.18, 16)), darkSteel);
@@ -1102,20 +1580,20 @@
       dummy.rotation.set(0, rotY, 0);
       dummy.scale.set(1, 1, 1);
 
-      dummy.position.set(ld.x, 3.36, ld.z);
+      dummy.position.set(ld.x, 4.68, ld.z);
       dummy.updateMatrix();
       beamMesh.setMatrixAt(i, dummy.matrix);
 
-      dummy.position.set(ld.x, 3.24, ld.z);
+      dummy.position.set(ld.x, 4.54, ld.z);
       dummy.updateMatrix();
       housingMesh.setMatrixAt(i, dummy.matrix);
 
-      dummy.position.set(ld.x, 3.16, ld.z);
+      dummy.position.set(ld.x, 4.46, ld.z);
       dummy.updateMatrix();
       tubeMesh.setMatrixAt(i, dummy.matrix);
 
       dummy.rotation.set(0, 0, 0);
-      dummy.position.set(ld.x, 1.62, ld.z);
+      dummy.position.set(ld.x, 2.25, ld.z);
       dummy.updateMatrix();
       coneMesh.setMatrixAt(i, dummy.matrix);
 
@@ -1478,6 +1956,7 @@
     buildLightFixtures: buildLightFixtures,
     buildGhostTrain: buildGhostTrain,
     buildInteractables: buildInteractables,
+    updateAmbientDynamics: updateAmbientDynamics,
     getZonePropSpecs: getZonePropSpecs
   };
 })(typeof window !== 'undefined' ? window : globalThis);

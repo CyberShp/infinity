@@ -2453,6 +2453,26 @@
     hurt: 3
   };
 
+  var COMBAT_FRAME_TO_SHEET_INDEX = {
+    windup: 0,
+    smear: 1,
+    cleave: 2,
+    parry: 3
+  };
+
+  function isCombatPoseFrame(frame) {
+    return COMBAT_FRAME_TO_SHEET_INDEX[frame] !== undefined;
+  }
+
+  function resolveExternalCombatPoseUrls(cid) {
+    try {
+      if (INFINITY.ASSETS && typeof INFINITY.ASSETS.getCombatPoseSheetUrls === 'function') {
+        return INFINITY.ASSETS.getCombatPoseSheetUrls(cid);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   var charTexRegistries = Object.create(null); // cid -> { albedo:[], normal:[], emissive:[] }
   var charExternalState = Object.create(null); // cid -> { sheetStatus, normalStatus, emissiveStatus, sheetImg, normalImg, emissiveImg }
   var flipbookEntries = Object.create(null);   // name -> { name, canvas, tex, loadedUrl, status }
@@ -2560,7 +2580,9 @@
     ctx.imageSmoothingEnabled = true;
     if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, dstW, dstH);
-    var idx = FRAME_TO_SHEET_INDEX[entry.frame];
+    var idx = isCombatPoseFrame(entry.frame)
+      ? COMBAT_FRAME_TO_SHEET_INDEX[entry.frame]
+      : FRAME_TO_SHEET_INDEX[entry.frame];
     if (typeof idx !== 'number') idx = 0;
     ctx.drawImage(img, idx * frameW, 0, frameW, frameH, 0, 0, dstW, dstH);
     applyLinearSpriteFiltering(entry.tex);
@@ -2745,7 +2767,10 @@
   }
 
   function triggerExternalSpriteLoad(cid, forceReload) {
-    var urls = resolveExternalSpriteUrls(cid);
+    var isCombatKey = typeof cid === 'string' && cid.slice(-7) === ':combat';
+    var urls = isCombatKey
+      ? resolveExternalCombatPoseUrls(cid.slice(0, -7))
+      : resolveExternalSpriteUrls(cid);
     if (!urls) return;
     if (urls.sheet) loadExternalCharChannel(cid, 'albedo', urls.sheet, forceReload);
     if (urls.normal) loadExternalCharChannel(cid, 'normal', urls.normal, forceReload);
@@ -3018,12 +3043,30 @@
     action: true,
     dash: true,
     channel: true,
-    hurt: true
+    hurt: true,
+    windup: true,
+    smear: true,
+    cleave: true,
+    parry: true
   };
 
   function normalizeCharFrame(frame) {
     var cframe = String(frame || 'idle');
     return VALID_CHAR_FRAMES[cframe] ? cframe : 'idle';
+  }
+
+  function resolveCharExtChannelId(cid, cframe) {
+    if (isCombatPoseFrame(cframe) && resolveExternalCombatPoseUrls(cid)) {
+      return cid + ':combat';
+    }
+    return cid;
+  }
+
+  function fallbackFrameForProcedural(cframe) {
+    if (cframe === 'windup') return 'channel';
+    if (cframe === 'smear') return 'dash';
+    if (cframe === 'cleave' || cframe === 'parry') return 'action';
+    return cframe;
   }
 
   // Optional 3rd arg weaponStyle ('sword' | 'cyber' | 'occult' | 'tactical'); 2-arg calls unchanged.
@@ -3035,18 +3078,19 @@
     var key = 'char:' + charCacheKey(cid, cframe, weaponStyle);
     if (textureCache[key]) return textureCache[key];
     var fixed = getFixedCharCanvasSize(cid);
-    var canvas = cloneCanvasToFixedSize(getCachedCharCanvas(cid, cframe, weaponStyle), fixed.width, fixed.height);
+    var canvas = cloneCanvasToFixedSize(getCachedCharCanvas(cid, fallbackFrameForProcedural(cframe), weaponStyle), fixed.width, fixed.height);
     var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4, nearest: false });
     textureCache[key] = tex;
 
     if (shouldUseExternalSprite(cid, weaponStyle)) {
+      var extId = resolveCharExtChannelId(cid, cframe);
       var entry = { frame: cframe, canvas: canvas, tex: tex };
-      getCharRegistry(cid).albedo.push(entry);
-      var st = getCharExtState(cid);
+      getCharRegistry(extId).albedo.push(entry);
+      var st = getCharExtState(extId);
       if (st.sheetStatus === 'loaded' && st.sheetImg) {
         sliceSheetImageIntoEntry(st.sheetImg, entry);
       } else {
-        triggerExternalSpriteLoad(cid, false);
+        triggerExternalSpriteLoad(extId, false);
       }
     }
     return tex;
@@ -3058,20 +3102,21 @@
     var key = 'charNormal:' + charCacheKey(cid, cframe, weaponStyle);
     if (textureCache[key]) return textureCache[key];
     var fixed = getFixedCharCanvasSize(cid);
-    var canvas = cloneCanvasToFixedSize(buildCharNormalCanvas(cid, cframe, weaponStyle), fixed.width, fixed.height);
+    var canvas = cloneCanvasToFixedSize(buildCharNormalCanvas(cid, fallbackFrameForProcedural(cframe), weaponStyle), fixed.width, fixed.height);
     var tex = toTexture(canvas, false, { srgb: false, mipmaps: false, anisotropy: 4, nearest: false });
     textureCache[key] = tex;
 
     if (shouldUseExternalSprite(cid, weaponStyle)) {
+      var extId = resolveCharExtChannelId(cid, cframe);
       var entry = { frame: cframe, canvas: canvas, tex: tex };
-      getCharRegistry(cid).normal.push(entry);
-      var st = getCharExtState(cid);
+      getCharRegistry(extId).normal.push(entry);
+      var st = getCharExtState(extId);
       if (st.normalStatus === 'loaded' && st.normalImg) {
         sliceSheetImageIntoEntry(st.normalImg, entry);
       } else if (st.sheetStatus === 'loaded' && st.normalStatus === 'error') {
-        syncDerivedCharMaps(cid);
+        syncDerivedCharMaps(extId);
       } else {
-        triggerExternalSpriteLoad(cid, false);
+        triggerExternalSpriteLoad(extId, false);
       }
     }
     return tex;
@@ -3083,20 +3128,21 @@
     var key = 'charEmissive:' + charCacheKey(cid, cframe, weaponStyle);
     if (textureCache[key]) return textureCache[key];
     var fixed = getFixedCharCanvasSize(cid);
-    var canvas = cloneCanvasToFixedSize(buildCharEmissiveCanvas(cid, cframe, weaponStyle), fixed.width, fixed.height);
+    var canvas = cloneCanvasToFixedSize(buildCharEmissiveCanvas(cid, fallbackFrameForProcedural(cframe), weaponStyle), fixed.width, fixed.height);
     var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4, nearest: false });
     textureCache[key] = tex;
 
     if (shouldUseExternalSprite(cid, weaponStyle)) {
+      var extId = resolveCharExtChannelId(cid, cframe);
       var entry = { frame: cframe, canvas: canvas, tex: tex };
-      getCharRegistry(cid).emissive.push(entry);
-      var st = getCharExtState(cid);
+      getCharRegistry(extId).emissive.push(entry);
+      var st = getCharExtState(extId);
       if (st.emissiveStatus === 'loaded' && st.emissiveImg) {
         sliceSheetImageIntoEntry(st.emissiveImg, entry);
       } else if (st.sheetStatus === 'loaded' && st.emissiveStatus === 'error') {
-        syncDerivedCharMaps(cid);
+        syncDerivedCharMaps(extId);
       } else {
-        triggerExternalSpriteLoad(cid, false);
+        triggerExternalSpriteLoad(extId, false);
       }
     }
     return tex;

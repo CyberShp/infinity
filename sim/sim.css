@@ -3220,7 +3220,7 @@ body[data-scene="exam"] {
 .hud25d-mission-collapsed {
   position: absolute;
   right: 14px;
-  bottom: 12px;
+  bottom: 158px;
   z-index: 24;
   display: inline-flex;
   align-items: center;
@@ -4536,4 +4536,97 @@ body[data-scene="exam"] {
   .form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ============================================================================
+ * Limbus x Hades Vertical Slice: HUD Auto-Recede & Director Cut-In Overlays
+ * Keeps >= 80% viewport clear during combat while preserving hover/H recall
+ * ============================================================================ */
+.exam25d-stage .hud25d-top-left,
+.exam25d-stage .hud25d-top-right,
+.exam25d-stage .hud25d-bottom-left,
+.exam25d-stage .hud25d-mission-collapsed {
+  transition: opacity 0.28s ease, transform 0.28s ease, filter 0.24s ease;
+}
+
+.exam25d-stage.hud-receded .hud25d-top-left {
+  opacity: 0.16;
+  transform: translate(-8px, -6px) scale(0.95);
+}
+
+.exam25d-stage.hud-receded .hud25d-top-right {
+  opacity: 0.16;
+  transform: translate(8px, -6px) scale(0.95);
+}
+
+.exam25d-stage.hud-receded .hud25d-bottom-left:not(.radio-active) {
+  opacity: 0.14;
+  transform: translate(-8px, 8px) scale(0.95);
+}
+
+.exam25d-stage.hud-receded .hud25d-mission-panel:not(.expanded):not(.collapsed) {
+  opacity: 0.10;
+  transform: translateX(12px);
+}
+
+.exam25d-stage.hud-receded .hud25d-mission-collapsed {
+  opacity: 0.36;
+}
+
+.exam25d-stage.hud-receded .hud25d-top-left:hover,
+.exam25d-stage.hud-receded .hud25d-top-right:hover,
+.exam25d-stage.hud-receded .hud25d-bottom-left:hover,
+.exam25d-stage.hud-receded .hud25d-mission-panel:hover,
+.exam25d-stage.hud-receded .hud25d-mission-collapsed:hover {
+  opacity: 0.96;
+  transform: none;
+}
+
+/* Limbus-style Skill Cut-In Ink Banner */
+.w25d-cutin-banner {
+  position: absolute;
+  left: 50%;
+  top: 16%;
+  transform: translate(-50%, -50%) skewX(-12deg) scaleX(0.86);
+  padding: 8px 34px 9px 28px;
+  background: linear-gradient(90deg, rgba(4, 6, 11, 0.96) 0%, rgba(10, 15, 24, 0.94) 72%, rgba(4, 6, 11, 0.0) 100%);
+  border-left: 5px solid #5ce8ff;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  border-bottom: 2px solid rgba(92, 232, 255, 0.72);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.88), -6px 0 24px rgba(92, 232, 255, 0.32);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 16;
+  transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.14s ease;
+}
+
+.w25d-cutin-banner.active {
+  opacity: 1;
+  transform: translate(-50%, -50%) skewX(-12deg) scaleX(1);
+}
+
+.w25d-cutin-banner.out {
+  opacity: 0;
+  transform: translate(-44%, -50%) skewX(-12deg) scaleX(1.06);
+  transition: transform 0.22s ease-in, opacity 0.22s ease-in;
+}
+
+.w25d-cutin-sub {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: rgba(235, 246, 255, 0.78);
+  margin-bottom: 2px;
+}
+
+.w25d-cutin-title {
+  font-family: "Noto Serif SC", "Songti SC", "STSong", "PingFang SC", serif;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: #f8fbff;
+  text-shadow: -2px -2px 0 #04060b, 2px 2px 0 #04060b, 0 0 18px rgba(92, 232, 255, 0.55);
+  white-space: nowrap;
 }

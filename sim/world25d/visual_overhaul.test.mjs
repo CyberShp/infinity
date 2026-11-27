@@ -646,3 +646,49 @@ test('P2 WebGL2 immutable texture guard: external sprite/flipbook hot-swap never
   assert.ok(bossTex.image._draws > bossDrawsBefore, 'inspector sprite must hot-swap external sheet');
   assert.ok(fbTex.image._draws > fbDrawsBefore, 'flipbook must hot-swap external WebP');
 });
+
+test('Scene-A Vertical Slice contract: painted concourse plates, 4x4 16f flipbooks, combat key poses, ink trail & director timeline', () => {
+  // 1. AssetManifest registers all Scene-A painted plates, props, combat poses, and 16-frame flipbooks
+  const sceneKeys = [
+    'concourse_floor', 'concourse_floor_normal', 'concourse_floor_roughness',
+    'concourse_wall', 'concourse_wall_normal',
+    'prop_turnstile', 'prop_bench', 'prop_clock_totem', 'prop_clutter'
+  ];
+  assert.equal(typeof ASSETS.getSceneAssetUrl, 'function');
+  for (const key of sceneKeys) {
+    const url = ASSETS.getSceneAssetUrl(key);
+    assert.ok(url && url.includes('assets/scenes/'), `Missing Scene-A asset URL for ${key}`);
+    const diskPath = path.resolve(process.cwd(), 'sim', url.replace(/^sim\//, ''));
+    assert.ok(fs.existsSync(diskPath), `Scene-A asset missing on disk: ${diskPath}`);
+  }
+
+  const combatUrls = ASSETS.getCombatPoseSheetUrls('player');
+  assert.ok(combatUrls && combatUrls.sheet && combatUrls.normal && combatUrls.emissive, 'Player combat pose sheet URLs required');
+  for (const ch of ['sheet', 'normal', 'emissive']) {
+    const diskPath = path.resolve(process.cwd(), 'sim', combatUrls[ch].replace(/^sim\//, ''));
+    assert.ok(fs.existsSync(diskPath), `Player combat pose asset missing on disk: ${diskPath}`);
+  }
+
+  for (const fb of ['hades_cyan_16f', 'hades_crimson_boss_16f']) {
+    const preset = VfxStudio.FLIPBOOK_PRESETS[fb];
+    assert.ok(preset && preset.cols === 4 && preset.rows === 4, `${fb} must be 4x4 (16-frame) preset`);
+    const url = ASSETS.getVfxFlipbookUrl(fb);
+    assert.ok(url, `Missing manifest URL for ${fb}`);
+    const diskPath = path.resolve(process.cwd(), 'sim', url.replace(/^sim\//, ''));
+    assert.ok(fs.existsSync(diskPath), `16-frame flipbook missing on disk: ${diskPath}`);
+  }
+
+  // 2. Director timeline zooms cleanly into combat & cut-in beats and recovers
+  assert.equal(typeof CombatFeel.createDirectorTimeline, 'function');
+  const dir = CombatFeel.createDirectorTimeline();
+  dir.triggerBeat({ zoom: 0.58, holdSec: 0.4, letterbox: 0.07, chromatic: 0.6, inkEdge: 0.7 });
+  const beatState = dir.step(0.12, true);
+  assert.ok(beatState.zoom < 0.85, `Expected camera cut-in zoom < 0.85, got ${beatState.zoom}`);
+  assert.ok(beatState.letterbox > 0.02, `Expected letterbox > 0.02 during beat, got ${beatState.letterbox}`);
+
+  // 3. Ink trail, ink step puff & ambient dynamics APIs exist
+  assert.equal(typeof VfxStudio.spawnInkBrushTrail, 'function');
+  assert.equal(typeof VfxStudio.spawnInkStepPuff, 'function');
+  assert.equal(typeof SceneArchitect.updateAmbientDynamics, 'function');
+  assert.equal(CombatFeel.getFloatingTextStyle('onomatopoeia').tier, 'onomatopoeia');
+});

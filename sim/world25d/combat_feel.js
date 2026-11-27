@@ -284,18 +284,37 @@
     var sem = tokens && tokens.SEMANTIC ? tokens.SEMANTIC : null;
     var key = String(tier || 'normal');
 
+    if (key === 'onomatopoeia') {
+      var onoCol = overrideColor || '#fff4d4';
+      return {
+        tier: 'onomatopoeia',
+        fontSize: '34px',
+        fontWeight: '900',
+        fontFamily: '"Noto Serif SC","Songti SC","STSong","PingFang SC",serif',
+        color: onoCol,
+        letterSpacing: '2px',
+        textShadow: '-3px -3px 0 #05070c, 3px -3px 0 #05070c, -3px 3px 0 #05070c, 3px 3px 0 #05070c, 0 6px 18px rgba(0,0,0,0.95)',
+        ttl: 0.62,
+        vy: 0.55,
+        scalePop: 1.55,
+        tiltDeg: -10
+      };
+    }
+
     if (key === 'parry') {
       var parryCol = overrideColor || (sem ? sem.parryGold : '#ffd86b');
       return {
         tier: 'parry',
-        fontSize: '17px',
+        fontSize: '21px',
         fontWeight: '900',
+        fontFamily: '"Noto Serif SC","Songti SC","PingFang SC",serif',
         color: parryCol,
-        letterSpacing: '1.2px',
-        textShadow: '0 0 14px rgba(255,216,107,0.92), 0 0 24px rgba(255,196,70,0.65), 0 2px 6px #000',
-        ttl: 1.65,
-        vy: 1.0,
-        scalePop: 1.25
+        letterSpacing: '1.6px',
+        textShadow: '-2px -2px 0 #06080e, 2px -2px 0 #06080e, -2px 2px 0 #06080e, 2px 2px 0 #06080e, 0 0 16px rgba(255,216,107,0.92), 0 4px 10px #000',
+        ttl: 1.55,
+        vy: 0.95,
+        scalePop: 1.38,
+        tiltDeg: -6
       };
     }
 
@@ -303,42 +322,124 @@
       var resCol = overrideColor || '#c89eff';
       return {
         tier: 'resonance',
-        fontSize: '15px',
+        fontSize: '17px',
         fontWeight: '900',
+        fontFamily: '"Noto Serif SC","Songti SC","PingFang SC",serif',
         color: resCol,
-        letterSpacing: '1.0px',
-        textShadow: '0 0 12px rgba(200,158,255,0.85), 0 0 20px rgba(82,229,255,0.45), 0 2px 5px #000',
-        ttl: 1.55,
-        vy: 1.08,
-        scalePop: 1.18
+        letterSpacing: '1.2px',
+        textShadow: '-2px -2px 0 #06080e, 2px 2px 0 #06080e, 0 0 14px rgba(200,158,255,0.88), 0 3px 8px #000',
+        ttl: 1.45,
+        vy: 1.02,
+        scalePop: 1.24,
+        tiltDeg: -4
       };
     }
 
     if (key === 'crit') {
-      var critCol = overrideColor || (sem ? sem.warning : '#ffaa3b');
+      var critCol = overrideColor || (sem ? sem.warning : '#ffbe48');
       return {
         tier: 'crit',
-        fontSize: '15px',
+        fontSize: '20px',
         fontWeight: '900',
+        fontFamily: '"Noto Serif SC","Songti SC","PingFang SC",serif',
         color: critCol,
-        letterSpacing: '0.8px',
-        textShadow: '0 0 10px rgba(255,170,59,0.78), 0 2px 5px #000',
-        ttl: 1.35,
-        vy: 1.2,
-        scalePop: 1.14
+        letterSpacing: '1px',
+        textShadow: '-2px -2px 0 #06080e, 2px -2px 0 #06080e, -2px 2px 0 #06080e, 2px 2px 0 #06080e, 0 0 12px rgba(255,170,59,0.82), 0 3px 6px #000',
+        ttl: 1.25,
+        vy: 1.15,
+        scalePop: 1.30,
+        tiltDeg: -7
       };
     }
 
     return {
       tier: 'normal',
-      fontSize: '12px',
-      fontWeight: '800',
+      fontSize: '14px',
+      fontWeight: '900',
+      fontFamily: '"JetBrains Mono","PingFang SC",sans-serif',
       color: overrideColor || '#edf3fa',
-      letterSpacing: '0.4px',
-      textShadow: '0 1px 4px #000, 0 0 8px rgba(0,0,0,0.95)',
-      ttl: 1.12,
-      vy: 1.35,
-      scalePop: 1.0
+      letterSpacing: '0.5px',
+      textShadow: '-1.5px -1.5px 0 #05070c, 1.5px 1.5px 0 #05070c, 0 2px 5px #000',
+      ttl: 1.05,
+      vy: 1.32,
+      scalePop: 1.12,
+      tiltDeg: -3
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. Limbus-Style Director Timeline (Camera Zoom, Letterbox, Chromatic, Ink)
+  // ---------------------------------------------------------------------------
+  function createDirectorTimeline() {
+    var zoomTarget = 1.0;
+    var zoomCurrent = 1.0;
+    var zoomHold = 0;
+    var letterboxTarget = 0;
+    var letterboxCurrent = 0;
+    var letterboxHold = 0;
+    var chromatic = 0;
+    var inkEdge = 0;
+
+    return {
+      triggerBeat: function (opts) {
+        var o = opts || {};
+        var reqHold = clamp(Number(o.holdSec) || 0.36, 0.10, 1.2);
+        if (typeof o.zoom === 'number') {
+          var reqZoom = clamp(o.zoom, 0.54, 1.0);
+          // Only refresh zoomHold if the new beat is tighter than or equal to current zoom, or previous hold expired
+          if (zoomHold <= 0 || reqZoom <= zoomTarget + 0.02) {
+            zoomTarget = Math.min(zoomHold > 0 ? zoomTarget : 1.0, reqZoom);
+            zoomHold = Math.max(zoomHold, reqHold);
+          }
+        }
+        if (typeof o.letterbox === 'number' && o.letterbox > 0) {
+          letterboxTarget = Math.max(letterboxTarget, clamp(o.letterbox, 0, 0.11));
+          letterboxHold = Math.max(letterboxHold, reqHold);
+        }
+        if (typeof o.chromatic === 'number') {
+          chromatic = Math.max(chromatic, clamp(o.chromatic, 0, 1.0));
+        }
+        if (typeof o.inkEdge === 'number') {
+          inkEdge = Math.max(inkEdge, clamp(o.inkEdge, 0, 1.0));
+        }
+      },
+      step: function (dt, inCombat) {
+        var safeDt = clamp(Number(dt) || 0.016, 0, 0.08);
+        if (zoomHold > 0) {
+          zoomHold = Math.max(0, zoomHold - safeDt);
+        } else {
+          zoomTarget = inCombat ? 0.80 : 1.0;
+        }
+        if (letterboxHold > 0) {
+          letterboxHold = Math.max(0, letterboxHold - safeDt);
+        } else {
+          letterboxTarget = 0;
+        }
+        var zSpeed = zoomTarget < zoomCurrent ? 14.0 : 5.8;
+        zoomCurrent += (zoomTarget - zoomCurrent) * (1 - Math.exp(-zSpeed * safeDt));
+        var lbSpeed = letterboxTarget > letterboxCurrent ? 16.0 : 7.5;
+        letterboxCurrent += (letterboxTarget - letterboxCurrent) * (1 - Math.exp(-lbSpeed * safeDt));
+        chromatic *= Math.exp(-9.5 * safeDt);
+        inkEdge *= Math.exp(-7.8 * safeDt);
+        if (chromatic < 0.004) chromatic = 0;
+        if (inkEdge < 0.004) inkEdge = 0;
+        return {
+          zoom: zoomCurrent,
+          letterbox: letterboxCurrent,
+          chromatic: chromatic,
+          inkEdge: inkEdge
+        };
+      },
+      reset: function () {
+        zoomTarget = 1.0;
+        zoomCurrent = 1.0;
+        zoomHold = 0;
+        letterboxTarget = 0;
+        letterboxCurrent = 0;
+        letterboxHold = 0;
+        chromatic = 0;
+        inkEdge = 0;
+      }
     };
   }
 
@@ -348,6 +449,7 @@
     getArchetypeFeel: getArchetypeFeel,
     supportsAimPreview: supportsAimPreview,
     createShakeBudget: createShakeBudget,
+    createDirectorTimeline: createDirectorTimeline,
     getFloatingTextStyle: getFloatingTextStyle
   };
 })(typeof window !== 'undefined' ? window : globalThis);
