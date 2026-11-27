@@ -16,7 +16,7 @@
   var FLOOR_Y = 0.0;
   var PLATFORM_Y = 0.04;
   var HAZARD_Y = 0.05;
-  var TRAIN_X = 51.5;
+  var TRAIN_X = 213.5;
   var TRAIN_CYCLE_SEC = 55;
   var TRAIN_DWELL_SEC = 10;
   var EXAM_DURATION_SEC = 540; // 9 minutes real-time compressed exam clock
@@ -58,8 +58,8 @@
       return { x: toX, z: toZ, hit: false, hitWall: false, hitRailEdge: false, normalX: 0, normalZ: 0 };
     }
     var grid = (typeof mapApi.getGrid === 'function') ? mapApi.getGrid() : null;
-    var gridW = mapApi.GRID_W || 56;
-    var gridH = mapApi.GRID_H || 38;
+    var gridW = mapApi.GRID_W || 224;
+    var gridH = mapApi.GRID_H || 152;
 
     function cellTypeAt(gx, gz) {
       var ix = Math.floor(gx);
@@ -256,12 +256,17 @@
     if (INFINITY.StationMap) return INFINITY.StationMap;
     // Ultra-safe minimal fallback if StationMap failed to load
     return {
-      GRID_W: 56,
-      GRID_H: 38,
+      GRID_W: 224,
+      GRID_H: 152,
+      PLATFORM_START_X: 168,
+      HAZARD_X: 207,
+      RAIL_MIN_X: 208,
+      RAIL_MAX_X: 219,
+      TRAIN_X: 213.5,
       ZONES: DEFAULT_ZONES,
-      isWalkable: function (gx, gz) { return gx > 0 && gx < 55 && gz > 0 && gz < 37; },
+      isWalkable: function (gx, gz) { return gx > 0 && gx < 223 && gz > 0 && gz < 151; },
       resolveCircleWallCollision: function (x, z, r) {
-        return { x: clamp(x, 1 + r, 55 - r), z: clamp(z, 1 + r, 37 - r), hit: false };
+        return { x: clamp(x, 1 + r, 223 - r), z: clamp(z, 1 + r, 151 - r), hit: false };
       },
       hasLineOfSight: function () { return true; },
       findPath: function (x0, z0, x1, z1) { return [{ x: x1, z: z1 }]; },
@@ -272,10 +277,10 @@
       },
       getGrid: function () {
         var g = [];
-        for (var r = 0; r < 38; r++) {
+        for (var r = 0; r < 152; r++) {
           var row = [];
-          for (var c = 0; c < 56; c++) {
-            row.push(r === 0 || r === 37 || c === 0 || c === 55 ? 1 : (c >= 50 ? 4 : 0));
+          for (var c = 0; c < 224; c++) {
+            row.push(r === 0 || r === 151 || c === 0 || c === 223 ? 1 : (c >= 208 ? 4 : 0));
           }
           g.push(row);
         }
@@ -449,7 +454,12 @@
     this.squadById = Object.create(null);
     this.interactables = [];
     this.interactablesById = Object.create(null);
+    this.destructibleCovers = [];
+    this.sceneTriggers = [];
     this.discoveredClueIds = [];
+    this.environmentClues = [];
+    this.environmentCluesById = Object.create(null);
+    this.latestEnvironmentClue = null;
     this.overridePct = 0;
     this.soundLevel = 8;
     this.threatLevel = 12;
@@ -485,6 +495,8 @@
       parries: 0,
       skillsCast: 0,
       cluesFound: 0,
+      coversDestroyed: 0,
+      triggersActivated: 0,
       fakeBroadcastsCancelled: 0,
       inspectorDefeated: false,
       inspectorSealed: false,
@@ -824,13 +836,13 @@
     // Build HTML overlay (speech bubbles, damage numbers, world HP tags, vignette, interact prompt)
     this.buildHtmlOverlay();
 
-    // Scene & Atmospheric Depth Fog
+    // Scene & Atmospheric Depth Fog (calibrated for grand 4x mega-station sightlines)
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x070a10);
-    this.scene.fog = new THREE.FogExp2(0x070a10, 0.030);
+    this.scene.fog = new THREE.FogExp2(0x070a10, 0.021);
 
-    // Elevated angled 2.5D camera
-    this.camera = new THREE.PerspectiveCamera(38, width / height, 0.5, 120);
+    // Elevated angled 2.5D camera (deep far plane for 224x152 mega-station scrolling)
+    this.camera = new THREE.PerspectiveCamera(38, width / height, 0.5, 190);
 
     // Build combat loadout & entities
     this.initLoadout();
@@ -1152,6 +1164,7 @@
   // Station 2.5D Geometry Builder (Instanced Crisp Pixel Floors & Extruded Walls)
   // ---------------------------------------------------------------------------
   EngineSession.prototype.buildStationGeometry = function () {
+    var trainX = (this.mapApi && this.mapApi.TRAIN_X) || TRAIN_X;
     if (INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.buildStation === 'function') {
       INFINITY.SceneArchitect.buildStation(this, {
         WALL_HEIGHT: WALL_HEIGHT,
@@ -1159,7 +1172,7 @@
         PLATFORM_Y: PLATFORM_Y,
         HAZARD_Y: HAZARD_Y,
         RAIL_Y: RAIL_Y,
-        TRAIN_X: TRAIN_X
+        TRAIN_X: trainX
       });
       return;
     }
@@ -1386,10 +1399,11 @@
   // Ghost Train No.0 (4-Car Articulated Specter Train sliding down x = 51.5)
   // ---------------------------------------------------------------------------
   EngineSession.prototype.buildGhostTrain = function () {
+    var trainX = (this.mapApi && this.mapApi.TRAIN_X) || TRAIN_X;
     if (INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.buildGhostTrain === 'function') {
       this.train = INFINITY.SceneArchitect.buildGhostTrain(this, {
         RAIL_Y: RAIL_Y,
-        TRAIN_X: TRAIN_X
+        TRAIN_X: trainX
       });
       return;
     }
@@ -1959,12 +1973,12 @@
       vis: pVis
     };
 
-    // Build 4 Autonomous Squad NPCs
+    // Build 4 Autonomous Squad NPCs (paced smoothly for 224x152 mega-station traversal)
     var npcSpawns = [
-      { id: 'yanci',   zone: 'concourse', dx: -2.0, dz: 1.5,  hp: 110, speed: 4.5 },
-      { id: 'lujin',   zone: 'corridor',  dx: -2.5, dz: 0.0,  hp: 135, speed: 5.0 },
-      { id: 'xutan',   zone: 'concourse', dx: 2.2,  dz: -1.4, hp: 95,  speed: 4.7 },
-      { id: 'shenyan', zone: 'concourse', dx: 3.4,  dz: 2.6,  hp: 115, speed: 4.6 }
+      { id: 'yanci',   zone: 'concourse', dx: -2.8, dz: 1.8,  hp: 110, speed: 6.6 },
+      { id: 'lujin',   zone: 'corridor',  dx: -3.2, dz: 0.0,  hp: 135, speed: 7.4 },
+      { id: 'xutan',   zone: 'concourse', dx: 2.8,  dz: -1.8, hp: 95,  speed: 6.9 },
+      { id: 'shenyan', zone: 'concourse', dx: 4.2,  dz: 3.0,  hp: 115, speed: 6.7 }
     ];
 
     for (var i = 0; i < npcSpawns.length; i++) {
@@ -2484,10 +2498,10 @@
 
   EngineSession.prototype.buildAtmosphericDust = function () {
     var THREE = this.THREE;
-    var count = 180;
+    var w = this.mapApi.GRID_W || 224;
+    var h = this.mapApi.GRID_H || 152;
+    var count = w > 160 ? 560 : (w > 80 ? 420 : 180);
     var positions = new Float32Array(count * 3);
-    var w = this.mapApi.GRID_W || 56;
-    var h = this.mapApi.GRID_H || 38;
     for (var i = 0; i < count; i++) {
       positions[i * 3] = Math.random() * w;
       positions[i * 3 + 1] = 0.35 + Math.random() * 2.8;
@@ -2512,9 +2526,9 @@
   // ---------------------------------------------------------------------------
   EngineSession.prototype.buildFogOfWar = function () {
     var THREE = this.THREE;
-    var gridW = this.mapApi.GRID_W || 56;
-    var gridH = this.mapApi.GRID_H || 38;
-    var scale = 4; // 224x152 offscreen canvas (4x station grid)
+    var gridW = this.mapApi.GRID_W || 224;
+    var gridH = this.mapApi.GRID_H || 152;
+    var scale = gridW > 160 ? 2 : (gridW > 80 ? 3 : 4); // crisp 448x304 canvas on 224x152 mega-station
     var cw = gridW * scale;
     var ch = gridH * scale;
 
@@ -2604,11 +2618,11 @@
     for (var i = 0; i < rayCount; i++) {
       var angle = (i / rayCount) * Math.PI * 2;
       var diff = Math.abs(Math.atan2(Math.sin(angle - aimAngle), Math.cos(angle - aimAngle)));
-      var maxDist = 15.0;
+      var maxDist = 21.0;
       if (diff <= coneHalf) {
-        maxDist = 20.0;
+        maxDist = 28.0;
       } else if (diff < coneOuter) {
-        maxDist = lerp(20.0, 15.0, (diff - coneHalf) / (coneOuter - coneHalf));
+        maxDist = lerp(28.0, 21.0, (diff - coneHalf) / (coneOuter - coneHalf));
       }
 
       var rdx = Math.cos(angle);
@@ -2636,7 +2650,7 @@
 
       var hitDist = maxDist;
       var steps = 0;
-      while (steps < 48) {
+      while (steps < 56) {
         steps++;
         var currDist;
         if (sideDistX < sideDistZ) {
@@ -2672,7 +2686,7 @@
     var pz = p.z * sc;
     ctx.globalCompositeOperation = 'destination-out';
 
-    var visGrad = ctx.createRadialGradient(px, pz, 1.5 * sc, px, pz, 20.5 * sc);
+    var visGrad = ctx.createRadialGradient(px, pz, 1.5 * sc, px, pz, 23.5 * sc);
     visGrad.addColorStop(0.0, 'rgba(0, 0, 0, 1.0)');
     visGrad.addColorStop(0.55, 'rgba(0, 0, 0, 0.96)');
     visGrad.addColorStop(0.80, 'rgba(0, 0, 0, 0.72)');
@@ -3230,8 +3244,8 @@
     this._v2ndc.set(this.mouseNdc.x, this.mouseNdc.y);
     this._raycaster.setFromCamera(this._v2ndc, this.camera);
     if (this._raycaster.ray.intersectPlane(this._groundPlane, this._v3a)) {
-      this.aimWorld.x = clamp(this._v3a.x, 0.5, (this.mapApi.GRID_W || 56) - 0.5);
-      this.aimWorld.z = clamp(this._v3a.z, 0.5, (this.mapApi.GRID_H || 38) - 0.5);
+      this.aimWorld.x = clamp(this._v3a.x, 0.5, (this.mapApi.GRID_W || 224) - 0.5);
+      this.aimWorld.z = clamp(this._v3a.z, 0.5, (this.mapApi.GRID_H || 152) - 0.5);
     }
     if (this.reticle) {
       this.reticle.group.position.set(this.aimWorld.x, 0.09, this.aimWorld.z);
@@ -3354,16 +3368,63 @@
     this.camKickZ = clamp(this.camKickZ + (kz || 0), -1.2, 1.2);
   };
 
+  function computeCameraScrollBounds(mapApi) {
+    var gridW = (mapApi && mapApi.GRID_W) || 224;
+    var gridH = (mapApi && mapApi.GRID_H) || 152;
+    var padX = Math.min(4.0, gridW * 0.12);
+    var padZ = Math.min(4.0, gridH * 0.12);
+    return {
+      minX: padX,
+      maxX: Math.max(padX, gridW - padX),
+      minZ: padZ,
+      maxZ: Math.max(padZ, gridH - padZ),
+      gridW: gridW,
+      gridH: gridH
+    };
+  }
+
+  EngineSession.prototype.getCameraBounds = function () {
+    return computeCameraScrollBounds(this.mapApi);
+  };
+
+  EngineSession.prototype.scrollCameraTo = function (worldX, worldZ, snap) {
+    var b = this.getCameraBounds();
+    var tx = clamp(Number(worldX) || 0, b.minX, b.maxX);
+    var tz = clamp(Number(worldZ) || 0, b.minZ, b.maxZ);
+    if (snap) {
+      this.camPos.x = tx;
+      this.camPos.z = tz;
+      this.camLook.x = tx;
+      this.camLook.z = tz;
+    } else {
+      this.camPos.x = lerp(this.camPos.x, tx, 0.35);
+      this.camPos.z = lerp(this.camPos.z, tz, 0.35);
+      this.camLook.x = lerp(this.camLook.x, tx, 0.35);
+      this.camLook.z = lerp(this.camLook.z, tz, 0.35);
+    }
+    if (this.camera) {
+      this.camera.position.set(this.camPos.x, CAMERA_25D_SPEC.offsetY, this.camPos.z + CAMERA_25D_SPEC.offsetZ);
+      this.camera.lookAt(this.camLook.x, CAMERA_25D_SPEC.lookAtY, this.camLook.z);
+    }
+    return { x: this.camPos.x, z: this.camPos.z, bounds: b };
+  };
+
   EngineSession.prototype.updateCamera = function (realDt) {
     var p = this.player;
-    var leadX = clamp((this.aimWorld.x - p.x) * 0.22, -2.2, 2.2);
-    var leadZ = clamp((this.aimWorld.z - p.z) * 0.18, -1.8, 1.8);
+    var b = this.getCameraBounds();
+    var leadX = clamp((this.aimWorld.x - p.x) * 0.22, -2.4, 2.4);
+    var leadZ = clamp((this.aimWorld.z - p.z) * 0.18, -2.0, 2.0);
 
-    var smooth = 1 - Math.exp(-7.5 * realDt);
-    this.camPos.x = lerp(this.camPos.x, p.x + leadX * 0.65, smooth);
-    this.camPos.z = lerp(this.camPos.z, p.z + leadZ * 0.65, smooth);
-    this.camLook.x = lerp(this.camLook.x, p.x + leadX, smooth);
-    this.camLook.z = lerp(this.camLook.z, p.z + leadZ, smooth);
+    var targetPosX = clamp(p.x + leadX * 0.65, b.minX, b.maxX);
+    var targetPosZ = clamp(p.z + leadZ * 0.65, b.minZ, b.maxZ);
+    var targetLookX = clamp(p.x + leadX, b.minX, b.maxX);
+    var targetLookZ = clamp(p.z + leadZ, b.minZ, b.maxZ);
+
+    var smooth = 1 - Math.exp(-7.8 * realDt);
+    this.camPos.x = clamp(lerp(this.camPos.x, targetPosX, smooth), b.minX, b.maxX);
+    this.camPos.z = clamp(lerp(this.camPos.z, targetPosZ, smooth), b.minZ, b.maxZ);
+    this.camLook.x = clamp(lerp(this.camLook.x, targetLookX, smooth), b.minX, b.maxX);
+    this.camLook.z = clamp(lerp(this.camLook.z, targetLookZ, smooth), b.minZ, b.maxZ);
 
     var kickDecay = Math.exp(-14.0 * realDt);
     this.camKickX *= kickDecay;
@@ -3421,7 +3482,38 @@
   };
 
   EngineSession.prototype.moveEntityWithCollision = function (fromX, fromZ, toX, toZ, radius) {
-    return resolveSweptMovement(this.mapApi, fromX, fromZ, toX, toZ, radius);
+    var res = resolveSweptMovement(this.mapApi, fromX, fromZ, toX, toZ, radius);
+    var covers = this.destructibleCovers;
+    if (covers && covers.length > 0) {
+      var r = (typeof radius === 'number' && radius > 0) ? radius : 0.4;
+      for (var i = 0; i < covers.length; i++) {
+        var c = covers[i];
+        if (!c || c.destroyed) continue;
+        var minDist = r + (c.radius || 0.72);
+        var dx = res.x - c.x;
+        var dz = res.z - c.z;
+        var d2 = dx * dx + dz * dz;
+        if (d2 < minDist * minDist) {
+          var dist = Math.sqrt(d2);
+          var nx = dist > 1e-4 ? (dx / dist) : 1;
+          var nz = dist > 1e-4 ? (dz / dist) : 0;
+          var pushX = c.x + nx * minDist;
+          var pushZ = c.z + nz * minDist;
+          if (!this.mapApi || typeof this.mapApi.isWalkable !== 'function' || this.mapApi.isWalkable(Math.floor(pushX), Math.floor(pushZ))) {
+            res.x = pushX;
+            res.z = pushZ;
+          } else {
+            res.x = fromX;
+            res.z = fromZ;
+          }
+          res.hit = true;
+          res.hitWall = true;
+          res.normalX = nx;
+          res.normalZ = nz;
+        }
+      }
+    }
+    return res;
   };
 
   EngineSession.prototype.isPointInPuddle = function (x, z) {
@@ -3834,7 +3926,7 @@
       if (this.keys['d'] || this.keys['KeyD'] || this.keys['ArrowRight']) mx += 1;
     }
 
-    var speed = 6.2 * this.passives.moveSpeedMult * (isOverclock ? 1.65 : 1.0);
+    var speed = 8.8 * this.passives.moveSpeedMult * (isOverclock ? 1.65 : 1.0);
     if (p.dashTimer > 0) {
       p.dashTimer = Math.max(0, p.dashTimer - simDt);
       p.vx = p.dashVx;
@@ -3870,7 +3962,8 @@
         if (inPuddle) {
           this.spawnPuddleSplash(p.x, p.z, false);
         } else {
-          var rippleCol = isOverclock ? (p.overclockColor || 0x4df8ff) : (p.x >= 41 ? 0x9aa9be : 0x56b6cc);
+          var platStartX = (this.mapApi && this.mapApi.PLATFORM_START_X) || 84;
+          var rippleCol = isOverclock ? (p.overclockColor || 0x4df8ff) : (p.x >= platStartX - 1 ? 0x9aa9be : 0x56b6cc);
           this.spawnFootstepRipple(p.x, p.z, rippleCol, isOverclock ? 0.62 : 0.42);
         }
       }
@@ -3916,7 +4009,8 @@
     }
 
     // Yellow line rule check (entering hazard/rail strip before overridePct >= 100)
-    if (p.x >= 49.0 && this.overridePct < 100 && this.inspector.alive && this.inspector.state !== 'HUNT') {
+    var hazardX = (this.mapApi && this.mapApi.HAZARD_X) || 103;
+    if (p.x >= hazardX && this.overridePct < 100 && this.inspector.alive && this.inspector.state !== 'HUNT') {
       this.inspector.state = 'HUNT';
       this.inspector.huntTargetId = 'player';
       this.inspector.huntLoseTimer = 10;
@@ -4129,6 +4223,9 @@
         });
         this.addCameraShake(0.16, 0.15);
       }
+
+      // Hit check against intact destructible covers
+      this.damageDestructibleCoversInArc(p.x, p.z, dir.x, dir.z, range + 0.55, 0.25, Math.max(22, dmg));
     }
   };
 
@@ -5302,15 +5399,33 @@
         if (!this.mapApi.isWalkable(Math.floor(pr.x), Math.floor(pr.z))) {
           this.spawnSparkBurst(pr.x, 1.0, pr.z, pr.color, 7);
           remove = true;
-        } else if (ins.alive && dist2D(pr.x, pr.z, ins.x, ins.z) <= ins.radius + pr.radius + 0.22) {
-          var vLen = Math.max(0.01, Math.sqrt(pr.vx * pr.vx + pr.vz * pr.vz));
-          this.damageInspector(pr.damage, (pr.vx / vLen) * pr.knockback, (pr.vz / vLen) * pr.knockback, false, {
-            impactColor: pr.color
-          });
-          this.spawnSparkBurst(pr.x, 1.1, pr.z, pr.secondaryColor || pr.color, 10);
-          remove = true;
-        } else if (pr.ttl <= 0) {
-          remove = true;
+        } else {
+          // Destructible cover hit check
+          var hitCov = null;
+          if (this.destructibleCovers && this.destructibleCovers.length) {
+            for (var ci = 0; ci < this.destructibleCovers.length; ci++) {
+              var cov = this.destructibleCovers[ci];
+              if (!cov || cov.destroyed) continue;
+              if (dist2D(pr.x, pr.z, cov.x, cov.z) <= (cov.radius || 0.72) + (pr.radius || 0.24)) {
+                hitCov = cov;
+                break;
+              }
+            }
+          }
+          if (hitCov) {
+            var pvLen = Math.max(0.01, Math.sqrt(pr.vx * pr.vx + pr.vz * pr.vz));
+            this.damageDestructibleCover(hitCov, Math.max(20, pr.damage || 22), pr.vx / pvLen, pr.vz / pvLen, 'projectile');
+            remove = true;
+          } else if (ins.alive && dist2D(pr.x, pr.z, ins.x, ins.z) <= ins.radius + pr.radius + 0.22) {
+            var vLen = Math.max(0.01, Math.sqrt(pr.vx * pr.vx + pr.vz * pr.vz));
+            this.damageInspector(pr.damage, (pr.vx / vLen) * pr.knockback, (pr.vz / vLen) * pr.knockback, false, {
+              impactColor: pr.color
+            });
+            this.spawnSparkBurst(pr.x, 1.1, pr.z, pr.secondaryColor || pr.color, 10);
+            remove = true;
+          } else if (pr.ttl <= 0) {
+            remove = true;
+          }
         }
       }
 
@@ -5360,6 +5475,9 @@
         { branchId: 'inspector_hunt' }
       );
     }
+
+    // EMP shockwave also shatters nearby destructible covers
+    this.damageDestructibleCoversInRadius(x, z, radius + 0.6, Math.max(40, power || 40));
 
     // Cancel active fake broadcasts!
     if (this.activeFakeBroadcastTimer > 0) {
@@ -5432,6 +5550,44 @@
           it.mat.color.setHex(statusHex);
           it.mat.opacity = exitUnlocked ? (0.56 + Math.sin(this.elapsedReal * 4) * 0.12) : 0.30;
         }
+      } else if (it.type === 'destructible_cover') {
+        it.ring.rotation.z += simDt * (it.destroyed ? 0.35 : 0.9);
+        if (it.hitShake > 0) {
+          it.hitShake = Math.max(0, it.hitShake - simDt * 4.5);
+          if (it.intactGroup) {
+            it.intactGroup.position.x = (Math.sin(this.elapsedReal * 65) * 0.09) * it.hitShake;
+            it.intactGroup.position.z = (Math.cos(this.elapsedReal * 58) * 0.07) * it.hitShake;
+          }
+        } else if (it.intactGroup) {
+          it.intactGroup.position.x = 0;
+          it.intactGroup.position.z = 0;
+        }
+        if (it.hitFlash > 0) {
+          it.hitFlash = Math.max(0, it.hitFlash - simDt * 5.0);
+        }
+        var damagedRatio = it.maxHp > 0 ? (it.hp / it.maxHp) : 0;
+        statusHex = it.destroyed ? COL_DONE : (damagedRatio <= 0.5 ? 0xff6b35 : COL_WARNING);
+        it.ringMat.color.setHex(statusHex);
+        it.ringMat.opacity = it.destroyed ? 0.14 : (0.34 + Math.sin(this.elapsedReal * 3.8 + i) * 0.08);
+        if (it.fractureMat) {
+          it.fractureMat.color.setHex(it.hitFlash > 0.05 ? 0xffffff : (damagedRatio <= 0.5 ? 0xff5a2c : 0xffa838));
+          it.fractureMat.opacity = it.destroyed ? 0 : (damagedRatio <= 0.5 ? 0.96 : 0.68);
+        }
+      } else if (it.type === 'scene_trigger') {
+        it.ring.rotation.z += simDt * (it.done ? 0.45 : 1.5);
+        var baseTrHex = it.triggerEffect === 'acoustic_lure' ? COL_WARNING : (it.triggerEffect === 'arc_surge' ? 0x6fa8ff : COL_PENDING);
+        statusHex = it.done ? COL_DONE : baseTrHex;
+        pulseSpeed = it.done ? 0.6 : 1.9;
+        it.ringMat.color.setHex(statusHex);
+        it.ringMat.opacity = it.done ? 0.22 : (0.42 + Math.sin(this.elapsedReal * 4.0 + i) * 0.10);
+        if (it.beaconMat) it.beaconMat.color.setHex(statusHex);
+        if (it.animPart) {
+          if (it.triggerEffect === 'vent_purge') {
+            it.animPart.rotation.z += simDt * (it.done ? 5.2 : 0.55);
+          } else if (it.triggerEffect === 'sonar_relay') {
+            it.animPart.rotation.y += simDt * (it.done ? 4.4 : 1.4);
+          }
+        }
       }
 
       if (it.pulseRing && it.pulseMat) {
@@ -5448,9 +5604,10 @@
       }
 
       var d = dist2D(p.x, p.z, it.x, it.z);
-      if (d <= bestDist) {
+      var rangeLim = it.type === 'destructible_cover' ? (bestDist + 0.35) : bestDist;
+      if (d <= rangeLim) {
         if (it.type === 'exit' || !it.done) {
-          bestDist = d;
+          bestDist = Math.min(bestDist, d);
           best = it;
         }
       }
@@ -5638,7 +5795,215 @@
       return true;
     }
 
+    if (it.type === 'destructible_cover' && !it.destroyed) {
+      var bdx = it.x - this.player.x;
+      var bdz = it.z - this.player.z;
+      var bl = Math.max(0.01, Math.sqrt(bdx * bdx + bdz * bdz));
+      this.damageDestructibleCover(it, 35, bdx / bl, bdz / bl, 'breach');
+      return true;
+    }
+
+    if (it.type === 'scene_trigger' && !it.done) {
+      this.activateSceneTrigger(it);
+      return true;
+    }
+
     return false;
+  };
+
+  EngineSession.prototype.discoverEnvironmentClue = function (clueSpec, sourceType, worldX, worldZ) {
+    if (!clueSpec || !clueSpec.id) return null;
+    if (this.environmentCluesById[clueSpec.id]) return this.environmentCluesById[clueSpec.id];
+
+    var entry = {
+      id: clueSpec.id,
+      title: clueSpec.title || '环境物证线索',
+      tag: clueSpec.tag || (sourceType === 'destructible_cover' ? '掩体破拆' : '场景触发器'),
+      zoneId: clueSpec.zoneId || (this.mapApi ? this.mapApi.getZoneAt(worldX, worldZ) : 'concourse'),
+      zoneCode: clueSpec.zoneCode || 'Z-01',
+      summary: clueSpec.summary || '发现与零号回廊结构相关的隐藏环境线索。',
+      effectText: clueSpec.effectText || '',
+      sourceType: sourceType || 'scene_trigger',
+      discoveredAt: Math.floor(this.stats.elapsedSec || 0)
+    };
+    this.environmentCluesById[entry.id] = entry;
+    this.environmentClues.push(entry);
+    this.latestEnvironmentClue = entry;
+
+    var totalEnv = (this.destructibleCovers ? this.destructibleCovers.length : 0) + (this.sceneTriggers ? this.sceneTriggers.length : 0);
+    this.recordMissionEvent(
+      'clue',
+      entry.tag + ' · ' + entry.title + ' (' + this.environmentClues.length + '/' + Math.max(1, totalEnv) + ')',
+      entry.summary + (entry.effectText ? (' [' + entry.effectText + ']') : ''),
+      { zoneId: entry.zoneId }
+    );
+    this.emitRadio({
+      type: 'narration',
+      text: '【环境线索 · ' + entry.title + '】' + entry.summary
+    });
+    if (typeof worldX === 'number' && typeof worldZ === 'number') {
+      this.spawnFloatingText(worldX, 2.25, worldZ, '环境线索: ' + entry.title, '#5ce8c8');
+    }
+    this.emitHudSnapshot();
+    return entry;
+  };
+
+  EngineSession.prototype.damageDestructibleCover = function (cover, amount, hitDirX, hitDirZ, sourceTag) {
+    if (!cover || cover.destroyed) return false;
+    var dmg = Math.max(1, Math.round(Number(amount) || 20));
+    cover.hp = Math.max(0, cover.hp - dmg);
+    cover.progress = Math.round((1 - cover.hp / Math.max(1, cover.maxHp)) * 100);
+    cover.hitShake = 1.0;
+    cover.hitFlash = 1.0;
+
+    this.spawnSparkBurst(cover.x, 0.85, cover.z, 0xffaa3b, cover.hp <= 0 ? 18 : 8);
+    this.emitSoundRipple(cover.x, cover.z, cover.hp <= 0 ? 48 : 26, 'cover_hit');
+    playSfxSafe(cover.hp <= 0 ? 'emp_boom' : 'sword_slash');
+
+    if (cover.hp > 0) {
+      if (cover.hp <= cover.maxHp * 0.5 && cover.intactGroup) {
+        cover.intactGroup.rotation.z = 0.08 * (hitDirX >= 0 ? -1 : 1);
+      }
+      this.spawnFloatingText(cover.x, 1.85, cover.z, '-' + dmg + ' 掩体耐久 ' + cover.hp + '/' + cover.maxHp, '#ffba52');
+      this.addCameraShake(0.10, 0.12);
+      this.emitHudSnapshot();
+      return true;
+    }
+
+    // Cover shattered into walkable rubble
+    cover.destroyed = true;
+    cover.done = true;
+    cover.progress = 100;
+    if (cover.intactGroup) cover.intactGroup.visible = false;
+    if (cover.rubbleGroup) cover.rubbleGroup.visible = true;
+    this.stats.coversDestroyed = (this.stats.coversDestroyed || 0) + 1;
+    this.hitStopTimer = Math.max(this.hitStopTimer || 0, 0.035);
+    this.addCameraShake(0.22, 0.18);
+    this.spawnShockRing(cover.x, cover.z, 2.6, 0xffaa3b, 0.45);
+    this.spawnFloatingText(cover.x, 1.9, cover.z, '掩体击碎!', '#ffaa3b');
+
+    // Minor tactical recovery from crate supplies / breather opening
+    if (this.player) {
+      if (cover.kind === 'crate_barricade') {
+        this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 8);
+      } else {
+        this.player.sanity = Math.min(this.player.maxSanity, this.player.sanity + 4);
+      }
+    }
+
+    if (cover.envClue) {
+      this.discoverEnvironmentClue(cover.envClue, 'destructible_cover', cover.x, cover.z);
+    } else {
+      this.emitHudSnapshot();
+    }
+    return true;
+  };
+
+  EngineSession.prototype.damageDestructibleCoversInArc = function (ox, oz, dx, dz, maxDist, minDot, dmg) {
+    var covers = this.destructibleCovers;
+    if (!covers || !covers.length) return 0;
+    var hits = 0;
+    for (var i = 0; i < covers.length; i++) {
+      var c = covers[i];
+      if (!c || c.destroyed) continue;
+      if (this.isPointInArc(ox, oz, dx, dz, c.x, c.z, maxDist + (c.radius || 0.72), minDot)) {
+        if (this.damageDestructibleCover(c, dmg, dx, dz, 'melee')) hits++;
+      }
+    }
+    return hits;
+  };
+
+  EngineSession.prototype.damageDestructibleCoversInRadius = function (x, z, radius, dmg) {
+    var covers = this.destructibleCovers;
+    if (!covers || !covers.length) return 0;
+    var hits = 0;
+    for (var i = 0; i < covers.length; i++) {
+      var c = covers[i];
+      if (!c || c.destroyed) continue;
+      var d = dist2D(x, z, c.x, c.z);
+      if (d <= radius + (c.radius || 0.72)) {
+        var nx = d > 0.01 ? (c.x - x) / d : 1;
+        var nz = d > 0.01 ? (c.z - z) / d : 0;
+        if (this.damageDestructibleCover(c, dmg, nx, nz, 'aoe')) hits++;
+      }
+    }
+    return hits;
+  };
+
+  EngineSession.prototype.activateSceneTrigger = function (trig) {
+    if (!trig || trig.done) return false;
+    trig.done = true;
+    trig.progress = 100;
+    this.stats.triggersActivated = (this.stats.triggersActivated || 0) + 1;
+
+    if (trig.animPart && (trig.triggerEffect === 'acoustic_lure' || trig.triggerEffect === 'arc_surge')) {
+      trig.animPart.rotation.z = 0.52;
+      trig.animPart.rotation.x = -0.52;
+    }
+
+    var fx = trig.triggerEffect || 'acoustic_lure';
+    if (fx === 'acoustic_lure') {
+      var lureX = clamp(trig.x + 12, 8, (this.mapApi && this.mapApi.GRID_W ? this.mapApi.GRID_W - 14 : 210));
+      var lureZ = clamp(trig.z + 6, 8, (this.mapApi && this.mapApi.GRID_H ? this.mapApi.GRID_H - 12 : 140));
+      if (typeof this.spawnDecoyFlare === 'function') {
+        this.spawnDecoyFlare(lureX, lureZ, 6.5, 0xffaa3b, null);
+      }
+      this.emitSoundRipple(lureX, lureZ, 88, 'decoy');
+      this.soundLevel = Math.max(4, this.soundLevel - 18);
+      if (this.player) this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 10);
+      this.spawnShockRing(trig.x, trig.z, 3.8, 0xffaa3b, 0.55);
+      playSfxSafe('alert');
+    } else if (fx === 'vent_purge') {
+      this.soundLevel = Math.max(4, this.soundLevel - 24);
+      this.threatLevel = Math.max(6, this.threatLevel - 14);
+      if (this.player) {
+        this.player.sanity = Math.min(this.player.maxSanity, this.player.sanity + 10);
+        this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 12);
+      }
+      this.spawnShockRing(trig.x, trig.z, 4.4, 0x5ce8c8, 0.65);
+      this.spawnSparkBurst(trig.x, 1.35, trig.z, 0x8ef2ff, 14);
+      playSfxSafe('fusion');
+    } else if (fx === 'sonar_relay') {
+      this.reconRevealTimer = Math.max(this.reconRevealTimer || 0, 8.0);
+      if (this.player) this.player.sanity = Math.min(this.player.maxSanity, this.player.sanity + 8);
+      this.spawnShockRing(trig.x, trig.z, 6.5, 0x5ce8c8, 0.72);
+      this.spawnSparkBurst(trig.x, 1.55, trig.z, 0x5ce8c8, 14);
+      playSfxSafe('vortex_buy');
+    } else if (fx === 'arc_surge') {
+      this.empBlackoutTimer = Math.max(this.empBlackoutTimer || 0, 2.2);
+      this.empBlackoutPos.x = trig.x;
+      this.empBlackoutPos.z = trig.z;
+      if (this.player) this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 14);
+      this.spawnShockRing(trig.x, trig.z, 5.2, 0x6fa8ff, 0.62);
+      this.spawnSparkBurst(trig.x, 1.45, trig.z, 0x7cb8ff, 16);
+      if (this.inspector && this.inspector.alive && dist2D(trig.x, trig.z, this.inspector.x, this.inspector.z) <= 14.5) {
+        this.inspector.stunTimer = Math.max(this.inspector.stunTimer || 0, 2.4);
+        if (typeof this.spawnLightningBolt === 'function') {
+          this.spawnLightningBolt(trig.x, 1.4, trig.z, this.inspector.x, 1.4, this.inspector.z, 0x7cb8ff, 0.42, 6);
+        }
+        this.damageInspector(18, 0, 0, false, { impactColor: 0x6fa8ff });
+      }
+      playSfxSafe('emp_boom');
+    }
+
+    this.addCameraShake(0.18, 0.18);
+    if (trig.envClue) {
+      this.discoverEnvironmentClue(trig.envClue, 'scene_trigger', trig.x, trig.z);
+    } else {
+      this.emitHudSnapshot();
+    }
+    return true;
+  };
+
+  EngineSession.prototype.getDynamicInteractablesSummary = function () {
+    return {
+      destructiblesTotal: this.destructibleCovers ? this.destructibleCovers.length : 0,
+      destructiblesBroken: this.stats.coversDestroyed || 0,
+      triggersTotal: this.sceneTriggers ? this.sceneTriggers.length : 0,
+      triggersActivated: this.stats.triggersActivated || 0,
+      envCluesFound: this.environmentClues ? this.environmentClues.length : 0,
+      envClues: this.environmentClues ? this.environmentClues.slice() : []
+    };
   };
 
   // ---------------------------------------------------------------------------
@@ -6170,13 +6535,13 @@
 
     // Vision & target selection (Decoys lure Inspector strongly!)
     var activeDecoy = this.decoys.length > 0 ? this.decoys[0] : null;
-    if (activeDecoy && dist2D(ins.x, ins.z, activeDecoy.x, activeDecoy.z) < 26) {
+    if (activeDecoy && dist2D(ins.x, ins.z, activeDecoy.x, activeDecoy.z) < 34) {
       ins.state = 'INVESTIGATE';
       ins.investigateTarget = { x: activeDecoy.x, z: activeDecoy.z };
-      ins.investigateTimer = 4.0;
+      ins.investigateTimer = 4.5;
     } else {
       // Check line-of-sight to player (Stealth Veil drastically cuts sight range)
-      var sightRange = p.stealthTimer > 0 ? 4.2 : 13.8;
+      var sightRange = p.stealthTimer > 0 ? 5.2 : 20.5;
       var dPlayer = dist2D(ins.x, ins.z, p.x, p.z);
       var seesPlayer = (dPlayer <= sightRange && mapApi.hasLineOfSight(ins.x, ins.z, p.x, p.z));
 
@@ -6191,7 +6556,7 @@
       } else {
         // Also check Lu Jin intercepting close by
         var lujin = this.squadById['lujin'];
-        if (lujin && lujin.alive && dist2D(ins.x, ins.z, lujin.x, lujin.z) < 7.0 && mapApi.hasLineOfSight(ins.x, ins.z, lujin.x, lujin.z)) {
+        if (lujin && lujin.alive && dist2D(ins.x, ins.z, lujin.x, lujin.z) < 8.5 && mapApi.hasLineOfSight(ins.x, ins.z, lujin.x, lujin.z)) {
           ins.state = 'HUNT';
           ins.huntTargetId = 'lujin';
           ins.huntLoseTimer = 4.5;
@@ -6199,13 +6564,13 @@
       }
     }
 
-    // Determine movement target based on state
+    // Determine movement target based on state (scaled for 224x152 mega-station arena)
     var targetX = ins.x;
     var targetZ = ins.z;
-    var baseSpeed = 3.35;
+    var baseSpeed = 5.0;
 
     if (ins.state === 'HUNT') {
-      baseSpeed = 4.65;
+      baseSpeed = 7.0;
       var tgt = (ins.huntTargetId === 'player') ? p : (this.squadById[ins.huntTargetId] || p);
       if (tgt.alive === false) tgt = p;
       targetX = tgt.x;
@@ -6238,7 +6603,7 @@
         }
       }
     } else if (ins.state === 'INVESTIGATE' && ins.investigateTarget) {
-      baseSpeed = 3.95;
+      baseSpeed = 6.0;
       targetX = ins.investigateTarget.x;
       targetZ = ins.investigateTarget.z;
       ins.investigateTimer -= simDt;
@@ -6538,6 +6903,10 @@
   EngineSession.prototype.updateGhostTrain = function (simDt) {
     if (!this.train) return;
     var tr = this.train;
+    var trainX = (this.mapApi && this.mapApi.TRAIN_X) || TRAIN_X;
+    var gridH = (this.mapApi && this.mapApi.GRID_H) || 152;
+    var targetDockZ = Math.round(gridH * 0.72);
+    var departEndZ = gridH + 66;
 
     if (this.trainPhase === 'waiting') {
       this.trainCountdownSec -= simDt;
@@ -6553,23 +6922,22 @@
       if (this.trainCountdownSec <= 0) {
         this.trainCountdownSec = 0;
         this.trainPhase = 'arriving';
-        tr.z = -24;
+        tr.z = -64;
         tr.group.visible = true;
-        tr.group.position.set(TRAIN_X, RAIL_Y + 0.12, tr.z);
+        tr.group.position.set(trainX, RAIL_Y + 0.12, tr.z);
         playSfxSafe('train_horn');
       }
     } else if (this.trainPhase === 'arriving') {
-      var targetZ = 27;
-      var rem = targetZ - tr.z;
-      var spd = clamp(rem * 1.45, 2.5, 26);
+      var rem = targetDockZ - tr.z;
+      var spd = clamp(rem * 1.45, 4.0, 42);
       tr.z += spd * simDt;
       tr.group.position.z = tr.z;
-      if (dist2D(this.player.x, this.player.z, TRAIN_X, 18) < 15) {
+      if (dist2D(this.player.x, this.player.z, trainX, gridH * 0.5) < 36) {
         this.addCameraShake(0.08, 0.1);
       }
       this.checkTrainCollision();
-      if (tr.z >= targetZ - 0.15) {
-        tr.z = targetZ;
+      if (tr.z >= targetDockZ - 0.15) {
+        tr.z = targetDockZ;
         this.trainPhase = 'docked';
         this.trainInStation = true;
         this.trainTimer = TRAIN_DWELL_SEC;
@@ -6595,10 +6963,10 @@
         playSfxSafe('train_horn');
       }
     } else if (this.trainPhase === 'departing') {
-      tr.z += 22 * simDt;
+      tr.z += 38 * simDt;
       tr.group.position.z = tr.z;
       this.checkTrainCollision();
-      if (tr.z >= 72) {
+      if (tr.z >= departEndZ) {
         tr.group.visible = false;
         this.trainPhase = 'waiting';
         this.trainCountdownSec = TRAIN_CYCLE_SEC;
@@ -6609,7 +6977,8 @@
 
   EngineSession.prototype.checkTrainCollision = function () {
     var p = this.player;
-    if (p.x >= TRAIN_X - 1.65 && p.x <= TRAIN_X + 1.65 && p.z <= this.train.z + 3.2 && p.z >= this.train.z - 22) {
+    var trainX = (this.mapApi && this.mapApi.TRAIN_X) || TRAIN_X;
+    if (p.x >= trainX - 1.65 && p.x <= trainX + 1.65 && p.z <= this.train.z + 3.4 && p.z >= this.train.z - 62) {
       this.damagePlayer(40, -10, 0);
       this.showSpeechBubble('player', '快退回月台！差点被零号列车卷进去！');
     }
@@ -7469,8 +7838,9 @@
     safeAudio('updateSpatialSource', 'inspector', ins ? (ins.x - p.x) : 99, ins ? (ins.z - p.z) : 99, insIntensity);
 
     var trainActive = !!(this.train && this.train.group && this.train.group.visible && this.trainPhase !== 'waiting' && !this.ended);
-    var trainZ = this.train ? this.train.z : -32;
-    safeAudio('updateSpatialSource', 'train', TRAIN_X - p.x, trainZ - p.z, trainActive ? 1 : 0);
+    var trainZ = this.train ? this.train.z : -46;
+    var trainX = (this.mapApi && this.mapApi.TRAIN_X) || TRAIN_X;
+    safeAudio('updateSpatialSource', 'train', trainX - p.x, trainZ - p.z, trainActive ? 1 : 0);
 
     safeAudio('setBulletTime', !!(this.slowMo || this.inputPaused));
   };
@@ -7479,10 +7849,11 @@
     if (!this.dustPoints) return;
     var attr = this.dustPoints.geometry.attributes.position;
     var arr = attr.array;
+    var maxW = (this.mapApi && this.mapApi.GRID_W) || 224;
     for (var i = 0; i < arr.length; i += 3) {
       arr[i + 1] += Math.sin(this.elapsedReal * 0.8 + i) * 0.08 * simDt;
       arr[i] += 0.12 * simDt;
-      if (arr[i] > 56) arr[i] = 0.5;
+      if (arr[i] > maxW) arr[i] = 0.5;
     }
     attr.needsUpdate = true;
   };
@@ -7679,9 +8050,18 @@
           this.promptEl.style.display = 'none';
         } else {
           var suffix = '';
-          if (ni.type === 'console') suffix = ' (' + Math.round(ni.progress) + '%)';
-          else if (ni.type === 'exit') suffix = (this.overridePct >= 100 || !this.inspector.alive) ? ' [可撤离]' : ' [道岔' + this.overridePct + '%]';
-          this.promptEl.textContent = '[E] ' + ni.label + suffix;
+          var prefixLabel = ni.label;
+          if (ni.type === 'console') {
+            suffix = ' (' + Math.round(ni.progress) + '%)';
+          } else if (ni.type === 'exit') {
+            suffix = (this.overridePct >= 100 || !this.inspector.alive) ? ' [可撤离]' : ' [道岔' + this.overridePct + '%]';
+          } else if (ni.type === 'destructible_cover') {
+            prefixLabel = (ni.actionLabel || '破拆掩体') + ' · ' + ni.label;
+            suffix = ' (HP ' + Math.round(ni.hp) + '/' + Math.round(ni.maxHp) + ')';
+          } else if (ni.type === 'scene_trigger') {
+            prefixLabel = (ni.actionLabel || '启动机关') + ' · ' + ni.label;
+          }
+          this.promptEl.textContent = '[E] ' + prefixLabel + suffix;
           this.promptEl.style.display = 'block';
           this.promptEl.style.left = Math.round(pScr.x) + 'px';
           this.promptEl.style.top = Math.round(pScr.y) + 'px';
@@ -7781,10 +8161,28 @@
 
     var near = this.nearbyInteractable ? {
       id: this.nearbyInteractable.id,
-      label: this.nearbyInteractable.label,
+      label: this.nearbyInteractable.type === 'destructible_cover'
+        ? ((this.nearbyInteractable.actionLabel || '破拆掩体') + ' · ' + this.nearbyInteractable.label)
+        : (this.nearbyInteractable.type === 'scene_trigger'
+          ? ((this.nearbyInteractable.actionLabel || '启动机关') + ' · ' + this.nearbyInteractable.label)
+          : this.nearbyInteractable.label),
       type: this.nearbyInteractable.type,
       progress: Math.round(this.nearbyInteractable.progress)
     } : null;
+
+    var dynamicMini = [];
+    if (this.sceneTriggers && this.sceneTriggers.length) {
+      for (var sti = 0; sti < this.sceneTriggers.length; sti++) {
+        var stg = this.sceneTriggers[sti];
+        dynamicMini.push({ x: stg.x, z: stg.z, type: 'scene_trigger', done: !!stg.done });
+      }
+    }
+    if (this.destructibleCovers && this.destructibleCovers.length) {
+      for (var dci = 0; dci < this.destructibleCovers.length; dci++) {
+        var dcv = this.destructibleCovers[dci];
+        dynamicMini.push({ x: dcv.x, z: dcv.z, type: 'destructible_cover', done: !!dcv.destroyed });
+      }
+    }
 
     var insOffscreen = dBoss > 7.5;
     var insScreenBearing = Math.atan2(ins.z - p.z, ins.x - p.x);
@@ -7804,6 +8202,9 @@
       }
     }
 
+    var destructiblesTotal = this.destructibleCovers ? this.destructibleCovers.length : 0;
+    var triggersTotal = this.sceneTriggers ? this.sceneTriggers.length : 0;
+
     return {
       zoneId: pZoneId,
       zoneName: pZone.name,
@@ -7816,6 +8217,14 @@
       cluesFoundCount: this.discoveredClueIds.length,
       cluesTotal: cluesTotal,
       discoveredClueIds: this.discoveredClueIds.slice(),
+      environmentClues: this.environmentClues ? this.environmentClues.slice() : [],
+      envCluesFoundCount: this.environmentClues ? this.environmentClues.length : 0,
+      envCluesTotal: destructiblesTotal + triggersTotal,
+      latestEnvironmentClue: this.latestEnvironmentClue || null,
+      destructiblesTotal: destructiblesTotal,
+      destructiblesBroken: this.stats.coversDestroyed || 0,
+      triggersTotal: triggersTotal,
+      triggersActivated: this.stats.triggersActivated || 0,
       consoles: consolesDetail,
       visitedZones: this.visitedZones.slice(),
       totalZones: 6,
@@ -7854,6 +8263,7 @@
         squad: squadMini,
         wards: wardsMini,
         consoles: consolesMini,
+        dynamicPoints: dynamicMini,
         exitReady: (this.overridePct >= 100 || !ins.alive),
         focusWaypoint: this.focusWaypoint ? {
           x: this.focusWaypoint.x,
@@ -8135,6 +8545,7 @@
     ACTOR_DIMENSIONS: ACTOR_DIMENSIONS,
     CAMERA_25D_SPEC: CAMERA_25D_SPEC,
     resolveSweptMovement: resolveSweptMovement,
+    computeCameraScrollBounds: computeCameraScrollBounds,
 
     _getSession: function () {
       return activeSession;

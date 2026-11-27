@@ -40,6 +40,8 @@
     postFxEnabled: true,
     minimapBaseCanvas: null,
     hotbarSig: '',
+    lastEnvClueId: null,
+    envClueDismissedId: null,
     lastAudioThreat: -1,
     crisisTimerId: null,
     crisisActiveKey: null,
@@ -1109,6 +1111,11 @@
     }, 360);
   }
 
+  function getMinimapScale(gridW) {
+    var w = Math.max(16, Number(gridW) || 224);
+    return Math.max(1.0, Math.min(4, 224 / w));
+  }
+
   function buildMinimapBase() {
     var mapMod = INFINITY.StationMap;
     if (!mapMod || typeof mapMod.getGrid !== 'function') return null;
@@ -1117,10 +1124,10 @@
 
     var W = mapMod.GRID_W || 56;
     var H = mapMod.GRID_H || 38;
-    var scale = 4;
+    var scale = getMinimapScale(W);
     var off = document.createElement('canvas');
-    off.width = W * scale;
-    off.height = H * scale;
+    off.width = Math.round(W * scale);
+    off.height = Math.round(H * scale);
     var ctx = off.getContext('2d');
 
     ctx.fillStyle = '#07080d';
@@ -1142,7 +1149,7 @@
         } else {
           ctx.fillStyle = '#131722';
         }
-        ctx.fillRect(x * scale, z * scale, scale, scale);
+        ctx.fillRect(x * scale, z * scale, Math.ceil(scale), Math.ceil(scale));
       }
     }
 
@@ -1153,12 +1160,13 @@
       ctx.textBaseline = 'middle';
       Object.keys(mapMod.ZONES).forEach(function (zid) {
         var zn = mapMod.ZONES[zid];
-        ctx.fillStyle = 'rgba(226, 212, 188, 0.34)';
+        ctx.fillStyle = 'rgba(226, 212, 188, 0.38)';
         ctx.fillText(zn.code || zid, zn.cx * scale, zn.cz * scale);
       });
     }
 
     uiState.minimapBaseCanvas = off;
+    uiState.minimapScale = scale;
     return off;
   }
 
@@ -1169,7 +1177,8 @@
     if (!ctx) return;
 
     var base = uiState.minimapBaseCanvas || buildMinimapBase();
-    var scale = 4;
+    var mapMod = INFINITY.StationMap;
+    var scale = uiState.minimapScale || getMinimapScale((mapMod && mapMod.GRID_W) || 56);
     if (base) {
       if (canvas.width !== base.width || canvas.height !== base.height) {
         canvas.width = base.width;
@@ -1208,6 +1217,32 @@
         ctx.strokeStyle = '#090a0f';
         ctx.lineWidth = 1;
         ctx.strokeRect(cx - 3, cz - 3, 6, 6);
+      }
+    }
+
+    // 2b. Dynamic Interactive Points (destructible cover & scene triggers)
+    if (Array.isArray(mm.dynamicPoints)) {
+      for (var dp = 0; dp < mm.dynamicPoints.length; dp++) {
+        var pt = mm.dynamicPoints[dp];
+        var dx = pt.x * scale;
+        var dz = pt.z * scale;
+        if (pt.type === 'scene_trigger') {
+          ctx.save();
+          ctx.translate(dx, dz);
+          ctx.rotate(Math.PI / 4);
+          ctx.fillStyle = pt.done ? '#58c4a6' : '#53d2e8';
+          ctx.fillRect(-2.4, -2.4, 4.8, 4.8);
+          ctx.strokeStyle = '#090a0f';
+          ctx.lineWidth = 0.85;
+          ctx.strokeRect(-2.4, -2.4, 4.8, 4.8);
+          ctx.restore();
+        } else if (pt.type === 'destructible_cover' && !pt.done) {
+          ctx.fillStyle = '#e69852';
+          ctx.fillRect(dx - 2, dz - 2, 4, 4);
+          ctx.strokeStyle = '#090a0f';
+          ctx.lineWidth = 0.75;
+          ctx.strokeRect(dx - 2, dz - 2, 4, 4);
+        }
       }
     }
 
@@ -1673,8 +1708,8 @@
     var insp = snapshot && snapshot.inspector;
     var dist = insp && isFinite(Number(insp.distToPlayer)) ? Number(insp.distToPlayer) : 999;
     var isOffscreen = (insp && typeof insp.offscreen === 'boolean') ? insp.offscreen : (dist >= 5.5);
-    // Show off-screen edge indicator only when Inspector is alive, off-screen, and within 28m
-    if (inspDone || !insp || !isOffscreen || dist > 28) {
+    // Show off-screen edge indicator only when Inspector is alive, off-screen, and within 44m
+    if (inspDone || !insp || !isOffscreen || dist > 44) {
       el.classList.add('hidden');
       return;
     }
@@ -1698,9 +1733,9 @@
     var cx = 50 + Math.cos(angle) * rx;
     var cy = 50 + Math.sin(angle) * ry;
     var deg = (angle * 180) / Math.PI + 90;
-    var urgency = clamp(1 - (dist - 5.5) / 22.5, 0.2, 1.0);
+    var urgency = clamp(1 - (dist - 5.5) / 38.5, 0.2, 1.0);
     el.classList.remove('hidden');
-    el.classList.toggle('urgent', dist <= 13 || insp.state === 'chase');
+    el.classList.toggle('urgent', dist <= 16 || insp.state === 'chase');
     el.style.left = cx.toFixed(1) + '%';
     el.style.top = cy.toFixed(1) + '%';
     el.style.opacity = (0.45 + urgency * 0.55).toFixed(2);
@@ -1773,6 +1808,43 @@
 
     if ($('hud25d-clues-val')) {
       $('hud25d-clues-val').textContent = (snapshot.cluesFoundCount || 0) + '/' + (snapshot.cluesTotal || 6);
+    }
+    if ($('hud25d-env-clues-val')) {
+      $('hud25d-env-clues-val').textContent = (snapshot.envCluesFoundCount || 0) + '/' + (snapshot.envCluesTotal || 22);
+    }
+
+    var envBanner = $('hud25d-env-clue-banner');
+    var latestEnv = snapshot.latestEnvironmentClue || null;
+    if (!latestEnv) {
+      uiState.lastEnvClueId = null;
+      uiState.envClueDismissedId = null;
+      if (envBanner) envBanner.classList.add('hidden');
+    } else {
+      if (latestEnv.id !== uiState.lastEnvClueId) {
+        uiState.lastEnvClueId = latestEnv.id;
+        if (uiState.envClueDismissedId === latestEnv.id) {
+          uiState.envClueDismissedId = null;
+        }
+      }
+      if (envBanner) {
+        var showEnvBanner = uiState.envClueDismissedId !== latestEnv.id;
+        envBanner.classList.toggle('hidden', !showEnvBanner);
+        envBanner.classList.toggle('source-cover', latestEnv.sourceType === 'destructible_cover');
+        if ($('hud25d-env-clue-tag')) $('hud25d-env-clue-tag').textContent = latestEnv.tag || '环境线索';
+        if ($('hud25d-env-clue-zone')) $('hud25d-env-clue-zone').textContent = latestEnv.zoneCode || 'Z-01';
+        if ($('hud25d-env-clue-title')) $('hud25d-env-clue-title').textContent = latestEnv.title || '';
+        if ($('hud25d-env-clue-body')) $('hud25d-env-clue-body').textContent = latestEnv.summary || '';
+        var envEffEl = $('hud25d-env-clue-effect');
+        if (envEffEl) {
+          if (latestEnv.effectText) {
+            envEffEl.textContent = latestEnv.effectText;
+            envEffEl.classList.remove('hidden');
+          } else {
+            envEffEl.textContent = '';
+            envEffEl.classList.add('hidden');
+          }
+        }
+      }
     }
 
     var inspStatusEl = $('hud25d-inspector-status');
@@ -4092,10 +4164,17 @@
     var allClues = (scenario && scenario.clues) || [];
 
     var matched = allClues.filter(function (c) { return unlocked.indexOf(c.id) !== -1; });
+    var envClues = (uiState.lastSnapshot && Array.isArray(uiState.lastSnapshot.environmentClues))
+      ? uiState.lastSnapshot.environmentClues
+      : [];
+    var envTotal = (uiState.lastSnapshot && Number(uiState.lastSnapshot.envCluesTotal)) || 22;
+
+    var html = '';
+    html += '<div class="clues-section-title">主线考场物证 <span class="mono">' + matched.length + '/' + (allClues.length || 6) + '</span></div>';
     if (!matched.length) {
-      body.innerHTML = '<div class="muted small">尚未破译任何关键线索。在 2.5D 站台中靠近发光物证并按 E 即可破译收集。</div>';
+      html += '<div class="muted small" style="margin-bottom:10px;">尚未破译任何主线物证。靠近发光线索终端并按 E 即可破译收集。</div>';
     } else {
-      body.innerHTML = matched.map(function (c) {
+      html += matched.map(function (c) {
         return (
           '<div class="clue-card">' +
             '<div style="font-weight:600;margin-bottom:4px;">' + esc(c.title) + ' <span class="mono small muted">' + esc(c.id) + '</span></div>' +
@@ -4104,6 +4183,28 @@
         );
       }).join('');
     }
+
+    html += '<div class="clues-section-title">动态环境线索 · 掩体与场景触发器 <span class="mono">' + envClues.length + '/' + envTotal + '</span></div>';
+    if (!envClues.length) {
+      html += '<div class="muted small">尚未发现环境线索。破拆橙标可破坏掩体（攻击 / 按 E）或触发青标场景机关即可解锁区域战术档案。</div>';
+    } else {
+      html += envClues.slice().reverse().map(function (ec) {
+        var isCover = ec.sourceType === 'destructible_cover';
+        return (
+          '<div class="clue-card clue-card-env' + (isCover ? ' source-cover' : '') + '">' +
+            '<div class="clue-card-env-head">' +
+              '<span class="clue-badge-inline' + (isCover ? ' cover' : '') + '">' + esc(ec.tag || (isCover ? '掩体破拆' : '场景触发器')) + '</span>' +
+              '<span class="mono small muted">' + esc(ec.zoneCode || '') + ' · ' + esc(ec.id || '') + '</span>' +
+            '</div>' +
+            '<div style="font-weight:600;margin-bottom:4px;">' + esc(ec.title) + '</div>' +
+            '<div class="small" style="color:var(--text-secondary);">' + esc(ec.summary) + '</div>' +
+            (ec.effectText ? ('<div class="small" style="margin-top:5px;color:#84f5d5;">' + esc(ec.effectText) + '</div>') : '') +
+          '</div>'
+        );
+      }).join('');
+    }
+
+    body.innerHTML = html;
     modal.classList.remove('hidden');
     syncModalPause25D();
   }
@@ -4494,6 +4595,31 @@
         if (INFINITY.World25D && typeof INFINITY.World25D.toggleSlowMo === 'function') {
           INFINITY.World25D.toggleSlowMo();
         }
+      });
+    }
+    if ($('hud25d-clues-pill')) {
+      $('hud25d-clues-pill').addEventListener('click', function () {
+        playSfx('ui_tick');
+        openCluesModal();
+      });
+    }
+    if ($('hud25d-env-clues-pill')) {
+      $('hud25d-env-clues-pill').addEventListener('click', function () {
+        playSfx('ui_tick');
+        openCluesModal();
+      });
+    }
+    if ($('btn-env-clue-dossier')) {
+      $('btn-env-clue-dossier').addEventListener('click', function () {
+        playSfx('ui_tick');
+        openCluesModal();
+      });
+    }
+    if ($('btn-env-clue-close')) {
+      $('btn-env-clue-close').addEventListener('click', function () {
+        playSfx('ui_tick');
+        uiState.envClueDismissedId = uiState.lastEnvClueId;
+        if ($('hud25d-env-clue-banner')) $('hud25d-env-clue-banner').classList.add('hidden');
       });
     }
 

@@ -394,110 +394,437 @@
   }
 
   /* --------------------------------------------------------------------------
-   * Pure Non-Blocking Zone Prop Layout Spec (Testable against StationMap!)
-   * Every ground-level prop sits cleanly against a perimeter wall or atop a pillar
-   * so walkable lanes, doorways, spawns, and A* routes remain 100% unobstructed.
+   * Procedural / Dynamic Zone Prop, Cover & Decal Generator (Scaled for 224x152)
+   * Reads StationMap bounds, walkability, walls, and interactables dynamically
+   * so the 4x expanded Station Zero (34,048 m²) is richly populated with zero
+   * pathfinding obstructions and zero rail-trench overhang.
    * -------------------------------------------------------------------------- */
-  function getZonePropSpecs() {
+  function generateDynamicZoneProps(mapApiArg) {
+    var mapApi = mapApiArg || INFINITY.StationMap || null;
+    var gridW = (mapApi && mapApi.GRID_W) || 224;
+    var gridH = (mapApi && mapApi.GRID_H) || 152;
+    var platformStartX = (mapApi && mapApi.PLATFORM_START_X) || 168;
+    var hazardX = (mapApi && mapApi.HAZARD_X) || 207;
+    var railMinX = (mapApi && mapApi.RAIL_MIN_X) || 208;
+    var grid = (mapApi && typeof mapApi.getGrid === 'function') ? mapApi.getGrid() : null;
+    var interactables = (mapApi && typeof mapApi.getInteractables === 'function') ? (mapApi.getInteractables() || []) : [];
+    var spawn = (mapApi && typeof mapApi.getZoneCenter === 'function')
+      ? (mapApi.getZoneCenter('concourse') || { x: 41.5, z: 37.5 })
+      : { x: 41.5, z: 37.5 };
+
+    var defaultBounds = {
+      concourse:  { x0: 4,   z0: 4,   x1: 78,  z1: 70 },
+      corridor:   { x0: 84,  z0: 50,  x1: 160, z1: 98 },
+      dispatch:   { x0: 84,  z0: 4,   x1: 160, z1: 44 },
+      substation: { x0: 4,   z0: 76,  x1: 78,  z1: 144 },
+      tunnel:     { x0: 84,  z0: 104, x1: 160, z1: 144 },
+      platform0:  { x0: 168, z0: 6,   x1: 206, z1: 144 }
+    };
+    var bounds = (mapApi && typeof mapApi.getZoneBounds === 'function')
+      ? (mapApi.getZoneBounds() || defaultBounds)
+      : defaultBounds;
+
+    function getCell(gx, gz) {
+      if (gx < 0 || gz < 0 || gx >= gridW || gz >= gridH) return 1;
+      if (!grid) return 0;
+      if (Array.isArray(grid[gz])) return grid[gz][gx];
+      return grid[gz * gridW + gx];
+    }
+
+    function isWalkableSafe(x, z) {
+      var ix = Math.floor(x);
+      var iz = Math.floor(z);
+      if (ix < 1 || iz < 1 || ix >= gridW - 1 || iz >= gridH - 1) return false;
+      var cell = getCell(ix, iz);
+      if (cell === 1 || cell === 4) return false;
+      if (mapApi && typeof mapApi.isWalkable === 'function') {
+        return !!mapApi.isWalkable(x, z);
+      }
+      return true;
+    }
+
+    var occupied = [];
+    function isClearForProp(x, z, minSep, spawnPad, interPad) {
+      if (!isWalkableSafe(x, z)) return false;
+      // Ensure footprint margin stays off solid walls and rail trench
+      if (!isWalkableSafe(x - 0.35, z) || !isWalkableSafe(x + 0.35, z) ||
+          !isWalkableSafe(x, z - 0.35) || !isWalkableSafe(x, z + 0.35)) {
+        return false;
+      }
+      var sp = typeof spawnPad === 'number' ? spawnPad : 2.8;
+      if (sp > 0) {
+        var sdx = x - spawn.x;
+        var sdz = z - spawn.z;
+        if (sdx * sdx + sdz * sdz < sp * sp) return false;
+      }
+      var ip = typeof interPad === 'number' ? interPad : 2.1;
+      if (ip > 0) {
+        for (var ii = 0; ii < interactables.length; ii++) {
+          var it = interactables[ii];
+          var idx = x - it.x;
+          var idz = z - it.z;
+          if (idx * idx + idz * idz < ip * ip) return false;
+        }
+      }
+      var sep = typeof minSep === 'number' ? minSep : 1.4;
+      var sepSq = sep * sep;
+      for (var oi = 0; oi < occupied.length; oi++) {
+        var ox = x - occupied[oi].x;
+        var oz = z - occupied[oi].z;
+        if (ox * ox + oz * oz < sepSq) return false;
+      }
+      return true;
+    }
+
+    function reserveProp(x, z) {
+      occupied.push({ x: x, z: z });
+    }
+
+    var cB = bounds.concourse || defaultBounds.concourse;
+    var rB = bounds.corridor || defaultBounds.corridor;
+    var dB = bounds.dispatch || defaultBounds.dispatch;
+    var sB = bounds.substation || defaultBounds.substation;
+    var tB = bounds.tunnel || defaultBounds.tunnel;
+    var pB = bounds.platform0 || defaultBounds.platform0;
+
+    // 1. 6 Zone-Signature 3D Landmarks (reserve first so dynamic props keep wide clearance)
+    var landmarks = [
+      { zone: 'concourse',  kind: 'clock_totem',  label: '停摆倒计时时钟塔',   x: 41.5,  z: 29.5,  color: '#68c8de' },
+      { zone: 'corridor',   kind: 'transit_arch', label: '换乘霓虹门拱',       x: 86.5,  z: 74.5,  color: '#d6b274' },
+      { zone: 'dispatch',   kind: 'radar_tower',  label: '调度信号塔',         x: 92.5,  z: 34.5,  color: '#52c4a2' },
+      { zone: 'substation', kind: 'tesla_coil',   label: '高压共振线圈',       x: 70.5,  z: 84.5,  color: '#6e9eff' },
+      { zone: 'tunnel',     kind: 'vent_turbine', label: '废弃通风涡轮',       x: 92.5,  z: 136.5, color: '#a884e0' },
+      { zone: 'platform0',  kind: 'signal_mast',  label: '0号站台铁路信号灯柱', x: 172.5, z: 136.5, color: '#e69c3c' }
+    ];
+    for (var lri = 0; lri < landmarks.length; lri++) {
+      reserveProp(landmarks[lri].x, landmarks[lri].z);
+    }
+
+    // 2. Dynamic Subway Ticket Turnstiles (Concourse North Entrance Banks + Transfer Gates)
+    var turnstiles = [];
+    for (var tx = cB.x0 + 6.5; tx <= cB.x1 - 5.5; tx += 2.2) {
+      // Leave central illuminated route-map kiosk approach clear (x: 35..48)
+      if (tx > 34.5 && tx < 48.5) continue;
+      var tz = cB.z0 + 0.92;
+      if (isClearForProp(tx, tz, 1.3, 2.5, 2.0)) {
+        turnstiles.push({ x: Number(tx.toFixed(2)), z: Number(tz.toFixed(2)), rotY: 0 });
+        reserveProp(tx, tz);
+      }
+    }
+    // Concourse east transfer gate turnstile wing (flanking doorway z=54..66)
+    var eastTsZ = [47.5, 49.5, 51.5, 68.5];
+    for (var et = 0; et < eastTsZ.length; et++) {
+      var etx = cB.x1 - 0.85;
+      var etz = eastTsZ[et];
+      if (isClearForProp(etx, etz, 1.2, 2.5, 2.0)) {
+        turnstiles.push({ x: Number(etx.toFixed(2)), z: Number(etz.toFixed(2)), rotY: -Math.PI * 0.5 });
+        reserveProp(etx, etz);
+      }
+    }
+
+    // 3. Dynamic Waiting Benches across Concourse, Corridor & Platform 0
+    var benches = [];
+    function tryAddBench(x, z, rotY) {
+      if (isClearForProp(x, z, 2.4, 3.2, 2.2)) {
+        benches.push({ x: Number(x.toFixed(2)), z: Number(z.toFixed(2)), rotY: rotY });
+        reserveProp(x, z);
+      }
+    }
+    // Signature twin benches framing Concourse Clock Totem right in opening viewport
+    tryAddBench(34.5, 29.5, 0);
+    tryAddBench(48.5, 29.5, 0);
+    // Concourse west & east walls (step 9m, skipping east doorway z=52..68)
+    for (var cbz = cB.z0 + 7.5; cbz <= cB.z1 - 6.5; cbz += 9.5) {
+      tryAddBench(cB.x0 + 0.65, cbz, Math.PI * 0.5);
+      if (cbz < 50.5 || cbz > 69.0) {
+        tryAddBench(cB.x1 - 0.65, cbz, -Math.PI * 0.5);
+      }
+    }
+    // Concourse south wall (skipping doorways x=13..21 and x=33..49)
+    for (var cbx = cB.x0 + 5.5; cbx <= cB.x1 - 5.5; cbx += 9.5) {
+      if ((cbx >= 12.0 && cbx <= 22.5) || (cbx >= 32.0 && cbx <= 50.5)) continue;
+      tryAddBench(cbx, cB.z1 - 0.62, 0);
+    }
+    // Corridor north & south boulevard walls (skipping Dispatch & Tunnel doorways x=92..106 and x=136..150)
+    for (var rbx = rB.x0 + 5.5; rbx <= rB.x1 - 5.5; rbx += 9.5) {
+      if ((rbx >= 91.5 && rbx <= 106.5) || (rbx >= 135.5 && rbx <= 150.5)) continue;
+      tryAddBench(rbx, rB.z0 + 0.62, 0);
+      tryAddBench(rbx, rB.z1 - 0.62, 0);
+    }
+    // Platform 0 grand west wall (skipping doorways z=16..30, z=66..82, z=116..130)
+    for (var pbz = pB.z0 + 5.5; pbz <= pB.z1 - 5.5; pbz += 9.5) {
+      if ((pbz >= 16.0 && pbz <= 30.5) || (pbz >= 66.0 && pbz <= 82.5) || (pbz >= 116.0 && pbz <= 130.5)) continue;
+      tryAddBench(pB.x0 + 0.65, pbz, Math.PI * 0.5);
+    }
+
+    // 4. Illuminated Subway Route Map Kiosk & Overhead Directional Transit Signage
+    var wallSigns = [
+      // Concourse north illuminated route-map kiosk (mounted flush on north wall face)
+      { kind: 'route_map', x: 41.5, y: 1.78, z: cB.z0 + 0.08, rotY: 0, w: 5.6, h: 2.35 },
+      // Concourse grand overhead transit header framing the northern colonnade & Clock Totem
+      { kind: 'hanging_sign', title: 'B1 检票大厅 · 零号换乘中枢', sub: 'CONCOURSE Z-01  ·  EAST → CORRIDOR', accent: '#68c8de', x: 41.5, y: 2.96, z: 23.8, rotY: 0, w: 5.4, h: 1.04 },
+      // Concourse east & south exit headers above Corridor & Substation gateways
+      { kind: 'sign', title: 'B2 换乘长廊 →', sub: 'CORRIDOR · Z-02', accent: '#f0c46c', x: cB.x1 + 0.92, y: 2.68, z: 60.5, rotY: -Math.PI * 0.5, w: 4.4, h: 0.94 },
+      { kind: 'sign', title: '旧变电间 ↓', sub: 'SUBSTATION · Z-04', accent: '#6e9eff', x: 41.5, y: 2.68, z: cB.z1 + 0.92, rotY: Math.PI, w: 4.4, h: 0.94 },
+      // Corridor overhead hanging directional transit signs along the central boulevard
+      { kind: 'hanging_sign', title: '← B1 检票大厅   ·   0号站台 →', sub: 'DISPATCH ↑  ·  TUNNEL ↓', accent: '#6fd8ea', x: 104.5, y: 2.94, z: 74.5, rotY: 0, w: 4.6, h: 1.0 },
+      { kind: 'hanging_sign', title: '中枢换乘大道 · 战术掩体区', sub: 'CORRIDOR Z-02 CENTRAL', accent: '#d6b274', x: 122.5, y: 2.94, z: 74.5, rotY: 0, w: 4.6, h: 1.0 },
+      { kind: 'hanging_sign', title: '前导区 · 0号站台主通道 →', sub: 'PLATFORM 00 EXPRESS', accent: '#f0c46c', x: 144.5, y: 2.94, z: 74.5, rotY: 0, w: 4.6, h: 1.0 },
+      // Dispatch & Substation overhead zone headers
+      { kind: 'hanging_sign', title: '信号调度中枢 · 道岔联锁区', sub: 'DISPATCH Z-03 · OVERRIDE A', accent: '#52c4a2', x: 122.5, y: 2.94, z: 24.5, rotY: 0, w: 4.6, h: 1.0 },
+      { kind: 'hanging_sign', title: '旧高压变电厅 · 严禁靠近母线', sub: 'SUBSTATION Z-04 · OVERRIDE B', accent: '#6e9eff', x: 41.5, y: 2.94, z: 110.5, rotY: 0, w: 4.8, h: 1.0 },
+      { kind: 'hanging_sign', title: '废弃应急维护通道 · 仅限检修', sub: 'EMERGENCY TUNNEL Z-05', accent: '#a884e0', x: 122.5, y: 2.94, z: 124.5, rotY: 0, w: 4.6, h: 1.0 },
+      // Platform 0 overhead hanging warning & timetable boards (cleanly centered between canopy ribs)
+      { kind: 'hanging_sign', title: '零号站台 · 禁止越过黄线', sub: 'PLATFORM 00 · NORTH BAY', accent: '#ff5264', x: 186.5, y: 2.96, z: 25.0, rotY: 0, w: 4.6, h: 1.0 },
+      { kind: 'hanging_sign', title: '00:00 停摆列车 · 延时未知', sub: 'NEXT TRAIN · LINE-00', accent: '#ffaa44', x: 186.5, y: 2.96, z: 51.0, rotY: 0, w: 4.6, h: 1.0 },
+      { kind: 'hanging_sign', title: '零号站台中段 · 主撤离区', sub: 'PLATFORM 00 · CENTRAL BAY', accent: '#68c8de', x: 186.5, y: 2.96, z: 75.0, rotY: 0, w: 4.6, h: 1.0 },
+      { kind: 'hanging_sign', title: '南段高压铁轨 · 严禁滞留', sub: 'PLATFORM 00 · SOUTH BAY', accent: '#ff5264', x: 186.5, y: 2.96, z: 105.0, rotY: 0, w: 4.6, h: 1.0 },
+      { kind: 'hanging_sign', title: '零号列车折返区 · 警戒边界', sub: 'PLATFORM 00 · TERMINAL', accent: '#ff5264', x: 186.5, y: 2.96, z: 131.0, rotY: 0, w: 4.6, h: 1.0 }
+    ];
+
+    // 5. Signal Dispatch CRT Monitor Banks (4 banks along Dispatch north wall)
+    var crtBanks = [
+      { x: 96.5,  y: 1.78, z: dB.z0 + 0.12, rotY: 0, w: 5.6, h: 1.65 },
+      { x: 113.5, y: 1.78, z: dB.z0 + 0.12, rotY: 0, w: 5.6, h: 1.65 },
+      { x: 131.5, y: 1.78, z: dB.z0 + 0.12, rotY: 0, w: 5.6, h: 1.65 },
+      { x: 148.5, y: 1.78, z: dB.z0 + 0.12, rotY: 0, w: 5.6, h: 1.65 }
+    ];
+
+    // 6. Dynamic Server Racks along Dispatch perimeter walls
+    var serverRacks = [];
+    function tryAddRack(x, z, rotY) {
+      if (isClearForProp(x, z, 1.15, 2.5, 2.0)) {
+        serverRacks.push({ x: Number(x.toFixed(2)), z: Number(z.toFixed(2)), rotY: rotY });
+        reserveProp(x, z);
+      }
+    }
+    for (var dnx = dB.x0 + 1.0; dnx <= dB.x0 + 7.5; dnx += 1.4) {
+      tryAddRack(dnx, dB.z0 + 0.65, 0);
+    }
+    for (var dnx2 = dB.x1 - 7.5; dnx2 <= dB.x1 - 1.0; dnx2 += 1.4) {
+      tryAddRack(dnx2, dB.z0 + 0.65, 0);
+    }
+    for (var dwz = dB.z0 + 3.0; dwz <= dB.z1 - 3.0; dwz += 4.2) {
+      tryAddRack(dB.x0 + 0.65, dwz, Math.PI * 0.5);
+      // Skip east doorway to Platform 0 (z=17..29)
+      if (dwz < 16.5 || dwz > 30.0) {
+        tryAddRack(dB.x1 - 0.65, dwz, -Math.PI * 0.5);
+      }
+    }
+
+    // 7. 6 High-Voltage Copper-Coil Transformers mounted atop Substation's 6 2x2 transformer blocks
+    var transformers = [
+      { x: 19.0, z: 95.0 },
+      { x: 41.0, z: 95.0 },
+      { x: 63.0, z: 95.0 },
+      { x: 19.0, z: 125.0 },
+      { x: 41.0, z: 125.0 },
+      { x: 63.0, z: 125.0 }
+    ];
+
+    // 8. Dynamic Maintenance Crates & Industrial Equipment Stacks across Tunnel, Substation & Service Corners
+    var cratesAndBarricades = [];
+    function tryAddCrate(x, z, rotY) {
+      if (isClearForProp(x, z, 1.35, 3.0, 2.2)) {
+        cratesAndBarricades.push({ x: Number(x.toFixed(2)), z: Number(z.toFixed(2)), rotY: rotY });
+        reserveProp(x, z);
+      }
+    }
+    // Tunnel north & south walls (skipping north doorways x=92..106 and x=136..150)
+    for (var tcx = tB.x0 + 2.5; tcx <= tB.x1 - 2.5; tcx += 7.5) {
+      if (!((tcx >= 91.5 && tcx <= 106.5) || (tcx >= 135.5 && tcx <= 150.5))) {
+        tryAddCrate(tcx, tB.z0 + 0.82, (hash2D(tcx, tB.z0) - 0.5) * 0.5);
+      }
+      tryAddCrate(tcx + 1.4, tB.z1 - 0.85, (hash2D(tcx, tB.z1) - 0.5) * 0.5);
+    }
+    // Substation perimeter maintenance alcoves (skipping east doorway z=114..130)
+    for (var scz = sB.z0 + 4.5; scz <= sB.z1 - 4.5; scz += 10.5) {
+      tryAddCrate(sB.x0 + 0.85, scz, (hash2D(sB.x0, scz) - 0.5) * 0.4);
+      if (scz < 113.5 || scz > 130.5) {
+        tryAddCrate(sB.x1 - 0.85, scz, (hash2D(sB.x1, scz) - 0.5) * 0.4);
+      }
+    }
+    // Concourse & Corridor tactical service crates tucked beside pillars/corners
+    var extraCrateAnchors = [
+      [cB.x0 + 1.2, cB.z0 + 1.2], [cB.x1 - 1.2, cB.z0 + 1.2],
+      [cB.x0 + 1.2, cB.z1 - 1.2], [cB.x1 - 1.2, cB.z1 - 1.2],
+      [rB.x0 + 1.2, rB.z0 + 1.2], [rB.x1 - 1.2, rB.z0 + 1.2],
+      [rB.x0 + 1.2, rB.z1 - 1.2], [rB.x1 - 1.2, rB.z1 - 1.2],
+      [pB.x0 + 1.2, pB.z0 + 1.4], [pB.x0 + 1.2, pB.z1 - 1.4]
+    ];
+    for (var ec = 0; ec < extraCrateAnchors.length; ec++) {
+      tryAddCrate(extraCrateAnchors[ec][0], extraCrateAnchors[ec][1], (ec % 2 === 0 ? 0.18 : -0.22));
+    }
+
+    // 9. Dynamic Safety Bollards & Metro Stanchions (framing colonnades & Platform 0 bay edges)
+    var bollards = [];
+    function tryAddBollard(x, z) {
+      if (isClearForProp(x, z, 1.6, 3.2, 2.2)) {
+        bollards.push({ x: Number(x.toFixed(2)), z: Number(z.toFixed(2)) });
+        reserveProp(x, z);
+      }
+    }
+    // Concourse central promenade stanchions
+    var concBollards = [
+      [34.5, 34.5], [48.5, 34.5], [34.5, 42.5], [48.5, 42.5],
+      [23.5, 18.5], [59.5, 18.5], [23.5, 54.5], [59.5, 54.5]
+    ];
+    for (var cb = 0; cb < concBollards.length; cb++) {
+      tryAddBollard(concBollards[cb][0], concBollards[cb][1]);
+    }
+    // Corridor boulevard guidance bollards
+    for (var rbx2 = 98.5; rbx2 <= 146.5; rbx2 += 12.0) {
+      tryAddBollard(rbx2, 65.5);
+      tryAddBollard(rbx2, 83.5);
+    }
+    // Platform 0 boarding zone bollards along colonnade aisle (strictly west of hazard strip)
+    for (var pbz2 = 14.5; pbz2 <= 136.5; pbz2 += 14.0) {
+      tryAddBollard(183.5, pbz2);
+      tryAddBollard(201.5, pbz2);
+    }
+
+    // 10. Dynamic Stratified Style-1 Damp Floor Puddles & Concrete Fracture Crack Decals
+    // Strictly walkable & clear of rail_trench (grid !== 4 and x <= hazardX - 1.5)
+    var puddles = [];
+    var crackDecals = [];
+    var zoneList = [
+      { id: 'concourse',  b: cB, cols: 4, rows: 3 },
+      { id: 'corridor',   b: rB, cols: 4, rows: 3 },
+      { id: 'dispatch',   b: dB, cols: 3, rows: 2 },
+      { id: 'substation', b: sB, cols: 4, rows: 3 },
+      { id: 'tunnel',     b: tB, cols: 3, rows: 2 },
+      { id: 'platform0',  b: pB, cols: 2, rows: 7 }
+    ];
+
+    function isDecalFloorSafe(x, z) {
+      if (x >= railMinX - 1.6) return false;
+      return isWalkableSafe(x, z) &&
+        isWalkableSafe(x - 0.6, z) && isWalkableSafe(x + 0.6, z) &&
+        isWalkableSafe(x, z - 0.6) && isWalkableSafe(x, z + 0.6);
+    }
+
+    // Hero spawn-plaza damp puddles so opening frame always exhibits Style-1 wet reflections
+    var heroPuddles = [
+      { x: 35.8, z: 35.2, sx: 2.7, sz: 1.90, rot: 0.28 },
+      { x: 47.4, z: 34.4, sx: 2.4, sz: 1.65, rot: -0.36 },
+      { x: 39.2, z: 42.4, sx: 2.3, sz: 1.60, rot: 0.16 }
+    ];
+    for (var hp = 0; hp < heroPuddles.length; hp++) {
+      if (isDecalFloorSafe(heroPuddles[hp].x, heroPuddles[hp].z)) {
+        puddles.push(heroPuddles[hp]);
+      }
+    }
+
+    for (var zi = 0; zi < zoneList.length; zi++) {
+      var zl = zoneList[zi];
+      var zb = zl.b;
+      var maxX = zl.id === 'platform0' ? Math.min(zb.x1 - 2.0, hazardX - 2.0) : (zb.x1 - 2.0);
+      var minX = zb.x0 + 2.0;
+      var minZ = zb.z0 + 2.0;
+      var maxZ = zb.z1 - 2.0;
+      var spanX = Math.max(4, maxX - minX);
+      var spanZ = Math.max(4, maxZ - minZ);
+
+      for (var r = 0; r < zl.rows; r++) {
+        for (var c = 0; c < zl.cols; c++) {
+          var seedA = hash2D(zi * 31 + c * 7 + 3, r * 19 + 5);
+          var seedB = hash2D(zi * 17 + c * 13 + 11, r * 23 + 9);
+          var px = minX + ((c + 0.25 + seedA * 0.5) / zl.cols) * spanX;
+          var pz = minZ + ((r + 0.25 + seedB * 0.5) / zl.rows) * spanZ;
+          // Nudge into nearest walkable tile if candidate landed on a pillar/cover
+          var foundP = false;
+          var offsets = [[0, 0], [2.2, 0], [-2.2, 0], [0, 2.2], [0, -2.2], [3.2, 2.2]];
+          for (var po = 0; po < offsets.length; po++) {
+            var txp = px + offsets[po][0];
+            var tzp = pz + offsets[po][1];
+            if (isDecalFloorSafe(txp, tzp)) {
+              puddles.push({
+                x: Number(txp.toFixed(2)),
+                z: Number(tzp.toFixed(2)),
+                sx: Number((2.1 + seedA * 0.95).toFixed(2)),
+                sz: Number((1.45 + seedB * 0.65).toFixed(2)),
+                rot: Number(((seedA - 0.5) * 1.4).toFixed(2))
+              });
+              foundP = true;
+              break;
+            }
+          }
+
+          // Generate 1-2 crack decals per cell at offset jitter
+          var cx1 = minX + ((c + 0.18 + seedB * 0.62) / zl.cols) * spanX;
+          var cz1 = minZ + ((r + 0.18 + seedA * 0.62) / zl.rows) * spanZ;
+          for (var co = 0; co < offsets.length; co++) {
+            var txc = cx1 + offsets[co][0];
+            var tzc = cz1 + offsets[co][1];
+            if (isDecalFloorSafe(txc, tzc)) {
+              crackDecals.push({
+                x: Number(txc.toFixed(2)),
+                z: Number(tzc.toFixed(2)),
+                sx: Number((1.9 + seedB * 0.65).toFixed(2)),
+                sz: Number((1.5 + seedA * 0.50).toFixed(2)),
+                rot: Number(((seedB - 0.5) * 1.8).toFixed(2))
+              });
+              break;
+            }
+          }
+          if (!foundP) {
+            // Secondary crack fallback for dense areas
+            var cx2 = minX + ((c + 0.5) / zl.cols) * spanX;
+            var cz2 = minZ + ((r + 0.5) / zl.rows) * spanZ;
+            if (isDecalFloorSafe(cx2, cz2)) {
+              crackDecals.push({
+                x: Number(cx2.toFixed(2)),
+                z: Number(cz2.toFixed(2)),
+                sx: 2.1,
+                sz: 1.6,
+                rot: 0.35
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Count tactical waist-high cover runs from StationMap for telemetry/tests
+    var tacticalCoverCount = 0;
+    if (mapApi && typeof mapApi.getWalls === 'function') {
+      var wallRuns = mapApi.getWalls() || [];
+      for (var wr = 0; wr < wallRuns.length; wr++) {
+        if (wallRuns[wr] && (wallRuns[wr].cover || (Number(wallRuns[wr].h) > 0 && Number(wallRuns[wr].h) <= 1.5))) {
+          tacticalCoverCount++;
+        }
+      }
+    }
+
     return {
-      // Concourse (x:2..19, z:2..18)
-      turnstiles: [
-        // Decorative ticket turnstile lane framing Concourse north entrance bay (z=2.7, clear of player 10,10)
-        { x: 4.5, z: 2.85, rotY: 0 },
-        { x: 6.2, z: 2.85, rotY: 0 },
-        { x: 13.8, z: 2.85, rotY: 0 },
-        { x: 15.5, z: 2.85, rotY: 0 },
-        { x: 17.2, z: 2.85, rotY: 0 }
-      ],
-      benches: [
-        // Concourse west & south wall edges
-        { x: 2.58, z: 6.5, rotY: Math.PI * 0.5 },
-        { x: 2.58, z: 14.5, rotY: Math.PI * 0.5 },
-        { x: 15.5, z: 18.42, rotY: 0 },
-        // Corridor wall edges (x:22..40, z:13..24)
-        { x: 37.2, z: 13.48, rotY: 0 },
-        { x: 24.5, z: 24.42, rotY: 0 },
-        { x: 36.2, z: 24.42, rotY: 0 },
-        // Platform 0 west wall benches (x=42.55, well clear of doorways z=17..20 & z=29..32)
-        { x: 42.58, z: 8.5, rotY: Math.PI * 0.5 },
-        { x: 42.58, z: 14.0, rotY: Math.PI * 0.5 },
-        { x: 42.58, z: 24.0, rotY: Math.PI * 0.5 }
-      ],
-      wallSigns: [
-        // Concourse north illuminated route-map kiosk (mounted flush on z=2.04 wall face)
-        { kind: 'route_map', x: 10.0, y: 1.75, z: 2.06, rotY: 0, w: 3.6, h: 1.8 },
-        // Concourse east exit header above Corridor doorway
-        { kind: 'sign', title: 'B2 换乘长廊 →', sub: 'CORRIDOR · Z-02', accent: '#f0c46c', x: 19.92, y: 2.65, z: 16.0, rotY: -Math.PI * 0.5, w: 3.4, h: 0.85 },
-        // Corridor overhead hanging directional transit signs (high overhead y=2.92 — zero collision!)
-        { kind: 'hanging_sign', title: '← B1 检票大厅   ·   0号站台 →', sub: 'DISPATCH ↑  ·  TUNNEL ↓', accent: '#6fd8ea', x: 29.8, y: 2.88, z: 18.5, rotY: 0, w: 4.0, h: 0.96 },
-        { kind: 'hanging_sign', title: '零号站台 · 禁止越过黄线', sub: 'PLATFORM 00 · DANGER', accent: '#ff5264', x: 45.8, y: 2.95, z: 14.5, rotY: 0, w: 3.8, h: 0.94 },
-        { kind: 'hanging_sign', title: '00:00 停摆列车 · 延时未知', sub: 'NEXT TRAIN · LINE-00', accent: '#ffaa44', x: 45.8, y: 2.95, z: 24.5, rotY: 0, w: 3.8, h: 0.94 }
-      ],
-      crtBanks: [
-        // Dispatch north wall CRT monitor wall (z=2.08, x=26..34)
-        { x: 29.8, y: 1.78, z: 2.12, rotY: 0, w: 5.2, h: 1.65 }
-      ],
-      serverRacks: [
-        // Dispatch NW/NE corners (strictly tucked into wall corners)
-        { x: 22.55, z: 2.58, rotY: 0 },
-        { x: 23.65, z: 2.58, rotY: 0 },
-        { x: 37.95, z: 2.58, rotY: 0 },
-        { x: 37.95, z: 3.78, rotY: -Math.PI * 0.5 }
-      ],
-      transformers: [
-        // Mounted directly ON TOP of Substation's two existing non-walkable transformer pillar blocks!
-        { x: 6.0, z: 25.5 },
-        { x: 17.0, z: 25.5 }
-      ],
-      cratesAndBarricades: [
-        // Tunnel wall-tucked maintenance crates (x:22..40, z:26..35)
-        { x: 22.65, z: 26.65, rotY: 0.15 },
-        { x: 23.55, z: 26.58, rotY: -0.2 },
-        { x: 39.8, z: 26.65, rotY: 0.35 },
-        { x: 22.65, z: 35.2, rotY: 0.1 },
-        // Substation south-west breaker corner
-        { x: 2.65, z: 35.1, rotY: 0.05 }
-      ],
-      // 6 Zone-Signature 3D Landmarks (1 per zone, >=2m from spawn, >=1.35m from interactables)
-      landmarks: [
-        { zone: 'concourse',  kind: 'clock_totem',   label: '停摆倒计时时钟塔', x: 18.5, z: 4.5,  color: '#68c8de' },
-        { zone: 'corridor',   kind: 'transit_arch',  label: '换乘霓虹门拱',     x: 23.0, z: 14.2, color: '#d6b274' },
-        { zone: 'dispatch',   kind: 'radar_tower',   label: '调度信号塔',       x: 23.5, z: 8.2,  color: '#52c4a2' },
-        { zone: 'substation', kind: 'tesla_coil',    label: '高压共振线圈',     x: 16.5, z: 23.5, color: '#6e9eff' },
-        { zone: 'tunnel',     kind: 'vent_turbine',  label: '废弃通风涡轮',     x: 24.0, z: 34.2, color: '#a884e0' },
-        { zone: 'platform0',  kind: 'signal_mast',   label: '0号站台铁路信号灯柱', x: 43.2, z: 32.5, color: '#e69c3c' }
-      ],
-      puddles: [
-        { x: 8.6, z: 12.2, sx: 2.3, sz: 1.65, rot: 0.3 },
-        { x: 13.8, z: 9.4, sx: 1.85, sz: 1.35, rot: -0.4 },
-        { x: 28.4, z: 18.8, sx: 2.5, sz: 1.55, rot: 0.15 },
-        { x: 35.0, z: 19.2, sx: 2.05, sz: 1.45, rot: -0.25 },
-        { x: 11.4, z: 29.8, sx: 2.7, sz: 1.9, rot: 0.5 },
-        { x: 30.2, z: 30.4, sx: 2.4, sz: 1.75, rot: -0.1 },
-        { x: 45.2, z: 13.5, sx: 2.15, sz: 1.45, rot: -0.32 },
-        { x: 45.4, z: 19.6, sx: 2.6, sz: 1.85, rot: 0.2 },
-        { x: 46.2, z: 25.8, sx: 2.05, sz: 1.4, rot: 0.44 }
-      ],
-      crackDecals: [
-        // Style-1 heavy-ink concrete fractures (strictly on walkable tiles, clear of rail_trench)
-        { x: 7.4,  z: 8.4,  sx: 1.8, sz: 1.5, rot: 0.25 },
-        { x: 12.6, z: 13.4, sx: 2.0, sz: 1.6, rot: -0.6 },
-        { x: 16.2, z: 11.2, sx: 1.7, sz: 1.4, rot: 0.8 },
-        { x: 25.2, z: 17.6, sx: 2.1, sz: 1.6, rot: 0.12 },
-        { x: 32.8, z: 21.4, sx: 1.9, sz: 1.5, rot: -0.42 },
-        { x: 28.2, z: 6.4,  sx: 1.8, sz: 1.4, rot: 0.5 },
-        { x: 9.2,  z: 28.6, sx: 2.2, sz: 1.7, rot: -0.25 },
-        { x: 27.6, z: 31.8, sx: 2.0, sz: 1.5, rot: 0.35 },
-        { x: 44.6, z: 10.6, sx: 1.9, sz: 1.5, rot: 0.18 },
-        { x: 47.4, z: 16.4, sx: 1.8, sz: 1.4, rot: -0.52 },
-        { x: 44.8, z: 22.8, sx: 2.0, sz: 1.5, rot: 0.65 },
-        { x: 47.2, z: 28.2, sx: 1.8, sz: 1.4, rot: -0.18 }
-      ]
+      turnstiles: turnstiles,
+      benches: benches,
+      wallSigns: wallSigns,
+      crtBanks: crtBanks,
+      serverRacks: serverRacks,
+      transformers: transformers,
+      cratesAndBarricades: cratesAndBarricades,
+      bollards: bollards,
+      landmarks: landmarks,
+      puddles: puddles,
+      crackDecals: crackDecals,
+      meta: {
+        gridW: gridW,
+        gridH: gridH,
+        area: gridW * gridH,
+        dynamicGenerated: true,
+        tacticalCoverCount: tacticalCoverCount
+      }
     };
   }
 
+  function getZonePropSpecs(mapApiArg) {
+    return generateDynamicZoneProps(mapApiArg);
+  }
+
   /* --------------------------------------------------------------------------
-   * 1. Build Station Geometry, PBR Surfaces, Pillar Cladding & Architectural Props
+   * 1. Build Station Geometry, PBR Surfaces, Pillar Cladding, Waist-High Cover
+   *    Barricades & Instanced Architectural Props (Optimized for 224x152!)
    * -------------------------------------------------------------------------- */
   function buildStation(session, opts) {
     var THREE = session.THREE;
@@ -508,10 +835,11 @@
     var PLATFORM_Y = cfg.PLATFORM_Y || 0.04;
     var HAZARD_Y = cfg.HAZARD_Y || 0.05;
     var RAIL_Y = cfg.RAIL_Y || -0.58;
-    var TRAIN_X = cfg.TRAIN_X || 51.5;
+    var PLATFORM_START_X = mapApi.PLATFORM_START_X || 168;
+    var TRAIN_X = cfg.TRAIN_X || mapApi.TRAIN_X || 213.5;
 
-    var gridW = mapApi.GRID_W || 56;
-    var gridH = mapApi.GRID_H || 38;
+    var gridW = mapApi.GRID_W || 224;
+    var gridH = mapApi.GRID_H || 152;
     var grid = (typeof mapApi.getGrid === 'function' ? mapApi.getGrid() : null) || [];
     var walls = (typeof mapApi.getWalls === 'function' ? mapApi.getWalls() : null) || [];
     var dummy = session._dummy;
@@ -530,7 +858,7 @@
         var cell = readCell(gx, gz);
         if (cell === 1) {
           if (walls.length === 0) {
-            wallTileMap[gx + ',' + gz] = { gx: gx, gz: gz, neon: false, h: WALL_HEIGHT, isPillar: false };
+            wallTileMap[gx + ',' + gz] = { gx: gx, gz: gz, neon: false, h: WALL_HEIGHT, isPillar: false, isCover: false };
           }
         } else {
           var bKey = (cell === 2 || cell === 3 || cell === 4) ? cell : 0;
@@ -539,7 +867,7 @@
       }
     }
 
-    // Parse merged walls from StationMap
+    // Parse merged walls, colonnade pillars (h=2.6), and waist-high tactical cover barricades (h=1.25, cover=true)
     if (walls.length > 0) {
       var hasHalf = false;
       var hasZeroSpan = false;
@@ -557,7 +885,8 @@
         var startX = wallsUseCenter ? Math.round(wObj.x - ww * 0.5) : Math.round(wObj.x);
         var startZ = wallsUseCenter ? Math.round(wObj.z - wd * 0.5) : Math.round(wObj.z);
         var wh = Number(wObj.h) || WALL_HEIGHT;
-        var isPillar = wh < WALL_HEIGHT - 0.15;
+        var isCover = !!wObj.cover || wh <= 1.5;
+        var isPillar = !isCover && (wh < WALL_HEIGHT - 0.15);
         for (var dz = 0; dz < wd; dz++) {
           for (var dx = 0; dx < ww; dx++) {
             var tx = startX + dx;
@@ -565,11 +894,12 @@
             if (tx >= 0 && tx < gridW && tz >= 0 && tz < gridH) {
               var k = tx + ',' + tz;
               if (!wallTileMap[k]) {
-                wallTileMap[k] = { gx: tx, gz: tz, neon: !!wObj.neon, h: wh, isPillar: isPillar };
+                wallTileMap[k] = { gx: tx, gz: tz, neon: !!wObj.neon, h: wh, isPillar: isPillar, isCover: isCover };
               } else {
                 if (wObj.neon) wallTileMap[k].neon = true;
                 if (wObj.h) wallTileMap[k].h = wh;
-                if (isPillar) wallTileMap[k].isPillar = true;
+                if (isCover) { wallTileMap[k].isCover = true; wallTileMap[k].isPillar = false; }
+                else if (isPillar && !wallTileMap[k].isCover) wallTileMap[k].isPillar = true;
               }
             }
           }
@@ -578,13 +908,6 @@
     }
 
     var spritesApi = INFINITY.PixelSprites || null;
-    function getBump(name) {
-      if (spritesApi && typeof spritesApi.getTileBumpTexture === 'function') {
-        return spritesApi.getTileBumpTexture(name);
-      }
-      return null;
-    }
-
     function getNormal(name) {
       if (spritesApi && typeof spritesApi.getTileNormalTexture === 'function') {
         return spritesApi.getTileNormalTexture(name);
@@ -653,34 +976,41 @@
       session.scene.add(fMesh);
     }
 
-    // Style-1 heavy-ink irregular damp floor puddles (smooth water plane, no stone grout normalMap)
-    var propSpecs = getZonePropSpecs();
-    var puddleTex = createPuddleTexture(THREE, session);
+    // Generate dynamic procedural prop & decal specs from live mapApi
+    var propSpecs = generateDynamicZoneProps(mapApi);
+
+    // Style-1 heavy-ink irregular damp floor puddles (1 InstancedMesh draw call across entire 224x152 map!)
     var puddleGeo = session.trackGeo(new THREE.PlaneGeometry(1, 1));
     puddleGeo.rotateX(-Math.PI / 2);
-    var puddleMat = session.trackMat(new THREE.MeshStandardMaterial({
-      map: puddleTex,
-      color: 0xffffff,
-      roughness: 0.28,
-      metalness: 0.14,
-      transparent: true,
-      opacity: 0.84,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2
-    }));
-    for (var pi = 0; pi < propSpecs.puddles.length; pi++) {
-      var pd = propSpecs.puddles[pi];
-      var pBaseY = (pd.x >= 42) ? PLATFORM_Y : FLOOR_Y;
-      var pm = new THREE.Mesh(puddleGeo, puddleMat);
-      pm.position.set(pd.x, pBaseY + 0.022, pd.z);
-      pm.rotation.y = pd.rot;
-      pm.scale.set(pd.sx, 1, pd.sz);
-      session.scene.add(pm);
+    if (propSpecs.puddles.length > 0) {
+      var puddleTex = createPuddleTexture(THREE, session);
+      var puddleMat = session.trackMat(new THREE.MeshStandardMaterial({
+        map: puddleTex,
+        color: 0xffffff,
+        roughness: 0.28,
+        metalness: 0.14,
+        transparent: true,
+        opacity: 0.84,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2
+      }));
+      var puddleInst = new THREE.InstancedMesh(puddleGeo, puddleMat, propSpecs.puddles.length);
+      for (var pi = 0; pi < propSpecs.puddles.length; pi++) {
+        var pd = propSpecs.puddles[pi];
+        var pBaseY = (pd.x >= PLATFORM_START_X) ? PLATFORM_Y : FLOOR_Y;
+        dummy.position.set(pd.x, pBaseY + 0.022, pd.z);
+        dummy.rotation.set(0, pd.rot || 0, 0);
+        dummy.scale.set(pd.sx, 1, pd.sz);
+        dummy.updateMatrix();
+        puddleInst.setMatrixAt(pi, dummy.matrix);
+      }
+      puddleInst.instanceMatrix.needsUpdate = true;
+      session.scene.add(puddleInst);
     }
 
-    // Style-1 heavy-ink floor fracture decals (clamped to walkable slabs)
+    // Style-1 heavy-ink floor fracture decals (1 InstancedMesh draw call across entire 224x152 map!)
     var crackDecals = propSpecs.crackDecals || [];
     if (crackDecals.length > 0) {
       var crackTex = createCrackDecalTexture(THREE, session);
@@ -693,15 +1023,18 @@
         polygonOffsetFactor: -2,
         polygonOffsetUnits: -2
       }));
+      var crackInst = new THREE.InstancedMesh(puddleGeo, crackMat, crackDecals.length);
       for (var cdi = 0; cdi < crackDecals.length; cdi++) {
         var cd = crackDecals[cdi];
-        var cdBaseY = (cd.x >= 42) ? PLATFORM_Y : FLOOR_Y;
-        var cm = new THREE.Mesh(puddleGeo, crackMat);
-        cm.position.set(cd.x, cdBaseY + 0.018, cd.z);
-        cm.rotation.y = cd.rot || 0;
-        cm.scale.set(cd.sx || 1.8, 1, cd.sz || 1.5);
-        session.scene.add(cm);
+        var cdBaseY = (cd.x >= PLATFORM_START_X) ? PLATFORM_Y : FLOOR_Y;
+        dummy.position.set(cd.x, cdBaseY + 0.018, cd.z);
+        dummy.rotation.set(0, cd.rot || 0, 0);
+        dummy.scale.set(cd.sx || 1.8, 1, cd.sz || 1.5);
+        dummy.updateMatrix();
+        crackInst.setMatrixAt(cdi, dummy.matrix);
       }
+      crackInst.instanceMatrix.needsUpdate = true;
+      session.scene.add(crackInst);
     }
 
     // --- 1B. RECESSED RAIL TRENCH, STEEL I-BEAM TRACKS, THIRD RAIL & TUNNEL PORTALS ---
@@ -759,7 +1092,7 @@
       addInkOutline(THREE, session, thirdRail, 24);
       session.scene.add(thirdRail);
 
-      // Concrete/timber rail sleepers
+      // Concrete/timber rail sleepers (Instanced)
       var tieCount = Math.floor(railSpanZ * 1.45);
       var tieGeo = session.trackGeo(new THREE.BoxGeometry(2.15, 0.08, 0.24));
       var tieMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x241f1c, roughness: 0.92, metalness: 0.06 }));
@@ -798,25 +1131,40 @@
         session.scene.add(pGroup);
       }
 
-      // Platform 0 Overhead Steel Canopy Ribs (matte heavy-ink iron girders, zero pale specular washout)
+      // Platform 0 Overhead Steel Canopy Ribs (Instanced cleanly over the rail trench & hazard curb)
       var ribMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x111720, roughness: 0.90, metalness: 0.14 }));
-      var ribGeo = session.trackGeo(new THREE.BoxGeometry(11.6, 0.22, 0.26));
-      for (var rbz = 6; rbz <= 34; rbz += 5.5) {
-        var rib = new THREE.Mesh(ribGeo, ribMat);
-        rib.position.set(47.6, 3.22, rbz);
-        addInkOutline(THREE, session, rib, 24);
-        session.scene.add(rib);
+      var ribSpanX = Math.max(6.4, (maxRailX - minRailX) + 3.0);
+      var ribCenterX = (minRailX + maxRailX + 1.0) * 0.5 - 0.25;
+      var ribStepZ = railSpanZ > 90 ? 10.0 : (railSpanZ > 45 ? 7.5 : 5.5);
+      var ribPositions = [];
+      for (var rbz = minRailZ + 4; rbz <= maxRailZ - 2; rbz += ribStepZ) {
+        ribPositions.push(rbz);
+      }
+      if (ribPositions.length > 0) {
+        var ribGeo = session.trackGeo(new THREE.BoxGeometry(ribSpanX, 0.24, 0.30));
+        var ribMesh = new THREE.InstancedMesh(ribGeo, ribMat, ribPositions.length);
+        for (var rbi = 0; rbi < ribPositions.length; rbi++) {
+          dummy.position.set(ribCenterX, 3.55, ribPositions[rbi]);
+          dummy.rotation.set(0, 0, 0);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          ribMesh.setMatrixAt(rbi, dummy.matrix);
+        }
+        ribMesh.instanceMatrix.needsUpdate = true;
+        session.scene.add(ribMesh);
       }
     }
 
-    // --- 1C. PBR LAYERED WALLS, ARCHITECTURAL COPING & REINFORCED PILLAR CLADDING ---
+    // --- 1C. PBR LAYERED WALLS, ARCHITECTURAL COPING, PILLARS & WAIST-HIGH TACTICAL COVER ---
     var concreteWalls = [];
     var neonWalls = [];
     var pillars = [];
+    var lowCovers = [];
     var wallKeys = Object.keys(wallTileMap);
     for (var wk = 0; wk < wallKeys.length; wk++) {
       var wt = wallTileMap[wallKeys[wk]];
-      if (wt.isPillar) pillars.push(wt);
+      if (wt.isCover) lowCovers.push(wt);
+      else if (wt.isPillar) pillars.push(wt);
       else if (wt.neon) neonWalls.push(wt);
       else concreteWalls.push(wt);
     }
@@ -826,6 +1174,26 @@
     var capMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x0b0f16, roughness: 0.86, metalness: 0.22 }));
     var baseTrimGeo = session.trackGeo(new THREE.BoxGeometry(1.04, 0.10, 1.04));
     var baseTrimMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0x06080d }));
+
+    var sharedAoGeo = session.trackGeo(new THREE.PlaneGeometry(1.85, 1.85));
+    sharedAoGeo.rotateX(-Math.PI / 2);
+    var sharedAoMat = session.trackMat(new THREE.MeshBasicMaterial({
+      map: createPillarAoTexture(THREE, session),
+      transparent: true,
+      opacity: 0.78,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
+    }));
+
+    var hazardBandMat = session.trackMat(new THREE.MeshStandardMaterial({
+      map: session.getTileTex('floor_hazard', '#d6a434', '#161a20'),
+      normalMap: getNormal('floor_hazard') || null,
+      normalScale: new THREE.Vector2(0.80, 0.80),
+      roughness: 0.74,
+      metalness: 0.14
+    }));
 
     if (concreteWalls.length > 0) {
       var cTex = session.getTileTex('wall_concrete', '#2b3240', '#161b24');
@@ -920,7 +1288,7 @@
       session.scene.add(nMesh, nCap, nBase, trimMesh);
     }
 
-    // Reinforced architectural cladding + heavy-ink grounding AO for interior cover pillars
+    // Reinforced architectural cladding + heavy-ink grounding AO for interior structural pillars
     if (pillars.length > 0) {
       var pilTex = session.getTileTex('wall_concrete', '#2e3848', '#151b24');
       var pilMat = session.trackMat(new THREE.MeshStandardMaterial({
@@ -935,39 +1303,21 @@
       var plinthMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x161c26, roughness: 0.72, metalness: 0.34 }));
       var inkCollarGeo = session.trackGeo(new THREE.BoxGeometry(1.16, 0.07, 1.16));
       var bandGeo = session.trackGeo(new THREE.BoxGeometry(1.06, 0.22, 1.06));
-      var bandMat = session.trackMat(new THREE.MeshStandardMaterial({
-        map: session.getTileTex('floor_hazard', '#d6a434', '#161a20'),
-        normalMap: getNormal('floor_hazard') || null,
-        normalScale: new THREE.Vector2(0.80, 0.80),
-        roughness: 0.74,
-        metalness: 0.14
-      }));
       var lightRingGeo = session.trackGeo(new THREE.BoxGeometry(1.07, 0.06, 1.07));
       var lightRingMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0x58dcf8 }));
-      var aoGeo = session.trackGeo(new THREE.PlaneGeometry(1.85, 1.85));
-      aoGeo.rotateX(-Math.PI / 2);
-      var aoMat = session.trackMat(new THREE.MeshBasicMaterial({
-        map: createPillarAoTexture(THREE, session),
-        transparent: true,
-        opacity: 0.78,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -1
-      }));
 
       var pMesh = new THREE.InstancedMesh(wallGeo, pilMat, pillars.length);
       var pPlinth = new THREE.InstancedMesh(plinthGeo, plinthMat, pillars.length);
       var pInkCollar = new THREE.InstancedMesh(inkCollarGeo, baseTrimMat, pillars.length);
-      var pBand = new THREE.InstancedMesh(bandGeo, bandMat, pillars.length);
+      var pBand = new THREE.InstancedMesh(bandGeo, hazardBandMat, pillars.length);
       var pRing = new THREE.InstancedMesh(lightRingGeo, lightRingMat, pillars.length);
       var pCap = new THREE.InstancedMesh(capGeo, capMat, pillars.length);
-      var pAo = new THREE.InstancedMesh(aoGeo, aoMat, pillars.length);
+      var pAo = new THREE.InstancedMesh(sharedAoGeo, sharedAoMat, pillars.length);
 
       for (var pli = 0; pli < pillars.length; pli++) {
         var pw = pillars[pli];
         var ph = pw.h || 2.6;
-        var pFloorY = (pw.gx >= 42) ? PLATFORM_Y : FLOOR_Y;
+        var pFloorY = (pw.gx >= PLATFORM_START_X) ? PLATFORM_Y : FLOOR_Y;
         dummy.rotation.set(0, 0, 0);
 
         dummy.position.set(pw.gx + 0.5, ph * 0.5, pw.gz + 0.5);
@@ -1010,12 +1360,63 @@
       session.scene.add(pMesh, pPlinth, pInkCollar, pBand, pRing, pCap, pAo);
     }
 
-    // --- 1D. ZONE-SPECIFIC 3D ARCHITECTURAL STORYTELLING PROPS ---
+    // Waist-High Style-1 Reinforced Tactical Cover Barricades (h=1.25m, 4 InstancedMesh draw calls!)
+    if (lowCovers.length > 0) {
+      var covBodyGeo = session.trackGeo(new THREE.BoxGeometry(0.96, 1.06, 0.88));
+      var covBodyMat = session.trackMat(new THREE.MeshStandardMaterial({
+        map: session.getTileTex('wall_concrete', '#303b4d', '#151b24'),
+        normalMap: getNormal('wall_concrete') || null,
+        normalScale: new THREE.Vector2(0.75, 0.75),
+        roughness: 0.78,
+        metalness: 0.24
+      }));
+      var covStripeGeo = session.trackGeo(new THREE.BoxGeometry(1.01, 0.20, 0.93));
+      var covRailGeo = session.trackGeo(new THREE.BoxGeometry(1.04, 0.18, 0.96));
+      var covRailMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x10151e, roughness: 0.55, metalness: 0.52 }));
+
+      var covBodyInst = new THREE.InstancedMesh(covBodyGeo, covBodyMat, lowCovers.length);
+      var covStripeInst = new THREE.InstancedMesh(covStripeGeo, hazardBandMat, lowCovers.length);
+      var covRailInst = new THREE.InstancedMesh(covRailGeo, covRailMat, lowCovers.length);
+      var covAoInst = new THREE.InstancedMesh(sharedAoGeo, sharedAoMat, lowCovers.length);
+
+      for (var lci = 0; lci < lowCovers.length; lci++) {
+        var lc = lowCovers[lci];
+        var lcFloorY = (lc.gx >= PLATFORM_START_X) ? PLATFORM_Y : FLOOR_Y;
+        var lch = lc.h || 1.25;
+        dummy.rotation.set(0, 0, 0);
+
+        dummy.position.set(lc.gx + 0.5, lcFloorY + lch * 0.44, lc.gz + 0.5);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        covBodyInst.setMatrixAt(lci, dummy.matrix);
+
+        dummy.position.set(lc.gx + 0.5, lcFloorY + 0.78, lc.gz + 0.5);
+        dummy.updateMatrix();
+        covStripeInst.setMatrixAt(lci, dummy.matrix);
+
+        dummy.position.set(lc.gx + 0.5, lcFloorY + lch - 0.08, lc.gz + 0.5);
+        dummy.updateMatrix();
+        covRailInst.setMatrixAt(lci, dummy.matrix);
+
+        dummy.position.set(lc.gx + 0.5, lcFloorY + 0.015, lc.gz + 0.5);
+        dummy.scale.set(0.92, 1, 0.92);
+        dummy.updateMatrix();
+        covAoInst.setMatrixAt(lci, dummy.matrix);
+      }
+      covBodyInst.instanceMatrix.needsUpdate = true;
+      covStripeInst.instanceMatrix.needsUpdate = true;
+      covRailInst.instanceMatrix.needsUpdate = true;
+      covAoInst.instanceMatrix.needsUpdate = true;
+      session.scene.add(covBodyInst, covStripeInst, covRailInst, covAoInst);
+    }
+
+    // --- 1D. ZONE-SPECIFIC 3D ARCHITECTURAL STORYTELLING PROPS (INSTANCED FOR 224x152) ---
     buildZoneProps(session, propSpecs);
   }
 
   function buildZoneProps(session, specs) {
     var THREE = session.THREE;
+    var dummy = session._dummy || new THREE.Object3D();
     var steelMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x344052, roughness: 0.62, metalness: 0.44 }));
     var darkMetalMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x161c26, roughness: 0.68, metalness: 0.36 }));
     var woodSlatMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x45372e, roughness: 0.86, metalness: 0.06 }));
@@ -1025,61 +1426,83 @@
     var redLedMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0xff3b52 }));
     var greenLedMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0x4af2a1 }));
 
-    // 1. B1 Concourse Stainless-Steel Subway Ticket Turnstiles (检票闸机)
-    var tsBodyGeo = session.trackGeo(new THREE.BoxGeometry(0.28, 0.96, 1.12));
-    var tsTopGeo = session.trackGeo(new THREE.BoxGeometry(0.32, 0.08, 1.16));
-    var tsGlassGeo = session.trackGeo(new THREE.BoxGeometry(0.46, 0.48, 0.05));
-    var tsGlassMat = session.trackMat(new THREE.MeshBasicMaterial({
-      color: 0xff4058,
-      transparent: true,
-      opacity: 0.36,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    }));
-    var tsLedGeo = session.trackGeo(new THREE.BoxGeometry(0.18, 0.10, 0.04));
-
-    for (var ti = 0; ti < specs.turnstiles.length; ti++) {
-      var ts = specs.turnstiles[ti];
-      var g = new THREE.Group();
-      g.position.set(ts.x, 0, ts.z);
-      g.rotation.y = ts.rotY || 0;
-      var body = new THREE.Mesh(tsBodyGeo, steelMat);
-      body.position.y = 0.48;
-      addInkOutline(THREE, session, body, 24);
-      var top = new THREE.Mesh(tsTopGeo, darkMetalMat);
-      top.position.y = 0.98;
-      addInkOutline(THREE, session, top, 24);
-      var led = new THREE.Mesh(tsLedGeo, ti % 2 === 0 ? cyanLedMat : redLedMat);
-      led.position.set(0, 0.82, 0.57);
-      var flap = new THREE.Mesh(tsGlassGeo, tsGlassMat);
-      flap.position.set(0.35, 0.56, 0.0);
-      g.add(body, top, led, flap);
-      session.scene.add(g);
+    // Helper to position an instanced child offset in local (lx, ly, lz) rotated around Y
+    function setLocalInstance(inst, idx, wx, wy, wz, rotY, lx, ly, lz) {
+      var cosR = Math.cos(rotY || 0);
+      var sinR = Math.sin(rotY || 0);
+      dummy.position.set(
+        wx + lx * cosR + lz * sinR,
+        wy + ly,
+        wz - lx * sinR + lz * cosR
+      );
+      dummy.rotation.set(0, rotY || 0, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      inst.setMatrixAt(idx, dummy.matrix);
     }
 
-    // 2. Subway Waiting Benches (tucked flush along walls)
-    var benchSeatGeo = session.trackGeo(new THREE.BoxGeometry(2.1, 0.09, 0.56));
-    var benchBackGeo = session.trackGeo(new THREE.BoxGeometry(2.1, 0.44, 0.07));
-    var benchLegGeo = session.trackGeo(new THREE.BoxGeometry(0.10, 0.44, 0.50));
-    for (var bi = 0; bi < specs.benches.length; bi++) {
-      var bn = specs.benches[bi];
-      var bg = new THREE.Group();
-      bg.position.set(bn.x, 0, bn.z);
-      bg.rotation.y = bn.rotY || 0;
-      var seat = new THREE.Mesh(benchSeatGeo, woodSlatMat);
-      seat.position.y = 0.46;
-      addInkOutline(THREE, session, seat, 24);
-      var back = new THREE.Mesh(benchBackGeo, steelMat);
-      back.position.set(0, 0.72, -0.24);
-      addInkOutline(THREE, session, back, 24);
-      var legL = new THREE.Mesh(benchLegGeo, darkMetalMat);
-      legL.position.set(-0.82, 0.22, 0);
-      addInkOutline(THREE, session, legL, 24);
-      var legR = new THREE.Mesh(benchLegGeo, darkMetalMat);
-      legR.position.set(0.82, 0.22, 0);
-      addInkOutline(THREE, session, legR, 24);
-      bg.add(seat, back, legL, legR);
-      session.scene.add(bg);
+    // 1. B1 Concourse Stainless-Steel Subway Ticket Turnstiles (Instanced Batch)
+    var turnstiles = specs.turnstiles || [];
+    if (turnstiles.length > 0) {
+      var tsBodyGeo = session.trackGeo(new THREE.BoxGeometry(0.28, 0.96, 1.12));
+      var tsTopGeo = session.trackGeo(new THREE.BoxGeometry(0.32, 0.08, 1.16));
+      var tsGlassGeo = session.trackGeo(new THREE.BoxGeometry(0.46, 0.48, 0.05));
+      var tsGlassMat = session.trackMat(new THREE.MeshBasicMaterial({
+        color: 0xff4058,
+        transparent: true,
+        opacity: 0.36,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      }));
+      var tsLedGeo = session.trackGeo(new THREE.BoxGeometry(0.18, 0.10, 0.04));
+
+      var tsBodyInst = new THREE.InstancedMesh(tsBodyGeo, steelMat, turnstiles.length);
+      var tsTopInst = new THREE.InstancedMesh(tsTopGeo, darkMetalMat, turnstiles.length);
+      var tsGlassInst = new THREE.InstancedMesh(tsGlassGeo, tsGlassMat, turnstiles.length);
+      var tsLedInst = new THREE.InstancedMesh(tsLedGeo, cyanLedMat, turnstiles.length);
+      var ledCol = new THREE.Color();
+
+      for (var ti = 0; ti < turnstiles.length; ti++) {
+        var ts = turnstiles[ti];
+        setLocalInstance(tsBodyInst, ti, ts.x, 0, ts.z, ts.rotY, 0, 0.48, 0);
+        setLocalInstance(tsTopInst, ti, ts.x, 0, ts.z, ts.rotY, 0, 0.98, 0);
+        setLocalInstance(tsGlassInst, ti, ts.x, 0, ts.z, ts.rotY, 0.35, 0.56, 0);
+        setLocalInstance(tsLedInst, ti, ts.x, 0, ts.z, ts.rotY, 0, 0.82, 0.57);
+        if (typeof tsLedInst.setColorAt === 'function') {
+          ledCol.setHex(ti % 2 === 0 ? 0x5aeaff : 0xff3b52);
+          tsLedInst.setColorAt(ti, ledCol);
+        }
+      }
+      tsBodyInst.instanceMatrix.needsUpdate = true;
+      tsTopInst.instanceMatrix.needsUpdate = true;
+      tsGlassInst.instanceMatrix.needsUpdate = true;
+      tsLedInst.instanceMatrix.needsUpdate = true;
+      if (tsLedInst.instanceColor) tsLedInst.instanceColor.needsUpdate = true;
+      session.scene.add(tsBodyInst, tsTopInst, tsGlassInst, tsLedInst);
+    }
+
+    // 2. Subway Waiting Benches (Instanced Batch across all 224x152 zones)
+    var benches = specs.benches || [];
+    if (benches.length > 0) {
+      var benchSeatGeo = session.trackGeo(new THREE.BoxGeometry(2.1, 0.09, 0.56));
+      var benchBackGeo = session.trackGeo(new THREE.BoxGeometry(2.1, 0.44, 0.07));
+      var benchLegGeo = session.trackGeo(new THREE.BoxGeometry(0.10, 0.44, 0.50));
+
+      var bSeatInst = new THREE.InstancedMesh(benchSeatGeo, woodSlatMat, benches.length);
+      var bBackInst = new THREE.InstancedMesh(benchBackGeo, steelMat, benches.length);
+      var bLegInst = new THREE.InstancedMesh(benchLegGeo, darkMetalMat, benches.length * 2);
+
+      for (var bi = 0; bi < benches.length; bi++) {
+        var bn = benches[bi];
+        setLocalInstance(bSeatInst, bi, bn.x, 0, bn.z, bn.rotY, 0, 0.46, 0);
+        setLocalInstance(bBackInst, bi, bn.x, 0, bn.z, bn.rotY, 0, 0.72, -0.24);
+        setLocalInstance(bLegInst, bi * 2, bn.x, 0, bn.z, bn.rotY, -0.82, 0.22, 0);
+        setLocalInstance(bLegInst, bi * 2 + 1, bn.x, 0, bn.z, bn.rotY, 0.82, 0.22, 0);
+      }
+      bSeatInst.instanceMatrix.needsUpdate = true;
+      bBackInst.instanceMatrix.needsUpdate = true;
+      bLegInst.instanceMatrix.needsUpdate = true;
+      session.scene.add(bSeatInst, bBackInst, bLegInst);
     }
 
     // 3. Illuminated Subway Route Map Kiosk & Overhead Directional Transit Signage
@@ -1118,7 +1541,7 @@
       session.scene.add(sg);
     }
 
-    // 4. Signal Dispatch CRT Monitor Bank & Server Racks
+    // 4. Signal Dispatch CRT Monitor Banks & Instanced Server Racks
     var crtTex = createCrtBankTexture(THREE, session);
     var crtMat = session.trackMat(new THREE.MeshBasicMaterial({ map: crtTex }));
     for (var ci = 0; ci < specs.crtBanks.length; ci++) {
@@ -1133,30 +1556,35 @@
       session.scene.add(cg);
     }
 
-    var rackGeo = session.trackGeo(new THREE.BoxGeometry(0.86, 2.35, 0.72));
-    var ledStripGeo = session.trackGeo(new THREE.BoxGeometry(0.54, 0.06, 0.04));
-    for (var sr = 0; sr < specs.serverRacks.length; sr++) {
-      var rk = specs.serverRacks[sr];
-      var rg = new THREE.Group();
-      rg.position.set(rk.x, 0, rk.z);
-      rg.rotation.y = rk.rotY || 0;
-      var box = new THREE.Mesh(rackGeo, darkMetalMat);
-      box.position.y = 1.18;
-      addInkOutline(THREE, session, box, 24);
-      rg.add(box);
-      for (var ly = 0; ly < 4; ly++) {
-        var lm = new THREE.Mesh(ledStripGeo, ly === 1 ? amberLedMat : (ly === 3 ? cyanLedMat : greenLedMat));
-        lm.position.set(0, 0.65 + ly * 0.42, 0.37);
-        rg.add(lm);
+    var serverRacks = specs.serverRacks || [];
+    if (serverRacks.length > 0) {
+      var rackGeo = session.trackGeo(new THREE.BoxGeometry(0.86, 2.35, 0.72));
+      var ledStripGeo = session.trackGeo(new THREE.BoxGeometry(0.54, 0.06, 0.04));
+      var rackInst = new THREE.InstancedMesh(rackGeo, darkMetalMat, serverRacks.length);
+      var ledAmberInst = new THREE.InstancedMesh(ledStripGeo, amberLedMat, serverRacks.length);
+      var ledCyanInst = new THREE.InstancedMesh(ledStripGeo, cyanLedMat, serverRacks.length);
+      var ledGreenInst = new THREE.InstancedMesh(ledStripGeo, greenLedMat, serverRacks.length * 2);
+
+      for (var sr = 0; sr < serverRacks.length; sr++) {
+        var rk = serverRacks[sr];
+        setLocalInstance(rackInst, sr, rk.x, 0, rk.z, rk.rotY, 0, 1.18, 0);
+        setLocalInstance(ledGreenInst, sr * 2, rk.x, 0, rk.z, rk.rotY, 0, 0.65, 0.37);
+        setLocalInstance(ledAmberInst, sr, rk.x, 0, rk.z, rk.rotY, 0, 1.07, 0.37);
+        setLocalInstance(ledGreenInst, sr * 2 + 1, rk.x, 0, rk.z, rk.rotY, 0, 1.49, 0.37);
+        setLocalInstance(ledCyanInst, sr, rk.x, 0, rk.z, rk.rotY, 0, 1.91, 0.37);
       }
-      session.scene.add(rg);
+      rackInst.instanceMatrix.needsUpdate = true;
+      ledAmberInst.instanceMatrix.needsUpdate = true;
+      ledCyanInst.instanceMatrix.needsUpdate = true;
+      ledGreenInst.instanceMatrix.needsUpdate = true;
+      session.scene.add(rackInst, ledAmberInst, ledCyanInst, ledGreenInst);
     }
 
-    // 5. Substation High-Voltage Copper-Coil Transformers (mounted on top of transformer blocks)
-    var coilGeo = session.trackGeo(new THREE.CylinderGeometry(0.32, 0.36, 0.95, 12));
-    var insGeo = session.trackGeo(new THREE.TorusGeometry(0.36, 0.055, 6, 14));
+    // 5. Substation High-Voltage Copper-Coil Transformers (mounted on top of 6 transformer blocks)
+    var coilGeo = session.trackGeo(new THREE.CylinderGeometry(0.32, 0.36, 0.95, 10));
+    var insGeo = session.trackGeo(new THREE.TorusGeometry(0.36, 0.055, 6, 12));
     insGeo.rotateX(Math.PI / 2);
-    var capOrbGeo = session.trackGeo(new THREE.SphereGeometry(0.16, 10, 10));
+    var capOrbGeo = session.trackGeo(new THREE.SphereGeometry(0.16, 8, 8));
     var ozoneMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0x6ce4ff }));
 
     for (var tfi = 0; tfi < specs.transformers.length; tfi++) {
@@ -1179,52 +1607,90 @@
       session.scene.add(tg);
     }
 
-    // Overhead high-voltage steel busbar linking Substation transformers
-    var busbar = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.05, 0.05, 11.2, 8)), copperMat);
-    busbar.rotation.z = Math.PI / 2;
-    busbar.position.set(11.5, 3.68, 25.5);
-    session.scene.add(busbar);
+    // Overhead high-voltage copper busbars spanning Substation's 6 transformers (3x2 turbine hall)
+    var busbarGeo = session.trackGeo(new THREE.CylinderGeometry(0.06, 0.06, 44.0, 8));
+    var busbarN = new THREE.Mesh(busbarGeo, copperMat);
+    busbarN.rotation.z = Math.PI / 2;
+    busbarN.position.set(41.0, 3.68, 95.0);
+    var busbarS = new THREE.Mesh(busbarGeo, copperMat);
+    busbarS.rotation.z = Math.PI / 2;
+    busbarS.position.set(41.0, 3.68, 125.0);
+    session.scene.add(busbarN, busbarS);
 
-    // 6. Tunnel Industrial Pipes & Tucked Maintenance Crates
-    var pipeGeo = session.trackGeo(new THREE.CylinderGeometry(0.09, 0.09, 17.5, 8));
+    // 6. Tunnel Industrial Pipes (mounted along Z-05 Tunnel south wall z=144.7) & Instanced Maintenance Crates
+    var pipeGeo = session.trackGeo(new THREE.CylinderGeometry(0.11, 0.11, 72.0, 8));
     pipeGeo.rotateZ(Math.PI / 2);
     var pipe1 = new THREE.Mesh(pipeGeo, steelMat);
-    pipe1.position.set(31.0, 2.35, 35.85);
+    pipe1.position.set(122.0, 2.38, 144.7);
     var pipe2 = new THREE.Mesh(pipeGeo, copperMat);
-    pipe2.position.set(31.0, 2.02, 35.85);
+    pipe2.position.set(122.0, 2.02, 144.7);
     session.scene.add(pipe1, pipe2);
 
-    var crateGeo = session.trackGeo(new THREE.BoxGeometry(0.76, 0.64, 0.76));
-    var crateMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x303744, roughness: 0.84, metalness: 0.22 }));
-    var crateTrimGeo = session.trackGeo(new THREE.BoxGeometry(0.79, 0.10, 0.79));
-    for (var cri = 0; cri < specs.cratesAndBarricades.length; cri++) {
-      var cr = specs.cratesAndBarricades[cri];
-      var cg2 = new THREE.Group();
-      cg2.position.set(cr.x, 0, cr.z);
-      cg2.rotation.y = cr.rotY || 0;
-      var cb2 = new THREE.Mesh(crateGeo, crateMat);
-      cb2.position.y = 0.32;
-      addInkOutline(THREE, session, cb2, 24);
-      var ct2 = new THREE.Mesh(crateTrimGeo, amberLedMat);
-      ct2.position.y = 0.54;
-      cg2.add(cb2, ct2);
-      session.scene.add(cg2);
+    var crates = specs.cratesAndBarricades || [];
+    if (crates.length > 0) {
+      var crateGeo = session.trackGeo(new THREE.BoxGeometry(0.78, 0.66, 0.78));
+      var crateMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x303744, roughness: 0.84, metalness: 0.22 }));
+      var crateTrimGeo = session.trackGeo(new THREE.BoxGeometry(0.81, 0.10, 0.81));
+
+      var crateInst = new THREE.InstancedMesh(crateGeo, crateMat, crates.length);
+      var crateTrimInst = new THREE.InstancedMesh(crateTrimGeo, amberLedMat, crates.length);
+      for (var cri = 0; cri < crates.length; cri++) {
+        var cr = crates[cri];
+        setLocalInstance(crateInst, cri, cr.x, 0, cr.z, cr.rotY, 0, 0.33, 0);
+        setLocalInstance(crateTrimInst, cri, cr.x, 0, cr.z, cr.rotY, 0, 0.56, 0);
+      }
+      crateInst.instanceMatrix.needsUpdate = true;
+      crateTrimInst.instanceMatrix.needsUpdate = true;
+      session.scene.add(crateInst, crateTrimInst);
     }
 
-    // 7. Floor Directional Guiding Strips (Concourse -> Corridor & Corridor -> Platform 0)
+    // 6B. Instanced Safety Bollards & Metro Stanchions (framing colonnades & Platform 0 boarding bays)
+    var bollards = specs.bollards || [];
+    if (bollards.length > 0) {
+      var bolPostGeo = session.trackGeo(new THREE.CylinderGeometry(0.11, 0.13, 0.88, 8));
+      var bolBandGeo = session.trackGeo(new THREE.CylinderGeometry(0.125, 0.125, 0.16, 8));
+      var bolCapGeo = session.trackGeo(new THREE.SphereGeometry(0.115, 8, 6));
+
+      var bolPostInst = new THREE.InstancedMesh(bolPostGeo, darkMetalMat, bollards.length);
+      var bolBandInst = new THREE.InstancedMesh(bolBandGeo, amberLedMat, bollards.length);
+      var bolCapInst = new THREE.InstancedMesh(bolCapGeo, steelMat, bollards.length);
+
+      for (var bli = 0; bli < bollards.length; bli++) {
+        var bl = bollards[bli];
+        setLocalInstance(bolPostInst, bli, bl.x, 0, bl.z, 0, 0, 0.44, 0);
+        setLocalInstance(bolBandInst, bli, bl.x, 0, bl.z, 0, 0, 0.66, 0);
+        setLocalInstance(bolCapInst, bli, bl.x, 0, bl.z, 0, 0, 0.90, 0);
+      }
+      bolPostInst.instanceMatrix.needsUpdate = true;
+      bolBandInst.instanceMatrix.needsUpdate = true;
+      bolCapInst.instanceMatrix.needsUpdate = true;
+      session.scene.add(bolPostInst, bolBandInst, bolCapInst);
+    }
+
+    // 7. Floor Directional Guiding Strips (aligned to 224x152 Station Zero grand concourse/corridor/platform lanes)
     var stripMat = session.trackMat(new THREE.MeshBasicMaterial({
       color: 0x4ccce6,
       transparent: true,
       opacity: 0.16,
       depthWrite: false
     }));
-    var strip1 = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(11.5, 0.14)), stripMat);
+    // Concourse eastbound promenade into Corridor gateway (z=60.5)
+    var strip1 = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(46.0, 0.18)), stripMat);
     strip1.rotation.x = -Math.PI / 2;
-    strip1.position.set(16.2, 0.022, 15.8);
-    var strip2 = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(16.5, 0.14)), stripMat);
+    strip1.position.set(60.5, 0.022, 60.5);
+    // Corridor central grand boulevard into Platform 0 (z=74.5)
+    var strip2 = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(86.0, 0.18)), stripMat);
     strip2.rotation.x = -Math.PI / 2;
-    strip2.position.set(33.2, 0.022, 18.5);
-    session.scene.add(strip1, strip2);
+    strip2.position.set(132.0, 0.022, 74.5);
+    // Concourse north-south promenade linking Clock Totem -> Spawn -> Substation gateway (x=41.5)
+    var strip3 = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(0.18, 44.0)), stripMat);
+    strip3.rotation.x = -Math.PI / 2;
+    strip3.position.set(41.5, 0.022, 51.5);
+    // Platform 0 north-south boarding spine (x=186.5)
+    var strip4 = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(0.18, 124.0)), stripMat);
+    strip4.rotation.x = -Math.PI / 2;
+    strip4.position.set(186.5, 0.062, 75.0);
+    session.scene.add(strip1, strip2, strip3, strip4);
 
     // 8. 6 Zone-Signature 3D Landmarks (distinct ink-outlined silhouettes for instant zone orientation)
     var landmarks = specs.landmarks || [];
@@ -1301,10 +1767,10 @@
         var core = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.18, 0.24, 2.35, 8)), copperMat);
         core.position.y = 1.24;
         addInkOutline(THREE, session, core, 26);
-        for (var ci = 0; ci < 3; ci++) {
-          var coilRing = new THREE.Mesh(session.trackGeo(new THREE.TorusGeometry(0.44 - ci * 0.05, 0.055, 8, 20)), steelMat);
+        for (var tci = 0; tci < 3; tci++) {
+          var coilRing = new THREE.Mesh(session.trackGeo(new THREE.TorusGeometry(0.44 - tci * 0.05, 0.055, 8, 20)), steelMat);
           coilRing.rotation.x = Math.PI / 2;
-          coilRing.position.y = 1.15 + ci * 0.45;
+          coilRing.position.y = 1.15 + tci * 0.45;
           g.add(coilRing);
         }
         var crown = new THREE.Mesh(session.trackGeo(new THREE.TorusGeometry(0.36, 0.08, 8, 20)), lmGlowMat);
@@ -1334,16 +1800,16 @@
         var pole = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.10, 0.14, 2.75, 8)), steelMat);
         pole.position.y = 1.42;
         addInkOutline(THREE, session, pole, 26);
-        var box = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.36, 0.96, 0.28)), darkSteel);
-        box.position.set(0, 2.35, 0.06);
-        addInkOutline(THREE, session, box, 24);
+        var sbox = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.36, 0.96, 0.28)), darkSteel);
+        sbox.position.set(0, 2.35, 0.06);
+        addInkOutline(THREE, session, sbox, 24);
         var lampTop = new THREE.Mesh(session.trackGeo(new THREE.SphereGeometry(0.10, 10, 10)), lmGlowMat);
         lampTop.position.set(0, 2.62, 0.20);
         var lampMid = new THREE.Mesh(session.trackGeo(new THREE.SphereGeometry(0.10, 10, 10)), lmGlowMat);
         lampMid.position.set(0, 2.35, 0.20);
         var arm = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.82, 0.09, 0.09)), lmGlowMat);
         arm.position.set(0.35, 1.78, 0);
-        g.add(pole, box, lampTop, lampMid, arm);
+        g.add(pole, sbox, lampTop, lampMid, arm);
       }
       session.scene.add(g);
     }
@@ -1351,7 +1817,6 @@
 
   /* --------------------------------------------------------------------------
    * 2. Hanging Industrial Fluorescent Light Fixtures + Volumetric Light Cones
-   * (Replaces the bare floating blue 0.45x0.12x0.45 squares!)
    * -------------------------------------------------------------------------- */
   function buildLightFixtures(session, lightDefs) {
     var THREE = session.THREE;
@@ -1361,55 +1826,72 @@
     var dummy = session._dummy;
     var col = new THREE.Color();
 
-    // 1. Dark steel reflector housing + ceiling suspension bar
     var housingGeo = session.trackGeo(new THREE.BoxGeometry(1.48, 0.14, 0.34));
     var housingMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x1a222e, roughness: 0.42, metalness: 0.72 }));
     var housingMesh = new THREE.InstancedMesh(housingGeo, housingMat, count);
 
-    // 2. Glowing fluorescent tube bar nestled under the shroud
     var tubeGeo = session.trackGeo(new THREE.BoxGeometry(1.32, 0.07, 0.16));
     var tubeMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0xdff6ff }));
     var tubeMesh = new THREE.InstancedMesh(tubeGeo, tubeMat, count);
 
-    // 3. Soft translucent volumetric downward light cone (subtle pools of atmosphere!)
-    // Additive blending happens in the linear PostFX target, where low alpha is lifted
-    // strongly by the final sRGB encode; keep opacity low to stay a faint haze.
-    var coneGeo = session.trackGeo(new THREE.ConeGeometry(2.35, 3.1, 16, 1, true));
+    var coneGradTex = null;
+    if (typeof document !== 'undefined') {
+      var cc = document.createElement('canvas');
+      cc.width = 4;
+      cc.height = 64;
+      var cctx = cc.getContext('2d');
+      cctx.fillStyle = '#000000';
+      cctx.fillRect(0, 0, 4, 64);
+      var cgrad = cctx.createLinearGradient(0, 0, 0, 64);
+      cgrad.addColorStop(0.0, '#000000');
+      cgrad.addColorStop(0.12, '#c8c8c8');
+      cgrad.addColorStop(0.42, '#444444');
+      cgrad.addColorStop(0.75, '#0e0e0e');
+      cgrad.addColorStop(1.0, '#000000');
+      cctx.fillStyle = cgrad;
+      cctx.fillRect(0, 0, 4, 64);
+      coneGradTex = session.trackTex(new THREE.CanvasTexture(cc));
+      coneGradTex.needsUpdate = true;
+    }
+
+    var coneGeo = session.trackGeo(new THREE.ConeGeometry(1.72, 2.15, 16, 1, true));
     var coneMat = session.trackMat(new THREE.MeshBasicMaterial({
       color: 0xffffff,
+      map: coneGradTex,
+      alphaMap: coneGradTex,
       transparent: true,
-      opacity: 0.016,
+      opacity: coneGradTex ? 0.014 : 0.004,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending
     }));
     var coneMesh = new THREE.InstancedMesh(coneGeo, coneMat, count);
 
-    // 4. Overhead steel cross-beam supporting each light fixture
-    var beamGeo = session.trackGeo(new THREE.BoxGeometry(3.8, 0.12, 0.14));
+    var beamGeo = session.trackGeo(new THREE.BoxGeometry(1.78, 0.08, 0.10));
     var beamMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x141a24, roughness: 0.6, metalness: 0.55 }));
     var beamMesh = new THREE.InstancedMesh(beamGeo, beamMat, count);
+    var platformStartX = (session.mapApi && session.mapApi.PLATFORM_START_X) ? session.mapApi.PLATFORM_START_X : 168;
 
     for (var i = 0; i < count; i++) {
       var ld = lightDefs[i];
-      var rotY = (ld.x > 40) ? Math.PI * 0.5 : 0;
+      var rotY = (ld.x >= platformStartX - 2) ? Math.PI * 0.5 : 0;
       dummy.rotation.set(0, rotY, 0);
       dummy.scale.set(1, 1, 1);
 
-      dummy.position.set(ld.x, 3.36, ld.z);
+      dummy.position.set(ld.x, 3.82, ld.z);
       dummy.updateMatrix();
       beamMesh.setMatrixAt(i, dummy.matrix);
 
-      dummy.position.set(ld.x, 3.24, ld.z);
+      dummy.position.set(ld.x, 3.74, ld.z);
       dummy.updateMatrix();
       housingMesh.setMatrixAt(i, dummy.matrix);
 
-      dummy.position.set(ld.x, 3.16, ld.z);
+      dummy.position.set(ld.x, 3.67, ld.z);
       dummy.updateMatrix();
       tubeMesh.setMatrixAt(i, dummy.matrix);
 
       dummy.rotation.set(0, 0, 0);
-      dummy.position.set(ld.x, 1.62, ld.z);
+      dummy.position.set(ld.x, 2.58, ld.z);
       dummy.updateMatrix();
       coneMesh.setMatrixAt(i, dummy.matrix);
 
@@ -1427,8 +1909,6 @@
 
     session.scene.add(beamMesh, housingMesh, tubeMesh, coneMesh);
 
-    // Per-fixture bulb control: each fixture owns its instance color, so flicker and
-    // EMP blackout can be applied locally instead of through one shared material.
     var baseHex = [];
     for (var bi = 0; bi < count; bi++) {
       baseHex.push(hexToInt(lightDefs[bi].color, 0xdff6ff));
@@ -1454,13 +1934,13 @@
   }
 
   /* --------------------------------------------------------------------------
-   * 3. Upgraded 4-Car Articulated Ghost Train No.0
+   * 3. Upgraded 10-Car Articulated Ghost Train No.0 (Scaled for 139m Platform 0)
    * -------------------------------------------------------------------------- */
   function buildGhostTrain(session, opts) {
     var THREE = session.THREE;
     var cfg = opts || {};
     var RAIL_Y = cfg.RAIL_Y || -0.58;
-    var TRAIN_X = cfg.TRAIN_X || 51.5;
+    var TRAIN_X = cfg.TRAIN_X || (session.mapApi && session.mapApi.TRAIN_X) || 213.5;
 
     var group = new THREE.Group();
     var spritesApi = INFINITY.PixelSprites || null;
@@ -1493,7 +1973,8 @@
     var lampGeo = session.trackGeo(new THREE.CylinderGeometry(0.18, 0.20, 0.16, 12));
     lampGeo.rotateX(Math.PI / 2);
 
-    for (var i = 0; i < 4; i++) {
+    var carCount = 10;
+    for (var i = 0; i < carCount; i++) {
       var cz = -i * 6.75;
       var car = new THREE.Mesh(carGeo, hullMat);
       car.position.set(0, 1.42, cz);
@@ -1507,27 +1988,20 @@
 
       var acUnit = new THREE.Mesh(acGeo, darkSteelMat);
       acUnit.position.set(0, 2.98, cz);
-      addInkOutline(THREE, session, acUnit, 24);
       group.add(acUnit);
 
-      // Undercarriage bogie trucks
       var bogieF = new THREE.Mesh(bogieGeo, darkSteelMat);
       bogieF.position.set(0, 0.18, cz + 2.0);
-      addInkOutline(THREE, session, bogieF, 24);
       var bogieB = new THREE.Mesh(bogieGeo, darkSteelMat);
       bogieB.position.set(0, 0.18, cz - 2.0);
-      addInkOutline(THREE, session, bogieB, 24);
       group.add(bogieF, bogieB);
 
-      // Flexible bellows coupling between cars
       if (i > 0) {
         var coupler = new THREE.Mesh(couplerGeo, darkSteelMat);
         coupler.position.set(0, 1.32, cz + 3.38);
-        addInkOutline(THREE, session, coupler, 24);
         group.add(coupler);
       }
 
-      // Recessed glowing crimson windows facing Platform 0
       for (var w = -1; w <= 1; w++) {
         var wz = cz + w * 1.82;
         var wFrame = new THREE.Mesh(frameGeo, winFrameMat);
@@ -1539,7 +2013,6 @@
       }
     }
 
-    // Sloped cowcatcher & twin headlights on Lead Locomotive
     var nose = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(2.32, 0.65, 0.55)), darkSteelMat);
     nose.position.set(0, 0.48, 3.22);
     addInkOutline(THREE, session, nose, 24);
@@ -1565,24 +2038,376 @@
     cone.position.set(0, 0.95, 8.4);
     group.add(cone);
 
-    var trainLight = new THREE.PointLight(0xff1c36, 4.2, 22, 1.3);
+    var trainLight = new THREE.PointLight(0xff1c36, 4.4, 24, 1.3);
     trainLight.position.set(-0.5, 1.65, 5.2);
     group.add(trainLight);
 
-    group.position.set(TRAIN_X, RAIL_Y + 0.12, -32);
+    group.position.set(TRAIN_X, RAIL_Y + 0.12, -72);
     group.visible = false;
     session.scene.add(group);
 
     return {
       group: group,
       light: trainLight,
-      z: -32,
+      z: -72,
       speed: 0
     };
   }
 
   /* --------------------------------------------------------------------------
-   * 4. Composite 3D Procedural Interactables (Consoles, Clues, Blast Exit Gate)
+   * 3B. Dynamic Interactive Points Generator (Destructible Cover & Scene Triggers)
+   * Scales across the 4x (224x152) Station Zero map with strict walkability checks.
+   * -------------------------------------------------------------------------- */
+  function findSafeWalkableSpot(mapApi, tx, tz, spawnPos, staticPts, usedPts) {
+    var gridW = (mapApi && mapApi.GRID_W) || 224;
+    var gridH = (mapApi && mapApi.GRID_H) || 152;
+
+    function isClearSpot(cx, cz) {
+      var ix = Math.floor(cx);
+      var iz = Math.floor(cz);
+      if (ix < 3 || ix > gridW - 4 || iz < 3 || iz > gridH - 4) return false;
+      if (mapApi && typeof mapApi.isWalkable === 'function') {
+        if (!mapApi.isWalkable(ix, iz)) return false;
+        // Ensure at least 3 cardinal neighbors are walkable so actor never gets wedged
+        var openNeighbors = 0;
+        if (mapApi.isWalkable(ix + 1, iz)) openNeighbors++;
+        if (mapApi.isWalkable(ix - 1, iz)) openNeighbors++;
+        if (mapApi.isWalkable(ix, iz + 1)) openNeighbors++;
+        if (mapApi.isWalkable(ix, iz - 1)) openNeighbors++;
+        if (openNeighbors < 3) return false;
+      }
+      if (spawnPos) {
+        var sdx = cx - spawnPos.x;
+        var sdz = cz - spawnPos.z;
+        if (sdx * sdx + sdz * sdz < 3.0 * 3.0) return false;
+      }
+      for (var i = 0; i < staticPts.length; i++) {
+        var pdx = cx - staticPts[i].x;
+        var pdz = cz - staticPts[i].z;
+        if (pdx * pdx + pdz * pdz < 2.8 * 2.8) return false;
+      }
+      for (var j = 0; j < usedPts.length; j++) {
+        var udx = cx - usedPts[j].x;
+        var udz = cz - usedPts[j].z;
+        if (udx * udx + udz * udz < 3.2 * 3.2) return false;
+      }
+      return true;
+    }
+
+    var baseX = Math.floor(tx) + 0.5;
+    var baseZ = Math.floor(tz) + 0.5;
+    if (isClearSpot(baseX, baseZ)) return { x: baseX, z: baseZ };
+
+    for (var rad = 1; rad <= 6; rad++) {
+      for (var dz = -rad; dz <= rad; dz++) {
+        for (var dx = -rad; dx <= rad; dx++) {
+          if (Math.abs(dx) !== rad && Math.abs(dz) !== rad) continue;
+          var cx = baseX + dx;
+          var cz = baseZ + dz;
+          if (isClearSpot(cx, cz)) return { x: cx, z: cz };
+        }
+      }
+    }
+    return null;
+  }
+
+  function generateDynamicInteractables(mapApi) {
+    var api = mapApi || INFINITY.StationMap || null;
+    var gridW = (api && api.GRID_W) || 224;
+    var gridH = (api && api.GRID_H) || 152;
+    var scaleX = gridW / 224;
+    var scaleZ = gridH / 152;
+
+    var spawnPos = (api && typeof api.getZoneCenter === 'function')
+      ? api.getZoneCenter('concourse')
+      : { x: 41.5 * scaleX, z: 37.5 * scaleZ };
+    var staticPts = (api && typeof api.getInteractables === 'function')
+      ? (api.getInteractables() || [])
+      : [];
+
+    var usedPts = [];
+
+    // 12 Destructible Tactical Covers across all 6 expanded zones
+    var coverBlueprints = [
+      {
+        id: 'dcov_concourse_east', zoneId: 'concourse', zoneCode: 'Z-01', kind: 'crate_barricade',
+        x: 46.5, z: 35.5, hp: 60, label: '裂缝补给箱垒',
+        envClue: {
+          id: 'env_clue_cov_concourse_1', tag: '掩体破拆', zoneId: 'concourse', zoneCode: 'Z-01',
+          title: '封存站务应急清单',
+          summary: '箱体夹层掉出一张被炭灰熏黑的检修单：零号站台所有 43.2Hz 广播回路都在检票大厅西侧断路箱串接，切断可降低假播报干扰。',
+          effectText: '掩体已瓦解为可通行碎渣，并回收 +8 能量补给'
+        }
+      },
+      {
+        id: 'dcov_concourse_south', zoneId: 'concourse', zoneCode: 'Z-01', kind: 'cracked_jersey',
+        x: 26.5, z: 58.5, hp: 60, label: '风化防撞石墩',
+        envClue: {
+          id: 'env_clue_cov_concourse_2', tag: '掩体破拆', zoneId: 'concourse', zoneCode: 'Z-01',
+          title: '旧版逃生通道涂鸦',
+          summary: '碎裂混凝土背面刻着前批考生的短剑划痕：「别走中轴直道，从南侧变电间折返可以避开检票员第一轮巡线」。',
+          effectText: '开辟新的侧翼穿行缺口，理智 +4'
+        }
+      },
+      {
+        id: 'dcov_corridor_west', zoneId: 'corridor', zoneCode: 'Z-02', kind: 'crate_barricade',
+        x: 98.5, z: 70.5, hp: 65, label: '倾倒检票杂物堆',
+        envClue: {
+          id: 'env_clue_cov_corridor_1', tag: '掩体破拆', zoneId: 'corridor', zoneCode: 'Z-02',
+          title: '带血的黄线测距尺',
+          summary: '残骸下压着一把折断的工务钢尺，标尺红漆标出 0 号站台警戒线外侧 2 米即是检票员红灯感知阈值。',
+          effectText: '打通换乘长廊西侧掩体火线，能量 +8'
+        }
+      },
+      {
+        id: 'dcov_corridor_east', zoneId: 'corridor', zoneCode: 'Z-02', kind: 'cracked_jersey',
+        x: 146.5, z: 78.5, hp: 65, label: '裂纹隔离护栏',
+        envClue: {
+          id: 'env_clue_cov_corridor_2', tag: '掩体破拆', zoneId: 'corridor', zoneCode: 'Z-02',
+          title: '零号列车制动记录带',
+          summary: '纸带显示零号列车每轮进站仅停靠短暂窗口；若未完成双端轨控改写强行登车，将触发次级惩罚分支。',
+          effectText: '破除长廊东端阻滞路障，理智 +4'
+        }
+      },
+      {
+        id: 'dcov_dispatch_west', zoneId: 'dispatch', zoneCode: 'Z-03', kind: 'crate_barricade',
+        x: 102.5, z: 24.5, hp: 60, label: '旧信号机备件箱',
+        envClue: {
+          id: 'env_clue_cov_dispatch_1', tag: '掩体破拆', zoneId: 'dispatch', zoneCode: 'Z-03',
+          title: '调度员值班便签',
+          summary: '便签写明：「调度室道岔反转只占联锁 50%，必须与旧变电间 B 相逆极闸刀同步合闸，0 号闸门才会彻底解锁。」',
+          effectText: '回收高频继电器备件，能量 +10'
+        }
+      },
+      {
+        id: 'dcov_dispatch_east', zoneId: 'dispatch', zoneCode: 'Z-03', kind: 'cracked_jersey',
+        x: 144.5, z: 32.5, hp: 60, label: '龟裂配电护墩',
+        envClue: {
+          id: 'env_clue_cov_dispatch_2', tag: '掩体破拆', zoneId: 'dispatch', zoneCode: 'Z-03',
+          title: '残破加密频道卡片',
+          summary: '卡片印着执棋小队的短波暗语，提示可随时通过加密短波指挥严辞与许檀分头合闸以缩短滞留时间。',
+          effectText: '清空调度室东侧撤离转角，理智 +4'
+        }
+      },
+      {
+        id: 'dcov_substation_north', zoneId: 'substation', zoneCode: 'Z-04', kind: 'crate_barricade',
+        x: 24.5, z: 96.5, hp: 70, label: '绝缘瓷瓶货箱',
+        envClue: {
+          id: 'env_clue_cov_substation_1', tag: '掩体破拆', zoneId: 'substation', zoneCode: 'Z-04',
+          title: '高压电弧干扰笔记',
+          summary: '维修工批注：「EMP 与过载电容释放的瞬间脉冲会直接烧灼检票员胸口对讲机，令其陷入数秒感知僵直。」',
+          effectText: '回收稳压绝缘片，能量 +10'
+        }
+      },
+      {
+        id: 'dcov_substation_south', zoneId: 'substation', zoneCode: 'Z-04', kind: 'cracked_jersey',
+        x: 54.5, z: 128.5, hp: 70, label: '焦黑防爆隔离墩',
+        envClue: {
+          id: 'env_clue_cov_substation_2', tag: '掩体破拆', zoneId: 'substation', zoneCode: 'Z-04',
+          title: '变电间接地日志',
+          summary: '日志指出旧变电间地面积水导电率极高，但沿南侧干燥通道绕行可大幅压低脚步声纹。',
+          effectText: '打通变电间南侧逃生通道，理智 +4'
+        }
+      },
+      {
+        id: 'dcov_tunnel_west', zoneId: 'tunnel', zoneCode: 'Z-05', kind: 'crate_barricade',
+        x: 102.5, z: 122.5, hp: 60, label: '废弃工务工具箱',
+        envClue: {
+          id: 'env_clue_cov_tunnel_1', tag: '掩体破拆', zoneId: 'tunnel', zoneCode: 'Z-05',
+          title: '沈砚遗落的折角票套',
+          summary: '票套内侧残留暗红印泥，与检票大厅查获的真票钢印存在细微错位——说明应急通道有人刻意伪造通行凭据。',
+          effectText: '清除隧道西口障碍，能量 +8'
+        }
+      },
+      {
+        id: 'dcov_tunnel_east', zoneId: 'tunnel', zoneCode: 'Z-05', kind: 'cracked_jersey',
+        x: 146.5, z: 126.5, hp: 60, label: '渗水混凝土残垣',
+        envClue: {
+          id: 'env_clue_cov_tunnel_2', tag: '掩体破拆', zoneId: 'tunnel', zoneCode: 'Z-05',
+          title: '应急隧道气压记录',
+          summary: '压力表残片显示每当列车驶入 0 号站台，隧道气压骤降，开启排水与通风阀可迅速吹散异常声纹。',
+          effectText: '开辟隧道直通站台近路，理智 +5'
+        }
+      },
+      {
+        id: 'dcov_platform0_north', zoneId: 'platform0', zoneCode: 'Z-06', kind: 'crate_barricade',
+        x: 186.5, z: 42.5, hp: 70, label: '站台检修围挡',
+        envClue: {
+          id: 'env_clue_cov_platform0_1', tag: '掩体破拆', zoneId: 'platform0', zoneCode: 'Z-06',
+          title: '0号站台遗留手电',
+          summary: '手电筒外壳贴着工务签条：「检票员提灯红光虽具威慑，但在掩体转角后卡视野可打断其直线突刺。」',
+          effectText: '清理站台北段机动空间，能量 +10'
+        }
+      },
+      {
+        id: 'dcov_platform0_south', zoneId: 'platform0', zoneCode: 'Z-06', kind: 'cracked_jersey',
+        x: 192.5, z: 118.5, hp: 70, label: '站台碎裂防撞墩',
+        envClue: {
+          id: 'env_clue_cov_platform0_2', tag: '掩体破拆', zoneId: 'platform0', zoneCode: 'Z-06',
+          title: '铁轨边缘刻痕警告',
+          summary: '碎石底座压着半张焦黄告示：「轨槽带电且深陷，交战击退时务必背对站台内侧，切勿逼近铁轨边缘。」',
+          effectText: '清空站台东南决战区，理智 +5'
+        }
+      }
+    ];
+
+    // 10 Interactive Scene Triggers across all 6 expanded zones
+    var triggerBlueprints = [
+      {
+        id: 'trig_concourse_breaker', zoneId: 'concourse', zoneCode: 'Z-01', triggerEffect: 'acoustic_lure',
+        x: 35.5, z: 35.5, label: '应急广播断路箱', actionLabel: '拉闸诱饵',
+        envClue: {
+          id: 'env_clue_trig_concourse_1', tag: '场景触发器', zoneId: 'concourse', zoneCode: 'Z-01',
+          title: '43.2Hz 广播回环日志',
+          summary: '断路箱主板打印出最后一条故障码：站内循环播报源自 0 号轨控中枢的伪造声频，反相拉闸会在远处产生声纹诱饵吸引检票员。',
+          effectText: '已向换乘方向释放声纹诱饵波，临时压低本地声纹 -18'
+        }
+      },
+      {
+        id: 'trig_concourse_vent', zoneId: 'concourse', zoneCode: 'Z-01', triggerEffect: 'vent_purge',
+        x: 56.5, z: 22.5, label: '大厅排烟稳压阀', actionLabel: '开启排压',
+        envClue: {
+          id: 'env_clue_trig_concourse_2', tag: '场景触发器', zoneId: 'concourse', zoneCode: 'Z-01',
+          title: '地下站空气循环简报',
+          summary: '排烟管道涌出干冷新风，表盘显示大厅滞留的微弱模因雾气已被吹散，小队认知负荷显著下降。',
+          effectText: '净化区域雾气：理智 +10 · 能量 +12 · 威胁值下降'
+        }
+      },
+      {
+        id: 'trig_corridor_sonar', zoneId: 'corridor', zoneCode: 'Z-02', triggerEffect: 'sonar_relay',
+        x: 122.5, z: 74.5, label: '声呐回波中继器', actionLabel: '启动扫描',
+        envClue: {
+          id: 'env_clue_trig_corridor_1', tag: '场景触发器', zoneId: 'corridor', zoneCode: 'Z-02',
+          title: '站台全频回波快照',
+          summary: '中继天线瞬间完成 224×152 全回廊穿墙扫描，检票员实时位置与残余未破译线索已同步标注至战术终端。',
+          effectText: '开启 8 秒穿墙声呐透视，锁定零号检票员实时动向'
+        }
+      },
+      {
+        id: 'trig_corridor_alarm', zoneId: 'corridor', zoneCode: 'Z-02', triggerEffect: 'acoustic_lure',
+        x: 108.5, z: 88.5, label: '长廊消防警铃箱', actionLabel: '敲响声诱',
+        envClue: {
+          id: 'env_clue_trig_corridor_2', tag: '场景触发器', zoneId: 'corridor', zoneCode: 'Z-02',
+          title: '站台联防警铃预案',
+          summary: '警铃箱内贴着应急规程：尖锐铜铃声优先度高于普通脚步声，可用于将巡逻中的异常体调离道岔控制台。',
+          effectText: '在长廊南侧引爆声波诱饵，转移检票员注意力'
+        }
+      },
+      {
+        id: 'trig_dispatch_blackbox', zoneId: 'dispatch', zoneCode: 'Z-03', triggerEffect: 'sonar_relay',
+        x: 118.5, z: 22.5, label: '旧站务黑匣子', actionLabel: '读取记录',
+        envClue: {
+          id: 'env_clue_trig_dispatch_1', tag: '场景触发器', zoneId: 'dispatch', zoneCode: 'Z-03',
+          title: '停摆前 60 秒行车录音',
+          summary: '黑匣子磁带揭示了停摆真相：零号列车在 00:00:00 进入死循环前，曾有两名未知乘务员强行锁死了双向道岔。',
+          effectText: '同步全站轨道信标，开启 8 秒穿墙侦察并恢复 +8 理智'
+        }
+      },
+      {
+        id: 'trig_substation_capacitor', zoneId: 'substation', zoneCode: 'Z-04', triggerEffect: 'arc_surge',
+        x: 40.5, z: 110.5, label: '过载电容泄压闸', actionLabel: '释放电弧',
+        envClue: {
+          id: 'env_clue_trig_substation_1', tag: '场景触发器', zoneId: 'substation', zoneCode: 'Z-04',
+          title: 'B相高压回路拓扑图',
+          summary: '合闸瞬间电弧横扫变电间，配电柜内测绘图标明变电间泄压会瞬时过载周边灯具并压制半径 14 米内的异常实体。',
+          effectText: '释放高压电磁脉冲，震慑附近检票员并回复 +15 能量'
+        }
+      },
+      {
+        id: 'trig_substation_vent', zoneId: 'substation', zoneCode: 'Z-04', triggerEffect: 'vent_purge',
+        x: 62.5, z: 96.5, label: '变压器冷却排风阀', actionLabel: '泄压降温',
+        envClue: {
+          id: 'env_clue_trig_substation_2', tag: '场景触发器', zoneId: 'substation', zoneCode: 'Z-04',
+          title: '变电冷却液异常检测',
+          summary: '白色冷雾自管口喷涌，传感器读数显示臭氧浓度恢复安全线，同时抹除了此前的脚步声纹痕迹。',
+          effectText: '区域降温降噪：声纹大幅回落，理智 +10 · 能量 +10'
+        }
+      },
+      {
+        id: 'trig_tunnel_drain', zoneId: 'tunnel', zoneCode: 'Z-05', triggerEffect: 'vent_purge',
+        x: 126.5, z: 118.5, label: '隧道应急排水阀', actionLabel: '启动泄洪',
+        envClue: {
+          id: 'env_clue_trig_tunnel_1', tag: '场景触发器', zoneId: 'tunnel', zoneCode: 'Z-05',
+          title: '排水槽金属铭牌',
+          summary: '水流冲刷出沟底一块编号牌，证明应急通道曾是旧线秘密检修口，直通 0 号站台东南侧死角。',
+          effectText: '水声掩盖移动噪音，威胁值下降且理智 +10'
+        }
+      },
+      {
+        id: 'trig_platform0_beacon', zoneId: 'platform0', zoneCode: 'Z-06', triggerEffect: 'arc_surge',
+        x: 184.5, z: 74.5, label: '轨道监测高压信标', actionLabel: '过载信标',
+        envClue: {
+          id: 'env_clue_trig_platform0_1', tag: '场景触发器', zoneId: 'platform0', zoneCode: 'Z-06',
+          title: '零号轨感应线圈读数',
+          summary: '过载信标测得 0 号站台铁轨磁场正随列车倒计时剧烈波动，电弧脉冲可短时干扰靠近站台的检票员。',
+          effectText: '触发站台电弧浪涌，震荡附近敌人并回复 +14 能量'
+        }
+      },
+      {
+        id: 'trig_platform0_buzzer', zoneId: 'platform0', zoneCode: 'Z-06', triggerEffect: 'acoustic_lure',
+        x: 188.5, z: 114.5, label: '站台警示蜂鸣器', actionLabel: '触发蜂鸣',
+        envClue: {
+          id: 'env_clue_trig_platform0_2', tag: '场景触发器', zoneId: 'platform0', zoneCode: 'Z-06',
+          title: '站台末班车调度密文',
+          summary: '蜂鸣器控制台弹出最后一条加密指令：「当双端联锁达到 100% 或检票员被肃清，0 号撤离闸门即刻解除封锁。」',
+          effectText: '在站台东南释放高频诱饵蜂鸣，声纹诱敌 + 能量 +10'
+        }
+      }
+    ];
+
+    var destructibles = [];
+    for (var ci = 0; ci < coverBlueprints.length; ci++) {
+      var cb = coverBlueprints[ci];
+      var cSpot = findSafeWalkableSpot(api, cb.x * scaleX, cb.z * scaleZ, spawnPos, staticPts, usedPts);
+      if (!cSpot) continue;
+      usedPts.push(cSpot);
+      destructibles.push({
+        id: cb.id,
+        type: 'destructible_cover',
+        kind: cb.kind,
+        x: cSpot.x,
+        z: cSpot.z,
+        zoneId: cb.zoneId,
+        zoneCode: cb.zoneCode,
+        label: cb.label,
+        actionLabel: '破拆掩体',
+        hp: cb.hp,
+        maxHp: cb.hp,
+        radius: 0.72,
+        envClue: cb.envClue
+      });
+    }
+
+    var triggers = [];
+    for (var ti = 0; ti < triggerBlueprints.length; ti++) {
+      var tb = triggerBlueprints[ti];
+      var tSpot = findSafeWalkableSpot(api, tb.x * scaleX, tb.z * scaleZ, spawnPos, staticPts, usedPts);
+      if (!tSpot) continue;
+      usedPts.push(tSpot);
+      triggers.push({
+        id: tb.id,
+        type: 'scene_trigger',
+        triggerEffect: tb.triggerEffect,
+        x: tSpot.x,
+        z: tSpot.z,
+        zoneId: tb.zoneId,
+        zoneCode: tb.zoneCode,
+        label: tb.label,
+        actionLabel: tb.actionLabel || '启动机关',
+        envClue: tb.envClue
+      });
+    }
+
+    return {
+      destructibles: destructibles,
+      triggers: triggers,
+      all: destructibles.concat(triggers)
+    };
+  }
+
+  /* --------------------------------------------------------------------------
+   * 4. Composite 3D Procedural Interactables (Consoles, Clues, Blast Exit Gate,
+   *    + Dynamic Destructible Covers & Interactive Scene Triggers)
    * Preserves exact engine_25d item contract (group, sprite, mat, ring, ringMat)
    * -------------------------------------------------------------------------- */
   function buildInteractables(session) {
@@ -1595,6 +2420,9 @@
     var steelMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.62, metalness: 0.44 }));
     var darkCaseMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x141922, roughness: 0.72, metalness: 0.34 }));
     var brassMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0xc29544, roughness: 0.46, metalness: 0.62 }));
+    var hazardMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0xe69f2e, roughness: 0.52, metalness: 0.16 }));
+    var concreteMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x3b4454, roughness: 0.88, metalness: 0.08 }));
+    var rubbleMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x262d38, roughness: 0.92, metalness: 0.06 }));
 
     var ringGeo = session.trackGeo(new THREE.RingGeometry(0.56, 0.65, 28));
     ringGeo.rotateX(-Math.PI / 2);
@@ -1779,6 +2607,275 @@
       session.interactables.push(item);
       session.interactablesById[item.id] = item;
     }
+
+    // --- 4B. Dynamic Destructible Covers & Interactive Scene Triggers for 4x Map ---
+    if (!session.destructibleCovers) session.destructibleCovers = [];
+    if (!session.sceneTriggers) session.sceneTriggers = [];
+
+    var dynSet = generateDynamicInteractables(session.mapApi);
+    var coverRingGeo = session.trackGeo(new THREE.RingGeometry(0.68, 0.78, 24));
+    coverRingGeo.rotateX(-Math.PI / 2);
+
+    // Build Composite 3D Destructible Cover Barricades
+    for (var di = 0; di < dynSet.destructibles.length; di++) {
+      var dc = dynSet.destructibles[di];
+      var dcGroup = new THREE.Group();
+      dcGroup.position.set(dc.x, 0, dc.z);
+
+      var dcRingMat = session.trackMat(new THREE.MeshBasicMaterial({
+        color: 0xe69f2e,
+        transparent: true,
+        opacity: 0.36,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      }));
+      var dcRing = new THREE.Mesh(coverRingGeo, dcRingMat);
+      dcRing.position.y = 0.062;
+      dcGroup.add(dcRing);
+
+      var dcPulseMat = session.trackMat(new THREE.MeshBasicMaterial({
+        color: 0xe69f2e,
+        transparent: true,
+        opacity: 0.16,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      }));
+      var dcPulse = new THREE.Mesh(coverRingGeo, dcPulseMat);
+      dcPulse.position.y = 0.058;
+      dcGroup.add(dcPulse);
+
+      var intactGroup = new THREE.Group();
+      var fractureMat = session.trackMat(new THREE.MeshBasicMaterial({
+        color: 0xffa838,
+        transparent: true,
+        opacity: 0.72
+      }));
+
+      if (dc.kind === 'crate_barricade') {
+        var crateBase = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(1.16, 0.76, 0.94)), steelMat);
+        crateBase.position.set(0, 0.38, 0);
+        addInkOutline(THREE, session, crateBase, 24);
+        var crateTop = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.72, 0.44, 0.64)), concreteMat);
+        crateTop.position.set(-0.14, 0.98, -0.06);
+        crateTop.rotation.y = 0.18;
+        addInkOutline(THREE, session, crateTop, 24);
+        var hazBand = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(1.20, 0.14, 0.98)), hazardMat);
+        hazBand.position.set(0, 0.62, 0);
+        var seamA = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.08, 0.56, 1.00)), fractureMat);
+        seamA.position.set(0.16, 0.38, 0);
+        seamA.rotation.z = 0.22;
+        var capBar = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(1.18, 0.08, 0.18)), darkCaseMat);
+        capBar.position.set(0, 0.78, 0.38);
+        intactGroup.add(crateBase, crateTop, hazBand, seamA, capBar);
+      } else {
+        var jerseyFoot = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(1.28, 0.34, 0.88)), darkCaseMat);
+        jerseyFoot.position.set(0, 0.17, 0);
+        addInkOutline(THREE, session, jerseyFoot, 24);
+        var jerseyCore = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(1.14, 0.72, 0.62)), concreteMat);
+        jerseyCore.position.set(0, 0.68, 0);
+        addInkOutline(THREE, session, jerseyCore, 24);
+        var jerseyStripe = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(1.18, 0.15, 0.66)), hazardMat);
+        jerseyStripe.position.set(0, 0.82, 0);
+        var jerseyRail = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(1.22, 0.10, 0.46)), steelMat);
+        jerseyRail.position.set(0, 1.08, 0);
+        addInkOutline(THREE, session, jerseyRail, 24);
+        var seamB = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.09, 0.64, 0.68)), fractureMat);
+        seamB.position.set(-0.10, 0.66, 0);
+        seamB.rotation.z = -0.26;
+        intactGroup.add(jerseyFoot, jerseyCore, jerseyStripe, jerseyRail, seamB);
+      }
+      dcGroup.add(intactGroup);
+
+      // Shattered walkable rubble pile (revealed when hp <= 0)
+      var rubbleGroup = new THREE.Group();
+      var rChunk1 = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.56, 0.14, 0.42)), rubbleMat);
+      rChunk1.position.set(-0.28, 0.07, 0.16);
+      rChunk1.rotation.y = 0.42;
+      var rChunk2 = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.48, 0.11, 0.38)), concreteMat);
+      rChunk2.position.set(0.30, 0.055, -0.18);
+      rChunk2.rotation.y = -0.58;
+      var rChunk3 = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.32, 0.08, 0.24)), hazardMat);
+      rChunk3.position.set(0.04, 0.04, 0.22);
+      rChunk3.rotation.y = 0.85;
+      var clueRemnantMat = session.trackMat(new THREE.MeshBasicMaterial({
+        color: 0x5ce8c8,
+        transparent: true,
+        opacity: 0.55,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      }));
+      var clueRemnant = new THREE.Mesh(session.trackGeo(new THREE.CircleGeometry(0.28, 12)), clueRemnantMat);
+      clueRemnant.rotation.x = -Math.PI / 2;
+      clueRemnant.position.y = 0.048;
+      rubbleGroup.add(rChunk1, rChunk2, rChunk3, clueRemnant);
+      rubbleGroup.visible = false;
+      dcGroup.add(rubbleGroup);
+
+      session.scene.add(dcGroup);
+
+      var covItem = {
+        id: dc.id,
+        type: 'destructible_cover',
+        kind: dc.kind,
+        x: dc.x,
+        z: dc.z,
+        zoneId: dc.zoneId,
+        zoneCode: dc.zoneCode,
+        label: dc.label,
+        actionLabel: dc.actionLabel,
+        hp: dc.hp,
+        maxHp: dc.maxHp,
+        radius: dc.radius,
+        destroyed: false,
+        hitShake: 0,
+        hitFlash: 0,
+        done: false,
+        progress: 0,
+        envClue: dc.envClue,
+        group: dcGroup,
+        intactGroup: intactGroup,
+        rubbleGroup: rubbleGroup,
+        sprite: intactGroup,
+        mat: fractureMat,
+        fractureMat: fractureMat,
+        ring: dcRing,
+        ringMat: dcRingMat,
+        pulseRing: dcPulse,
+        pulseMat: dcPulseMat,
+        bobPhase: di * 0.9
+      };
+      session.destructibleCovers.push(covItem);
+      session.interactables.push(covItem);
+      session.interactablesById[covItem.id] = covItem;
+    }
+
+    // Build Composite 3D Interactive Scene Triggers
+    for (var ti = 0; ti < dynSet.triggers.length; ti++) {
+      var tr = dynSet.triggers[ti];
+      var trGroup = new THREE.Group();
+      trGroup.position.set(tr.x, 0, tr.z);
+
+      var trColor = tr.triggerEffect === 'acoustic_lure'
+        ? 0xffaa3b
+        : (tr.triggerEffect === 'arc_surge' ? 0x6fa8ff : 0x5ce8c8);
+
+      var trRingMat = session.trackMat(new THREE.MeshBasicMaterial({
+        color: trColor,
+        transparent: true,
+        opacity: 0.44,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      }));
+      var trRing = new THREE.Mesh(ringGeo, trRingMat);
+      trRing.position.y = 0.068;
+      trGroup.add(trRing);
+
+      var trPulseMat = session.trackMat(new THREE.MeshBasicMaterial({
+        color: trColor,
+        transparent: true,
+        opacity: 0.22,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      }));
+      var trPulse = new THREE.Mesh(ringGeo, trPulseMat);
+      trPulse.position.y = 0.064;
+      trGroup.add(trPulse);
+
+      var trBeaconMat = session.trackMat(new THREE.MeshBasicMaterial({ color: trColor }));
+      var trPlinth = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.46, 0.54, 0.14, 8)), darkCaseMat);
+      trPlinth.position.y = 0.07;
+      addInkOutline(THREE, session, trPlinth, 24);
+      trGroup.add(trPlinth);
+
+      var animPart = null;
+      if (tr.triggerEffect === 'vent_purge') {
+        var pipeBody = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.22, 0.26, 1.18, 10)), steelMat);
+        pipeBody.position.y = 0.72;
+        addInkOutline(THREE, session, pipeBody, 24);
+        var hoodCap = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.56, 0.24, 0.56)), darkCaseMat);
+        hoodCap.position.y = 1.38;
+        addInkOutline(THREE, session, hoodCap, 24);
+        var wheel = new THREE.Mesh(session.trackGeo(new THREE.TorusGeometry(0.24, 0.045, 8, 16)), brassMat);
+        wheel.position.set(0, 0.88, 0.26);
+        var gauge = new THREE.Mesh(session.trackGeo(new THREE.SphereGeometry(0.09, 10, 10)), trBeaconMat);
+        gauge.position.set(0, 1.54, 0);
+        trGroup.add(pipeBody, hoodCap, wheel, gauge);
+        animPart = wheel;
+      } else if (tr.triggerEffect === 'sonar_relay') {
+        var mast = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.08, 0.18, 1.24, 8)), steelMat);
+        mast.position.y = 0.74;
+        addInkOutline(THREE, session, mast, 24);
+        var dish = new THREE.Mesh(session.trackGeo(new THREE.ConeGeometry(0.38, 0.26, 12, 1, true)), darkCaseMat);
+        dish.position.set(0, 1.44, 0);
+        dish.rotation.x = 0.52;
+        addInkOutline(THREE, session, dish, 24);
+        var crystal = new THREE.Mesh(session.trackGeo(new THREE.OctahedronGeometry(0.14, 0)), trBeaconMat);
+        crystal.position.set(0, 1.68, 0.06);
+        trGroup.add(mast, dish, crystal);
+        animPart = crystal;
+      } else if (tr.triggerEffect === 'arc_surge') {
+        var cab = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.76, 1.12, 0.52)), darkCaseMat);
+        cab.position.y = 0.68;
+        addInkOutline(THREE, session, cab, 24);
+        var coilL = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.09, 0.11, 0.48, 8)), brassMat);
+        coilL.position.set(-0.22, 1.44, 0);
+        var coilR = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.09, 0.11, 0.48, 8)), brassMat);
+        coilR.position.set(0.22, 1.44, 0);
+        var arcCore = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.50, 0.10, 0.10)), trBeaconMat);
+        arcCore.position.set(0, 1.62, 0);
+        var switchArm = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.08, 0.36, 0.08)), hazardMat);
+        switchArm.position.set(0, 0.92, 0.30);
+        switchArm.rotation.x = 0.48;
+        trGroup.add(cab, coilL, coilR, arcCore, switchArm);
+        animPart = switchArm;
+      } else {
+        // acoustic_lure: breaker box + twin speakers + pull lever
+        var boxBody = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.70, 1.16, 0.44)), steelMat);
+        boxBody.position.y = 0.70;
+        addInkOutline(THREE, session, boxBody, 24);
+        var horn = new THREE.Mesh(session.trackGeo(new THREE.ConeGeometry(0.24, 0.36, 10, 1, true)), darkCaseMat);
+        horn.position.set(0, 1.44, 0.10);
+        horn.rotation.x = Math.PI * 0.42;
+        addInkOutline(THREE, session, horn, 24);
+        var pullLever = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.08, 0.38, 0.08)), brassMat);
+        pullLever.position.set(0.40, 0.86, 0.08);
+        pullLever.rotation.z = -0.45;
+        var lamp = new THREE.Mesh(session.trackGeo(new THREE.SphereGeometry(0.09, 10, 10)), trBeaconMat);
+        lamp.position.set(-0.20, 1.38, 0.16);
+        trGroup.add(boxBody, horn, pullLever, lamp);
+        animPart = pullLever;
+      }
+
+      session.scene.add(trGroup);
+
+      var trigItem = {
+        id: tr.id,
+        type: 'scene_trigger',
+        triggerEffect: tr.triggerEffect,
+        x: tr.x,
+        z: tr.z,
+        zoneId: tr.zoneId,
+        zoneCode: tr.zoneCode,
+        label: tr.label,
+        actionLabel: tr.actionLabel,
+        done: false,
+        progress: 0,
+        envClue: tr.envClue,
+        group: trGroup,
+        sprite: animPart || trGroup,
+        animPart: animPart,
+        mat: trBeaconMat,
+        beaconMat: trBeaconMat,
+        ring: trRing,
+        ringMat: trRingMat,
+        pulseRing: trPulse,
+        pulseMat: trPulseMat,
+        bobPhase: ti * 1.15
+      };
+      session.sceneTriggers.push(trigItem);
+      session.interactables.push(trigItem);
+      session.interactablesById[trigItem.id] = trigItem;
+    }
   }
 
   INFINITY.SceneArchitect = {
@@ -1786,6 +2883,8 @@
     buildLightFixtures: buildLightFixtures,
     buildGhostTrain: buildGhostTrain,
     buildInteractables: buildInteractables,
+    generateDynamicZoneProps: generateDynamicZoneProps,
+    generateDynamicInteractables: generateDynamicInteractables,
     getZonePropSpecs: getZonePropSpecs
   };
 })(typeof window !== 'undefined' ? window : globalThis);

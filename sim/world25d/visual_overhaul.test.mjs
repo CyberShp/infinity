@@ -154,7 +154,7 @@ test('PixelSprites upgraded resolutions: 256x256 tiles/props, 128x128 cast, 160x
 test('SceneArchitect props stay clear of player spawn and interactables, and StationMap A* stays connected', () => {
   const specs = SceneArchitect.getZonePropSpecs();
   const interactables = StationMap.getInteractables();
-  const spawn = { x: 10.5, z: 10.5 };
+  const spawn = StationMap.getZoneCenter('concourse');
 
   const groundProps = [
     ...specs.turnstiles,
@@ -162,7 +162,7 @@ test('SceneArchitect props stay clear of player spawn and interactables, and Sta
     ...specs.serverRacks,
     ...specs.cratesAndBarricades
   ];
-  assert.ok(groundProps.length >= 10, 'Expected rich ground storytelling props across zones');
+  assert.ok(groundProps.length >= 24, 'Expected rich ground storytelling props across 4x expanded zones');
 
   for (const p of groundProps) {
     const dSpawn = Math.hypot(p.x - spawn.x, p.z - spawn.z);
@@ -174,16 +174,11 @@ test('SceneArchitect props stay clear of player spawn and interactables, and Sta
   }
 
   // Verify A* connectivity from spawn to key points in all 6 zones
-  const zoneWaypoints = [
-    { name: 'dispatch', x: 30.5, z: 6.5 },
-    { name: 'corridor', x: 31.5, z: 18.5 },
-    { name: 'substation', x: 11.5, z: 28.5 },
-    { name: 'tunnel', x: 31.5, z: 30.5 },
-    { name: 'platform0', x: 45.5, z: 18.5 }
-  ];
-  for (const wp of zoneWaypoints) {
+  const zoneIds = ['dispatch', 'corridor', 'substation', 'tunnel', 'platform0'];
+  for (const zId of zoneIds) {
+    const wp = StationMap.getZoneCenter(zId);
     const pathPts = StationMap.findPath(spawn.x, spawn.z, wp.x, wp.z);
-    assert.ok(Array.isArray(pathPts) && pathPts.length > 0, `A* path to ${wp.name} must remain connected`);
+    assert.ok(Array.isArray(pathPts) && pathPts.length > 0, `A* path to ${zId} must remain connected`);
   }
 });
 
@@ -417,10 +412,12 @@ test('P2 VfxStudio.spawnFlipbookVfx enforces dual-layer ink/bright rendering and
     trackGeo(g) { return g; }
   };
 
+  const railMinX = StationMap.RAIL_MIN_X || 104;
+  const platCenter = StationMap.getZoneCenter('platform0');
   const groundFx = VfxStudio.spawnFlipbookVfx(session, {
     name: 'hades_tao_ground',
-    x: 49.6,
-    z: 18.5,
+    x: railMinX - 0.4,
+    z: platCenter.z,
     radius: 2.8,
     layer: 'ground'
   });
@@ -431,7 +428,7 @@ test('P2 VfxStudio.spawnFlipbookVfx enforces dual-layer ink/bright rendering and
   assert.equal(groundFx.group.children.length, 2, 'Flipbook must render dual-layer (ink backing + bright cel)');
   assert.equal(groundFx.inkMesh.material.blending, MockTHREE.NormalBlending);
   assert.equal(groundFx.brightMesh.material.blending, MockTHREE.AdditiveBlending);
-  assert.ok(groundFx.group.position.x + groundFx.radius <= 50.05, 'Ground flipbook must clamp clear of rail_trench (x >= 50)');
+  assert.ok(groundFx.group.position.x + groundFx.radius <= railMinX + 0.05, `Ground flipbook must clamp clear of rail_trench (x >= ${railMinX})`);
 
   const slashFx = VfxStudio.spawnFlipbookVfx(session, {
     name: 'hades_cyan',
@@ -484,29 +481,33 @@ test('P2 Art Bible Iron Rule 4: swept knockback blocks rail_trench (grid=4) & wa
   assert.equal(typeof World25D.resolveSweptMovement, 'function');
   const grid = StationMap.getGrid();
 
-  // 1. Huge knockback near Platform 0 yellow line toward sunken rail_trench (x = 50..53, grid === 4)
-  const railPush = World25D.resolveSweptMovement(StationMap, 49.2, 18.5, 53.8, 18.5, 0.56);
+  const railMinX = StationMap.RAIL_MIN_X || 104;
+  const trainX = StationMap.TRAIN_X || 106.5;
+  const platZ = StationMap.getZoneCenter('platform0').z;
+
+  // 1. Huge knockback near Platform 0 yellow line toward sunken rail_trench (grid === 4)
+  const railPush = World25D.resolveSweptMovement(StationMap, railMinX - 0.8, platZ, railMinX + 3.8, platZ, 0.56);
   assert.equal(railPush.hit, true, 'Knockback toward rail_trench must register collision');
   assert.equal(railPush.hitRailEdge, true, 'Knockback toward rail_trench must flag hitRailEdge');
-  assert.ok(railPush.x < 50.0, `Actor crossed into rail_trench (x=${railPush.x.toFixed(2)})`);
+  assert.ok(railPush.x < railMinX, `Actor crossed into rail_trench (x=${railPush.x.toFixed(2)})`);
   assert.equal(StationMap.isWalkable(railPush.x, railPush.z), true, 'Final position must stay strictly walkable');
   assert.notEqual(grid[Math.floor(railPush.z)][Math.floor(railPush.x)], 4, 'Actor must never land on grid===4 rail_trench');
 
-  // 2. High-speed knockback into Corridor cover pillar (x=25..26, z=16, grid === 1)
-  const wallPush = World25D.resolveSweptMovement(StationMap, 24.3, 16.5, 28.4, 16.5, 0.42);
+  // 2. High-speed knockback into Corridor cover pillar (x=94..95, z=62, grid === 1)
+  const wallPush = World25D.resolveSweptMovement(StationMap, 93.3, 62.5, 97.4, 62.5, 0.42);
   assert.equal(wallPush.hit, true, 'Knockback into pillar must register collision');
   assert.equal(wallPush.hitWall, true, 'Knockback into pillar must flag hitWall for rebound/debris');
-  assert.ok(wallPush.x < 25.0, `Actor tunneled through pillar (x=${wallPush.x.toFixed(2)})`);
+  assert.ok(wallPush.x < 94.0, `Actor tunneled through pillar (x=${wallPush.x.toFixed(2)})`);
   assert.equal(StationMap.isWalkable(wallPush.x, wallPush.z), true);
 
   // 3. Ground decal clamping near Platform 0 edge must never overhang into rail_trench
-  const decal = VfxStudio.clampGroundDecal(StationMap, 49.7, 18.5, 2.4);
+  const decal = VfxStudio.clampGroundDecal(StationMap, railMinX - 0.3, platZ, 2.4);
   assert.equal(decal.valid, true, 'Walkable platform edge decal should clamp validly');
   assert.equal(StationMap.isWalkable(decal.x, decal.z), true, 'Clamped decal center must stay walkable');
-  assert.ok(decal.x + decal.radius <= 50.05, `Ground decal overhangs rail edge (x=${decal.x.toFixed(2)}, r=${decal.radius.toFixed(2)})`);
+  assert.ok(decal.x + decal.radius <= railMinX + 0.05, `Ground decal overhangs rail edge (x=${decal.x.toFixed(2)}, r=${decal.radius.toFixed(2)})`);
 
   // 4. Ground decal deep inside non-walkable rail_trench / out-of-bounds must report valid: false and never push off-map
-  const offRail = VfxStudio.clampGroundDecal(StationMap, 52.5, 18.5, 4.8);
+  const offRail = VfxStudio.clampGroundDecal(StationMap, trainX, platZ, 4.8);
   assert.equal(offRail.valid, false, 'Decal deep inside rail_trench must return valid: false');
   const offWall = VfxStudio.clampGroundDecal(StationMap, 0.2, 0.2, 3.0);
   assert.equal(offWall.valid, false, 'Decal inside outer wall must return valid: false');
@@ -689,4 +690,129 @@ test('P3-A Style-1 heavy-ink scene unification: bespoke WebP tiles on disk, walk
   const spriteSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/world25d/pixel_sprites.js'), 'utf8');
   assert.ok(/willReadFrequently:\s*true/.test(spriteSrc), 'pixel_sprites.js must pass willReadFrequently: true on readback canvases');
 });
+
+test('4x Station Zero mega-scale expansion (224x152 = 34,048 m²): dynamic props/cover generation, A* reachability, and full 2.5D camera scroll bounds', () => {
+  const area = StationMap.GRID_W * StationMap.GRID_H;
+  assert.equal(StationMap.GRID_W, 224);
+  assert.equal(StationMap.GRID_H, 152);
+  assert.equal(area, 34048, `Expected exact 4x area of 112x76 (34048 m^2), got ${area}`);
+  assert.equal(StationMap.PLATFORM_START_X, 168);
+  assert.equal(StationMap.HAZARD_X, 207);
+  assert.equal(StationMap.RAIL_MIN_X, 208);
+  assert.equal(StationMap.RAIL_MAX_X, 219);
+  assert.equal(StationMap.TRAIN_X, 213.5);
+
+  const lights = StationMap.getLights();
+  assert.ok(lights.length >= 64, `Expected >= 64 atmospheric zone lights for 224x152 station, got ${lights.length}`);
+
+  // Dynamic procedural scene & cover generation in scene_architect.js
+  assert.equal(typeof SceneArchitect.generateDynamicZoneProps, 'function');
+  const dynSpecs = SceneArchitect.generateDynamicZoneProps(StationMap);
+  assert.equal(dynSpecs.meta && dynSpecs.meta.dynamicGenerated, true);
+  assert.equal(dynSpecs.meta.area, 34048);
+
+  const totalGroundProps =
+    (dynSpecs.turnstiles?.length || 0) +
+    (dynSpecs.benches?.length || 0) +
+    (dynSpecs.serverRacks?.length || 0) +
+    (dynSpecs.cratesAndBarricades?.length || 0) +
+    (dynSpecs.bollards?.length || 0);
+  assert.ok(totalGroundProps >= 90, `Expected >= 90 dynamically generated environmental props, got ${totalGroundProps}`);
+  assert.ok(dynSpecs.puddles.length >= 45, `Expected >= 45 dynamic puddles across 224x152 zones, got ${dynSpecs.puddles.length}`);
+  assert.ok(dynSpecs.crackDecals.length >= 50, `Expected >= 50 dynamic crack decals across 224x152 zones, got ${dynSpecs.crackDecals.length}`);
+
+  // Verify waist-high tactical cover barricades exist across the expanded station
+  const coverRuns = StationMap.getWalls().filter(w => w.cover || (Number(w.h) > 0 && Number(w.h) <= 1.5));
+  assert.ok(coverRuns.length >= 35, `Expected >= 35 waist-high tactical cover barricades, got ${coverRuns.length}`);
+
+  // Verify every dynamically placed ground prop sits on walkable floor and clear of rail_trench
+  const grid = StationMap.getGrid();
+  for (const listName of ['turnstiles', 'benches', 'serverRacks', 'cratesAndBarricades', 'bollards', 'landmarks']) {
+    for (const item of dynSpecs[listName] || []) {
+      assert.equal(StationMap.isWalkable(item.x, item.z), true, `Dynamic ${listName} prop at (${item.x},${item.z}) must be walkable`);
+      assert.notEqual(grid[Math.floor(item.z)][Math.floor(item.x)], 4, `Dynamic ${listName} prop at (${item.x},${item.z}) must not enter rail_trench`);
+    }
+  }
+
+  // Verify spawn & every interactable across all 6 zones is walkable and A*-reachable
+  const spawn = StationMap.getZoneCenter('concourse');
+  assert.equal(StationMap.isWalkable(spawn.x, spawn.z), true, 'Spawn center must be walkable');
+  for (const inter of StationMap.getInteractables()) {
+    assert.equal(StationMap.isWalkable(inter.x, inter.z), true, `Interactable ${inter.id} at (${inter.x},${inter.z}) must be walkable`);
+    const p = StationMap.findPath(spawn.x, spawn.z, inter.x, inter.z);
+    assert.ok(Array.isArray(p) && p.length > 0, `Interactable ${inter.id} must be A*-reachable from spawn`);
+  }
+
+  // Verify 2.5D camera scroll bounds cover all 6 zones including far Platform 0 east/south corners
+  assert.equal(typeof World25D.computeCameraScrollBounds, 'function');
+  const bounds = World25D.computeCameraScrollBounds(StationMap);
+  assert.ok(bounds.minX <= 4.0 && bounds.minZ <= 4.0, 'Camera scroll bounds must cover NW Concourse corner');
+  assert.ok(bounds.maxX >= StationMap.HAZARD_X && bounds.maxZ >= 144, `Camera scroll bounds (${bounds.maxX}x${bounds.maxZ}) must cover far Platform 0 SE region`);
+  for (const zId of Object.keys(StationMap.ZONES)) {
+    const zc = StationMap.getZoneCenter(zId);
+    assert.ok(zc.x >= bounds.minX && zc.x <= bounds.maxX && zc.z >= bounds.minZ && zc.z <= bounds.maxZ,
+      `Zone ${zId} center (${zc.x},${zc.z}) must lie inside camera scroll bounds`);
+  }
+});
+
+test('4x map dynamic interactive points: destructible covers, scene triggers, walkability/clearance, and environmental clues across all 6 zones', () => {
+  assert.equal(typeof SceneArchitect.generateDynamicInteractables, 'function');
+  const dyn = SceneArchitect.generateDynamicInteractables(StationMap);
+  assert.ok(dyn && Array.isArray(dyn.destructibles) && Array.isArray(dyn.triggers),
+    'generateDynamicInteractables must return { destructibles, triggers }');
+  assert.ok(dyn.destructibles.length >= 10, `Expected >= 10 destructible covers, got ${dyn.destructibles.length}`);
+  assert.ok(dyn.triggers.length >= 8, `Expected >= 8 scene triggers, got ${dyn.triggers.length}`);
+
+  const allItems = [...dyn.destructibles, ...dyn.triggers];
+  const seenIds = new Set();
+  const seenClueIds = new Set();
+  const coveredZones = new Set();
+  const spawn = StationMap.getZoneCenter('concourse');
+  const staticInts = StationMap.getInteractables();
+  const grid = StationMap.getGrid();
+
+  for (const item of allItems) {
+    assert.ok(item.id && !seenIds.has(item.id), `Duplicate or missing dynamic interactable id: ${item.id}`);
+    seenIds.add(item.id);
+
+    assert.equal(StationMap.isWalkable(item.x, item.z), true,
+      `Dynamic point ${item.id} at (${item.x},${item.z}) must sit on walkable floor`);
+    assert.notEqual(grid[Math.floor(item.z)][Math.floor(item.x)], 4,
+      `Dynamic point ${item.id} must not sit inside rail_trench`);
+
+    const spawnDist = Math.hypot(item.x - spawn.x, item.z - spawn.z);
+    assert.ok(spawnDist >= 2.8, `Dynamic point ${item.id} too close to spawn (${spawnDist.toFixed(2)}m)`);
+
+    for (const si of staticInts) {
+      const d = Math.hypot(item.x - si.x, item.z - si.z);
+      assert.ok(d >= 2.4, `Dynamic point ${item.id} overlaps static interactable ${si.id} (${d.toFixed(2)}m)`);
+    }
+
+    assert.ok(item.envClue && item.envClue.id && !seenClueIds.has(item.envClue.id),
+      `Dynamic point ${item.id} must carry a unique envClue.id`);
+    seenClueIds.add(item.envClue.id);
+    assert.ok(item.envClue.title && item.envClue.summary && item.envClue.tag && item.envClue.zoneCode,
+      `Dynamic point ${item.id} envClue missing required display fields`);
+    coveredZones.add(item.zoneId || item.envClue.zoneId);
+  }
+
+  for (const zId of Object.keys(StationMap.ZONES)) {
+    assert.ok(coveredZones.has(zId), `Zone ${zId} must have at least one dynamic interactive point`);
+  }
+
+  for (const cov of dyn.destructibles) {
+    assert.equal(cov.type, 'destructible_cover');
+    assert.ok(cov.hp >= 50 && cov.hp <= 200, `Destructible cover ${cov.id} hp out of bounds: ${cov.hp}`);
+    assert.ok(cov.radius > 0.4 && cov.radius < 2.0, `Destructible cover ${cov.id} radius out of bounds: ${cov.radius}`);
+  }
+
+  for (const trg of dyn.triggers) {
+    assert.equal(trg.type, 'scene_trigger');
+    assert.ok(['acoustic_lure', 'vent_purge', 'sonar_relay', 'arc_surge'].includes(trg.triggerEffect),
+      `Unexpected triggerEffect ${trg.triggerEffect} on ${trg.id}`);
+  }
+});
+
+
+
 

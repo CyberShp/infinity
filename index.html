@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>无限·活体考场终端 // 零号回廊</title>
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="sim/sim.css?v=12">
+  <link rel="stylesheet" href="sim/sim.css?v=13">
   <!-- Strict load order per sim/world25d/CONTRACT_25D.md (classic defer scripts, zero ES-module CORS issues) -->
   <script defer src="sim/vendor/three.min.js?v=4"></script>
   <script defer src="sim/vendor/d3.min.js?v=1"></script>
@@ -18,15 +18,15 @@
   <script defer src="sim/engine/audio_engine.js?v=7"></script>
   <script defer src="sim/data/asset_manifest.js?v=7"></script>
   <script defer src="sim/world25d/pixel_sprites.js?v=11"></script>
-  <script defer src="sim/world25d/station_map.js?v=5"></script>
+  <script defer src="sim/world25d/station_map.js?v=8"></script>
   <script defer src="sim/world25d/skill_archetypes.js?v=8"></script>
-  <script defer src="sim/world25d/scene_architect.js?v=6"></script>
+  <script defer src="sim/world25d/scene_architect.js?v=11"></script>
   <script defer src="sim/world25d/vfx_studio.js?v=5"></script>
   <script defer src="sim/world25d/combat_feel.js?v=1"></script>
-  <script defer src="sim/world25d/engine_25d.js?v=16"></script>
+  <script defer src="sim/world25d/engine_25d.js?v=19"></script>
   <script defer src="sim/ui/tactical_canvas.js?v=4"></script>
   <script defer src="sim/ui/icon_synth.js?v=1"></script>
-  <script defer src="sim/ui/app_ui.js?v=14"></script>
+  <script defer src="sim/ui/app_ui.js?v=17"></script>
 </head>
 <body data-scene="hall">
   <!-- Top Wristwatch Telemetry Bar -->
@@ -203,8 +203,27 @@
             </div>
 
             <div class="hud25d-obj-meta">
-              <span class="hud25d-clue-pill">线索 <strong id="hud25d-clues-val" class="mono accent-gold">0/6</strong></span>
+              <div class="hud25d-clue-group">
+                <button id="hud25d-clues-pill" class="hud25d-clue-pill" type="button" title="打开线索簿">线索 <strong id="hud25d-clues-val" class="mono accent-gold">0/6</strong></button>
+                <button id="hud25d-env-clues-pill" class="hud25d-env-clue-pill" type="button" title="查看掩体与机关环境线索">环境 <strong id="hud25d-env-clues-val" class="mono accent-cyan">0/22</strong></button>
+              </div>
               <span id="hud25d-inspector-status" class="hud25d-inspector-pill">检票员：巡逻中 · --m</span>
+            </div>
+
+            <div id="hud25d-env-clue-banner" class="hud25d-env-clue-banner hidden" role="status" aria-live="polite" aria-label="最新环境线索">
+              <div class="hud25d-env-clue-head">
+                <span class="hud25d-env-clue-badges">
+                  <span id="hud25d-env-clue-tag" class="hud25d-env-tag">环境线索</span>
+                  <span id="hud25d-env-clue-zone" class="mono hud25d-env-zone">Z-01</span>
+                </span>
+                <div class="hud25d-env-clue-actions">
+                  <button id="btn-env-clue-dossier" class="hud25d-env-mini-btn" type="button">线索簿</button>
+                  <button id="btn-env-clue-close" class="hud25d-env-mini-btn" type="button" aria-label="收起环境线索">×</button>
+                </div>
+              </div>
+              <strong id="hud25d-env-clue-title" class="hud25d-env-clue-title"></strong>
+              <p id="hud25d-env-clue-body" class="hud25d-env-clue-body"></p>
+              <div id="hud25d-env-clue-effect" class="hud25d-env-clue-effect"></div>
             </div>
           </div>
         </aside>
