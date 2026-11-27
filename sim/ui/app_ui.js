@@ -399,6 +399,7 @@
     var scene = getSceneName(state);
     var prev = uiState.currentScene;
     document.body.setAttribute('data-scene', scene);
+    document.body.setAttribute('data-state', scene === 'exam' ? 'playing' : (scene === 'settlement' ? 'gameover' : 'title'));
 
     ['hall', 'exam', 'settlement'].forEach(function (name) {
       var el = $('scene-' + name);
@@ -775,7 +776,7 @@
       if (curated) {
         previewHtml =
           '<div class="fusion-preview-card">' +
-            '<p class="eyebrow crimson">CURATED FUSION // 秘传血统融合</p>' +
+            '<p class="eyebrow crimson">CURATED FUSION · 秘传血统融合</p>' +
             '<h4>' + esc(curated.result.name) + ' <span class="tier-badge tier-' + esc(curated.result.tier) + '">' + esc(curated.result.tier) + '</span></h4>' +
             '<p class="item-desc" style="margin:6px 0;">' + esc(curated.result.desc) + '</p>' +
             '<div class="item-delta-line">' + esc(formatDeltaSummary(curated.result.powerDelta)) + '</div>' +
@@ -788,7 +789,7 @@
         var estCost = tierCosts[itemA.tier] || 30;
         previewHtml =
           '<div class="fusion-preview-card">' +
-            '<p class="eyebrow">PROCEDURAL FUSION // 自由同阶跨体系拼合</p>' +
+            '<p class="eyebrow">PROCEDURAL FUSION · 自由同阶跨体系拼合</p>' +
             '<h4>' + esc(itemA.name) + ' × ' + esc(itemB.name) + '</h4>' +
             (sameTier
               ? '<p class="item-desc" style="margin:6px 0;">未命中固定秘方，将通过主神基因熔炉合成高一阶定制复合血统（D+D→C需30分，C+C→B需90分）。</p>' +
@@ -836,7 +837,7 @@
     container.innerHTML =
       '<div class="fusion-layout">' +
         '<div class="fusion-panel">' +
-          '<p class="eyebrow crimson">GENE CRUCIBLE // 血统融合炉</p>' +
+          '<p class="eyebrow crimson">GENE CRUCIBLE · 血统融合炉</p>' +
           '<h3>双血统熔合槽</h3>' +
           '<div class="fusion-slots">' +
             '<div class="fusion-slot' + (itemA ? ' filled' : '') + '">' +
@@ -854,7 +855,7 @@
           '<div class="fusion-bloodline-list">' + ownedListHtml + '</div>' +
         '</div>' +
         '<div class="fusion-panel">' +
-          '<p class="eyebrow">CURATED ARCHIVE // 已知高阶融合配方 (' + recipes.length + ')</p>' +
+          '<p class="eyebrow">CURATED ARCHIVE · 已知高阶融合配方 (' + recipes.length + ')</p>' +
           '<h3>秘传血统图谱</h3>' +
           '<div class="recipe-list">' + recipesHtml + '</div>' +
         '</div>' +
@@ -1780,15 +1781,17 @@
         patrol: '巡逻中',
         investigate: '循声搜查',
         chase: '追猎锁定!',
+        hunt: '追猎锁定!',
         stunned: '僵直受制',
         sealed: '已封印',
         defeated: '已击杀'
       };
+      var stateKey = String(insp.state || 'patrol').toLowerCase();
       var distTxt = isFinite(Number(insp.distToPlayer)) ? (Math.round(Number(insp.distToPlayer)) + 'm') : '--m';
       inspStatusEl.textContent = inspDone
         ? '检票员：已肃清'
-        : ('检票员：' + (stateLabels[insp.state] || insp.state || '巡逻中') + ' · ' + distTxt);
-      inspStatusEl.classList.toggle('danger', !inspDone && (insp.state === 'chase' || Number(insp.distToPlayer) <= 10));
+        : ('检票员：' + (stateLabels[stateKey] || '巡逻中') + ' · ' + distTxt);
+      inspStatusEl.classList.toggle('danger', !inspDone && (stateKey === 'chase' || stateKey === 'hunt' || Number(insp.distToPlayer) <= 10));
       inspStatusEl.classList.toggle('neutralized', inspDone);
     }
 
@@ -4724,6 +4727,18 @@
     }
 
     syncFxToggleUi();
+
+    var shouldAutostart = false;
+    try {
+      var params = new URLSearchParams(global.location && global.location.search ? global.location.search : '');
+      shouldAutostart = params.get('autostart') === '1';
+    } catch (_) {}
+
+    if (shouldAutostart && INFINITY.Engine && typeof INFINITY.Engine.enterScenario === 'function') {
+      uiState.lastFeedCount = 0;
+      INFINITY.Engine.enterScenario('station_zero');
+    }
+
     renderAll(getStateSafe());
   }
 

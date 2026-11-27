@@ -7,15 +7,38 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
-    body {
-      margin: 0;
-      background: #0b0b0d;
-      color: #e7e1d6;
-      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    :root {
+      color-scheme: dark;
+      --exam1-bg: #0b0b0d;
+      --exam1-surface: rgba(17, 18, 22, 0.94);
+      --exam1-ink: #e7e1d6;
+      --exam1-gold: #d6b274;
+      --exam1-crimson: #c83737;
     }
-    .font-serif { font-family: "Noto Serif SC", "Songti SC", "STSong", serif; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--exam1-bg);
+      color: var(--exam1-ink);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-serif { font-family: "Noto Serif SC", "Songti SC", "STSong", Georgia, serif; }
     .font-sans-ui { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
-    .font-mono-ui { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .font-mono-ui {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    .exam1-portrait-fallback {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(160deg, #1b1815, #0e0f13);
+      color: var(--exam1-gold);
+      font-family: "Noto Serif SC", serif;
+      font-weight: 700;
+    }
     .scroll-thin::-webkit-scrollbar { width: 6px; height: 6px; }
     .scroll-thin::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
     .scroll-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 999px; }

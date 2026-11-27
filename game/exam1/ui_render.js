@@ -106,13 +106,13 @@
     const portraits = (global.AV_MANIFEST && global.AV_MANIFEST.playerPortraits) || {};
     return `
     <div class="relative min-h-screen w-full flex items-center justify-center p-5 md:p-8 text-[#e8e2d5]" style="background:#0c0c0e;">
-      <img src="${resolveSceneImg('alley')}" alt="" class="fixed inset-0 w-full h-full object-cover opacity-30 pointer-events-none select-none" />
+      <img src="${resolveSceneImg('alley')}" referrerPolicy="no-referrer" onerror="window.UI.onImgError(this)" alt="" class="fixed inset-0 w-full h-full object-cover opacity-30 pointer-events-none select-none" />
       <div class="fixed inset-0 bg-gradient-to-b from-black/75 via-black/65 to-[#09090b]/95 pointer-events-none"></div>
-      <div class="relative z-10 w-full max-w-3xl bg-[#111216]/92 backdrop-blur-xl border border-amber-200/15 rounded-2xl p-6 md:p-8 shadow-2xl space-y-5">
+      <div class="relative z-10 w-full max-w-3xl bg-[#111216]/96 border border-amber-200/18 rounded-2xl p-6 md:p-8 shadow-2xl space-y-5">
         <div class="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
           <div>
             <div class="text-[11px] tracking-[0.25em] text-amber-300/80 uppercase font-sans-ui">第一季第 1 场 · 两天两夜标准三轮制</div>
-            <h1 class="text-2xl md:text-3xl font-bold text-stone-100 mt-1 tracking-wide">白雾古宅 · 裴宅买命契</h1>
+            <h1 class="text-2xl md:text-3xl font-bold font-serif text-stone-100 mt-1 tracking-wide">白雾古宅 · 裴宅买命契</h1>
             <p class="text-xs text-stone-400 mt-1.5 leading-5">选定你的现实身份与随身物件。本场为「零高亮原件翻验 ＋ 零空气墙物理拆解 ＋ 双煞潜行 ＋ 三主线与三真·IF线」完整版。</p>
           </div>
           <a href="../index.html" class="shrink-0 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/15 text-xs text-stone-300 transition">返回死考大厅</a>
@@ -124,7 +124,7 @@
             const stItem = DATA().ITEMS[o.startItem];
             return `
             <button type="button" onclick="window.UI.chooseOrigin('${o.id}')" class="text-left flex gap-3.5 p-4 rounded-xl bg-white/[0.03] hover:bg-amber-950/25 border border-white/10 hover:border-amber-400/50 transition group">
-              ${pSrc ? `<img src="${pSrc}" alt="${esc(o.name)}" class="w-16 h-22 object-cover rounded-lg border border-white/15 shrink-0" />` : ''}
+              ${pSrc ? `<img src="${pSrc}" referrerPolicy="no-referrer" onerror="window.UI.onPortraitError(this)" alt="${esc(o.name)}" class="w-16 h-22 object-cover rounded-lg border border-white/15 shrink-0 bg-[#141311]" />` : ''}
               <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-2">
                   <span class="text-sm font-semibold text-stone-100 group-hover:text-amber-200 transition">${esc(o.name)}</span>
@@ -173,11 +173,11 @@
     return `
     <div class="relative w-screen h-screen overflow-hidden flex flex-col text-[#e7e1d6] bg-[#0b0b0d] font-sans-ui">
       <!-- 场景底图与暗调雾层 -->
-      <img src="${sceneSrc}" onerror="window.UI.onImgError(this)" alt="" class="fixed inset-0 w-full h-full object-cover opacity-35 pointer-events-none select-none transition-all duration-700" />
+      <img src="${sceneSrc}" referrerPolicy="no-referrer" onerror="window.UI.onImgError(this)" alt="" class="fixed inset-0 w-full h-full object-cover opacity-35 pointer-events-none select-none transition-all duration-700" />
       <div class="fixed inset-0 bg-gradient-to-b from-[#0a0b0e]/85 via-[#0c0d11]/75 to-[#09090b]/95 pointer-events-none"></div>
 
       <!-- 顶部腕表状态栏 -->
-      <header class="relative z-20 shrink-0 px-4 py-2.5 bg-[#0b0c10]/90 backdrop-blur-xl border-b border-white/10 flex flex-wrap items-center justify-between gap-2">
+      <header class="relative z-20 shrink-0 px-4 py-2.5 bg-[#0b0c10]/96 border-b border-white/10 flex flex-wrap items-center justify-between gap-2">
         <div class="flex flex-wrap items-center gap-2.5">
           <span class="px-2.5 py-1 rounded-md bg-red-950/60 border border-red-500/40 text-amber-200 text-xs font-mono-ui font-semibold">${esc(eng.formatClock(S.clockMin))} · ${esc(eng.getWatchLabel())}</span>
           <span class="px-2.5 py-1 rounded-md bg-white/5 border border-white/10 text-stone-200 text-xs">${roundTitles[S.round] || ''}</span>
@@ -245,7 +245,7 @@
         </main>
 
         <!-- 右侧情报与拓扑面板 -->
-        <aside class="w-full lg:w-[390px] xl:w-[420px] shrink-0 bg-[#0b0c10]/88 backdrop-blur-xl flex flex-col min-h-0 max-h-[42vh] lg:max-h-none overflow-y-auto scroll-thin p-4 space-y-4">
+        <aside class="w-full lg:w-[390px] xl:w-[420px] shrink-0 bg-[#0b0c10]/95 flex flex-col min-h-0 max-h-[42vh] lg:max-h-none overflow-y-auto scroll-thin p-4 space-y-4">
           ${isPrologue
             ? renderPrologueSidebar(S)
             : `${renderTopologyMap(S)}${renderInventoryAndDocs(S)}${renderNpcRoster(S)}`}
@@ -302,7 +302,7 @@
       const pSrc = item.portrait ? resolvePortrait(item.portrait, item.emotion || 'calm') : '';
       return `
       <div class="flex gap-3 p-3 rounded-xl bg-white/[0.04] border border-white/10${anim}">
-        ${pSrc ? `<img src="${pSrc}" alt="" class="w-11 h-14 object-cover rounded-lg border border-white/15 shrink-0" />` : ''}
+        ${pSrc ? `<img src="${pSrc}" referrerPolicy="no-referrer" onerror="window.UI.onPortraitError(this)" alt="" class="w-11 h-14 object-cover rounded-lg border border-white/15 shrink-0 bg-[#141311]" />` : ''}
         <div class="min-w-0 flex-1">
           <div class="flex items-center justify-between text-[11px] text-amber-300/90 font-medium">
             <span>${esc(item.speaker || '')}</span>
@@ -531,7 +531,7 @@
           const pSrc = resolvePortrait(n.id, n.alive ? n.emotion : 'injured');
           return `
           <div class="flex items-center gap-2 p-1.5 rounded-lg border ${n.alive ? 'bg-white/[0.025] border-white/10' : 'bg-rose-950/25 border-rose-500/30 opacity-60'}">
-            ${pSrc ? `<img src="${pSrc}" alt="" class="w-8 h-10 object-cover rounded border border-white/15 shrink-0 ${n.alive ? '' : 'grayscale'}" />` : ''}
+            ${pSrc ? `<img src="${pSrc}" referrerPolicy="no-referrer" onerror="window.UI.onPortraitError(this)" alt="" class="w-8 h-10 object-cover rounded border border-white/15 shrink-0 bg-[#141311] ${n.alive ? '' : 'grayscale'}" />` : ''}
             <div class="min-w-0 flex-1">
               <div class="text-[11px] font-medium text-stone-100 truncate">${esc(n.name)} <span class="text-[9px] text-stone-500">${esc(n.code)}</span></div>
               <div class="text-[10px] ${n.alive ? 'text-stone-400' : 'text-rose-300'} truncate">
@@ -557,7 +557,7 @@
   function renderHistoryModal(S) {
     const past = S.history.slice(0, Math.max(0, S.sceneStartIdx || 0));
     return `
-    <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="fixed inset-0 z-50 bg-black/84 flex items-center justify-center p-4">
       <div class="w-full max-w-2xl max-h-[86vh] bg-[#121318] border border-amber-500/35 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         <div class="shrink-0 p-4 border-b border-white/10 flex items-center justify-between gap-3 bg-[#171820]">
           <div>
@@ -584,7 +584,7 @@
     const bodyLines = page.dynamicBody === 'autopsy_dynamic' ? getDynamicAutopsyLines(S) : (page.body || []);
 
     return `
-    <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="fixed inset-0 z-50 bg-black/84 flex items-center justify-center p-4">
       <div class="w-full max-w-2xl max-h-[88vh] bg-[#141311] border border-amber-500/35 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         <div class="shrink-0 p-4 border-b border-white/10 flex items-center justify-between gap-3 bg-[#191714]">
           <div>
@@ -596,7 +596,7 @@
 
         <div class="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 scroll-thin">
           <div class="w-full h-44 rounded-xl overflow-hidden border border-white/10 bg-black/40">
-            <img src="${resolvePropImg(d.propKey)}" onerror="window.UI.onImgError(this)" alt="" class="w-full h-full object-cover" />
+            <img src="${resolvePropImg(d.propKey)}" referrerPolicy="no-referrer" onerror="window.UI.onImgError(this)" alt="" class="w-full h-full object-cover" />
           </div>
 
           <!-- 翻页标签 -->
@@ -639,7 +639,7 @@
     const gates = global.LUBAN_GATES;
 
     return `
-    <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="fixed inset-0 z-50 bg-black/84 flex items-center justify-center p-4">
       <div class="w-full max-w-2xl max-h-[90vh] bg-[#131418] border border-amber-500/40 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         <div class="shrink-0 p-4 border-b border-white/10 flex items-center justify-between gap-3 bg-[#181920]">
           <div>
@@ -651,7 +651,7 @@
 
         <div class="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 scroll-thin">
           <div class="w-full h-40 rounded-xl overflow-hidden border border-white/10 bg-black/40">
-            <img src="${resolvePropImg(wb.propKey)}" onerror="window.UI.onImgError(this)" alt="" class="w-full h-full object-cover" />
+            <img src="${resolvePropImg(wb.propKey)}" referrerPolicy="no-referrer" onerror="window.UI.onImgError(this)" alt="" class="w-full h-full object-cover" />
           </div>
 
           ${S.toast ? `<div class="p-3 rounded-lg bg-amber-950/60 border border-amber-400/50 text-xs text-amber-100 leading-5">${esc(S.toast)}</div>` : ''}
@@ -721,7 +721,7 @@
       : [{ id: 'M1', name: '按鲁门残谱拔除三枚锁宅钉，以湿阴灰撕毁神龛总契破正门' }];
 
     return `
-    <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="fixed inset-0 z-50 bg-black/84 flex items-center justify-center p-4">
       <div class="w-full max-w-2xl max-h-[90vh] bg-[#141418] border border-rose-500/45 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         <div class="shrink-0 p-4 border-b border-white/10 flex items-center justify-between bg-[#1b1518]">
           <div>
@@ -777,11 +777,11 @@
 
     return `
     <div class="relative w-screen h-screen overflow-hidden flex flex-col lg:flex-row text-[#e6e1d6] font-sans-ui bg-[#0e0d0f]">
-      <img src="${resolveHallImg(ed)}" alt="死考空间大厅" class="absolute inset-0 w-full h-full object-cover opacity-85 pointer-events-none select-none" />
-      <div class="absolute inset-0 bg-black/55 backdrop-blur-[2px] pointer-events-none"></div>
+      <img src="${resolveHallImg(ed)}" referrerPolicy="no-referrer" onerror="window.UI.onImgError(this)" alt="死考空间大厅" class="absolute inset-0 w-full h-full object-cover opacity-85 pointer-events-none select-none" />
+      <div class="absolute inset-0 bg-black/60 pointer-events-none"></div>
 
       <div class="relative z-10 w-full lg:w-[43%] h-[48vh] lg:h-full p-5 flex flex-col gap-4 overflow-y-auto scroll-thin">
-        <div class="bg-[#0b0d11]/92 backdrop-blur-xl border border-white/15 rounded-2xl p-5 shadow-2xl space-y-2.5">
+        <div class="bg-[#0b0d11]/95 border border-white/15 rounded-2xl p-5 shadow-2xl space-y-2.5">
           <div class="flex items-center justify-between gap-2">
             <div>
               <span class="text-[10px] tracking-[0.2em] text-amber-300/80 uppercase">死考空间 · 半圆大厅</span>
@@ -808,7 +808,7 @@
           </div>
         </div>
 
-        <div class="bg-[#0b0d11]/92 backdrop-blur-xl border border-white/15 rounded-2xl p-5 shadow-2xl space-y-2.5">
+        <div class="bg-[#0b0d11]/95 border border-white/15 rounded-2xl p-5 shadow-2xl space-y-2.5">
           <div class="flex items-center justify-between text-xs">
             <span class="font-semibold text-stone-200">72 小时休整与私人房门</span>
             <span class="font-mono-ui text-amber-300">行动点 ${S.restAP}/6</span>
@@ -834,7 +834,7 @@
       </div>
 
       <div class="relative z-10 w-full lg:w-[57%] h-[52vh] lg:h-full p-5 flex flex-col overflow-hidden">
-        <div class="flex-1 min-h-0 bg-[#0b0d11]/92 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div class="flex-1 min-h-0 bg-[#0b0d11]/95 border border-white/15 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
           <div class="shrink-0 p-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-2">
             <div>
               <div class="text-[10px] tracking-[0.2em] text-red-300 uppercase">Crimson Vortex Exchange</div>
@@ -895,6 +895,12 @@
       if (src) missingAssets.add(src);
       el.onerror = null;
       el.src = 'assets/exam1_courtyard.jpg';
+    },
+    onPortraitError(el) {
+      const src = el.getAttribute('src');
+      if (src) missingAssets.add(src);
+      el.onerror = null;
+      el.style.display = 'none';
     },
     chooseOrigin(id) { global.EXAM1_STORY.selectOrigin(id); },
     nextBeat() { E().advanceBeat(); },

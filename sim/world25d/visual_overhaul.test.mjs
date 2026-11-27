@@ -588,6 +588,9 @@ test('P2 WebGL2 immutable texture guard: external sprite/flipbook hot-swap never
         } else if (url.includes('assets/vfx/')) {
           this.naturalWidth = 1024;
           this.naturalHeight = 1024;
+        } else if (url.includes('assets/tiles/')) {
+          this.naturalWidth = 512;
+          this.naturalHeight = 512;
         } else {
           this.naturalWidth = 1024;
           this.naturalHeight = 256;
@@ -609,6 +612,7 @@ test('P2 WebGL2 immutable texture guard: external sprite/flipbook hot-swap never
   const playerTacticalTex = PS.getCharTexture('player', 'idle', 'tactical');
   const bossTex = PS.getCharTexture('inspector', 'idle');
   const fbTex = PS.getVfxFlipbookTexture('hades_cyan');
+  const tileSlateTex = PS.getTileTexture('floor_slate', 4, 4);
 
   // Lock initial WebGL2 texStorage2D dimensions upfront
   assert.equal(playerSwordTex.image.width, 256);
@@ -619,11 +623,14 @@ test('P2 WebGL2 immutable texture guard: external sprite/flipbook hot-swap never
   assert.equal(bossTex.image.height, 384);
   assert.equal(fbTex.image.width, 1024);
   assert.equal(fbTex.image.height, 1024);
+  assert.equal(tileSlateTex.image.width, 512);
+  assert.equal(tileSlateTex.image.height, 512);
 
   const tacticalDrawsBefore = playerTacticalTex.image._draws;
   const swordDrawsBefore = playerSwordTex.image._draws;
   const bossDrawsBefore = bossTex.image._draws;
   const fbDrawsBefore = fbTex.image._draws;
+  const tileDrawsBefore = tileSlateTex.image._draws;
 
   // Simulate async WebP image arrivals after first WebGL frame render
   for (const img of loadedImages) {
@@ -639,10 +646,47 @@ test('P2 WebGL2 immutable texture guard: external sprite/flipbook hot-swap never
   assert.equal(bossTex.image.height, 384);
   assert.equal(fbTex.image.width, 1024);
   assert.equal(fbTex.image.height, 1024);
+  assert.equal(tileSlateTex.image.width, 512);
+  assert.equal(tileSlateTex.image.height, 512);
 
-  // Hot-swap must apply Style-1 external sheet to both sword & default-spawn tactical player, inspector, and flipbook
+  // Hot-swap must apply Style-1 external sheet to both sword & default-spawn tactical player, inspector, flipbook, and tile
   assert.ok(playerSwordTex.image._draws > swordDrawsBefore, 'player sword sprite must hot-swap external sheet');
   assert.ok(playerTacticalTex.image._draws > tacticalDrawsBefore, 'player default tactical sprite must hot-swap external Style-1 sheet');
   assert.ok(bossTex.image._draws > bossDrawsBefore, 'inspector sprite must hot-swap external sheet');
   assert.ok(fbTex.image._draws > fbDrawsBefore, 'flipbook must hot-swap external WebP');
+  assert.ok(tileSlateTex.image._draws > tileDrawsBefore, 'Style-1 external tile must hot-swap onto immutable 512x512 canvas');
 });
+
+test('P3-A Style-1 heavy-ink scene unification: bespoke WebP tiles on disk, walkable crack/puddle decals, EdgesGeometry outlines, and willReadFrequently guard', () => {
+  const expectedTiles = ['floor_slate', 'floor_platform', 'wall_concrete'];
+  for (const key of expectedTiles) {
+    const relUrl = ASSETS.tiles && ASSETS.tiles[key];
+    assert.ok(relUrl && relUrl.endsWith(`assets/tiles/${key}.webp`), `Missing bespoke WebP tile entry for ${key}: ${relUrl}`);
+    const diskPath = path.resolve(process.cwd(), 'sim', relUrl);
+    assert.ok(fs.existsSync(diskPath), `Bespoke tile missing on disk: ${diskPath}`);
+  }
+
+  // All puddles and crack decals must stay strictly on walkable tiles and clear of rail_trench (grid === 4)
+  const specs = SceneArchitect.getZonePropSpecs();
+  const grid = StationMap.getGrid();
+  assert.ok(Array.isArray(specs.puddles) && specs.puddles.length >= 6, 'Expected Style-1 damp puddles across station zones');
+  assert.ok(Array.isArray(specs.crackDecals) && specs.crackDecals.length >= 10, 'Expected Style-1 floor fracture crack decals');
+
+  for (const p of specs.puddles) {
+    assert.equal(StationMap.isWalkable(p.x, p.z), true, `Puddle at (${p.x},${p.z}) must sit on walkable floor`);
+    assert.notEqual(grid[Math.floor(p.z)][Math.floor(p.x)], 4, `Puddle at (${p.x},${p.z}) must not enter rail_trench`);
+  }
+  for (const c of specs.crackDecals) {
+    assert.equal(StationMap.isWalkable(c.x, c.z), true, `Crack decal at (${c.x},${c.z}) must sit on walkable floor`);
+    assert.notEqual(grid[Math.floor(c.z)][Math.floor(c.x)], 4, `Crack decal at (${c.x},${c.z}) must not enter rail_trench`);
+  }
+
+  // Architectural heavy-ink silhouette outlines and Canvas2D readback optimization guards
+  const archSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/world25d/scene_architect.js'), 'utf8');
+  assert.ok(/EdgesGeometry/.test(archSrc) && /addInkOutline/.test(archSrc), 'scene_architect.js must apply EdgesGeometry ink silhouettes');
+  assert.ok(/createPillarAoTexture/.test(archSrc), 'scene_architect.js must ground cover pillars with base AO shadows');
+
+  const spriteSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/world25d/pixel_sprites.js'), 'utf8');
+  assert.ok(/willReadFrequently:\s*true/.test(spriteSrc), 'pixel_sprites.js must pass willReadFrequently: true on readback canvases');
+});
+

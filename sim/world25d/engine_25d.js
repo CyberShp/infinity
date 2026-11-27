@@ -1609,16 +1609,16 @@
     var group = new THREE.Group();
 
     // Dual-Layer Grounding Shadow (Art Bible Iron Rule 2):
-    // Layer 1: Tight high-density pure-black Contact Shadow directly under boots (eliminates float)
-    var shW = isBoss ? 1.48 : 0.96;
-    var shD = isBoss ? 0.98 : 0.62;
+    // Layer 1: Tight high-density heavy-ink Contact Shadow directly under boots (eliminates float)
+    var shW = isBoss ? 1.56 : 1.02;
+    var shD = isBoss ? 1.04 : 0.68;
     var shGeo = this.trackGeo(new THREE.PlaneGeometry(shW, shD));
     shGeo.rotateX(-Math.PI / 2);
     var shMat = this.trackMat(new THREE.MeshBasicMaterial({
       map: this.getContactShadowTex(),
       color: 0x000000,
       transparent: true,
-      opacity: isBoss ? 0.92 : 0.88,
+      opacity: isBoss ? 0.96 : 0.92,
       depthWrite: false
     }));
     var shadow = new THREE.Mesh(shGeo, shMat);
@@ -1628,8 +1628,8 @@
 
     // Layer 2: Dynamic Directional Cast Shadow pivoted at feet (rotates & elongates away from
     // player flashlight, Inspector crimson lantern, and nearest overhead station lamps!)
-    var castW = isBoss ? 1.38 : 0.88;
-    var castLen = isBoss ? 2.45 : 1.65;
+    var castW = isBoss ? 1.44 : 0.92;
+    var castLen = isBoss ? 2.55 : 1.72;
     var castGeo = this.trackGeo(new THREE.PlaneGeometry(castW, castLen));
     castGeo.rotateX(-Math.PI / 2);
     castGeo.translate(0, 0, castLen * 0.44);
@@ -1637,7 +1637,7 @@
       map: this.getCastShadowTex(),
       color: 0x020408,
       transparent: true,
-      opacity: isBoss ? 0.56 : 0.46,
+      opacity: isBoss ? 0.62 : 0.52,
       depthWrite: false
     }));
     var castShadow = new THREE.Mesh(castGeo, castMat);
@@ -1645,18 +1645,18 @@
     castShadow.rotation.y = 0.45;
     group.add(castShadow);
 
-    // Subtle role accent base ring
-    var bGeo = this.trackGeo(new THREE.RingGeometry(isBoss ? 0.58 : 0.36, isBoss ? 0.69 : 0.44, 24));
+    // Restrained tactical footing anchor (low-glare, lets boots & contact shadow lead)
+    var bGeo = this.trackGeo(new THREE.RingGeometry(isBoss ? 0.60 : 0.39, isBoss ? 0.66 : 0.43, 24));
     bGeo.rotateX(-Math.PI / 2);
     var bMat = this.trackMat(new THREE.MeshBasicMaterial({
       color: hexToInt(accentHex, 0x6fd8ea),
       transparent: true,
-      opacity: isBoss ? 0.56 : 0.34,
+      opacity: isBoss ? 0.44 : 0.20,
       side: THREE.DoubleSide,
       depthWrite: false
     }));
     var baseRing = new THREE.Mesh(bGeo, bMat);
-    baseRing.position.y = 0.065;
+    baseRing.position.y = 0.063;
     group.add(baseRing);
 
     // Angled 2.5D PBR billboard sprite plane with tangent-space Normal Map + Selective Emissive Map
@@ -1704,7 +1704,7 @@
       shadow: shadow,
       castShadow: castShadow,
       castShadowMat: castMat,
-      baseCastOpacity: isBoss ? 0.56 : 0.46
+      baseCastOpacity: isBoss ? 0.62 : 0.52
     };
   };
 
@@ -2196,19 +2196,19 @@
     var orbiterType = (charVis && charVis.orbiterType) || 'sword';
     var orbiterCount = clamp(Number(charVis && charVis.orbiterCount) || 2, 1, 4);
 
-    // Subtle under-foot build sigil
-    var sigilGeo = this.trackGeo(new THREE.PlaneGeometry(1.52, 1.52));
+    // Subtle etched under-foot build sigil (restrained idle presence, flares on cast pulse)
+    var sigilGeo = this.trackGeo(new THREE.PlaneGeometry(1.28, 1.28));
     sigilGeo.rotateX(-Math.PI / 2);
     var sigilMat = this.trackMat(new THREE.MeshBasicMaterial({
       map: this.getPropTex(sigilKey, '#6fd8ea'),
       color: primaryHex,
       transparent: true,
-      opacity: 0.28 + Math.min(0.18, (Number(charVis && charVis.tierRank) || 0) * 0.04),
+      opacity: 0.12 + Math.min(0.08, (Number(charVis && charVis.tierRank) || 0) * 0.02),
       depthWrite: false,
       blending: THREE.AdditiveBlending
     }));
     var sigilMesh = new THREE.Mesh(sigilGeo, sigilMat);
-    sigilMesh.position.y = 0.08;
+    sigilMesh.position.y = 0.066;
     auraGroup.add(sigilMesh);
 
     // Optional S-tier / A-tier / Fused harmonic tilted halo ring
@@ -5410,9 +5410,9 @@
         it.ringMat.color.setHex(statusHex);
         if (it.done) {
           it.mat.opacity = 0.22;
-          it.ringMat.opacity = 0.14;
+          it.ringMat.opacity = 0.12;
         } else {
-          it.ringMat.opacity = 0.56 + Math.sin(this.elapsedReal * 4.2 + i) * 0.14;
+          it.ringMat.opacity = 0.38 + Math.sin(this.elapsedReal * 4.2 + i) * 0.10;
         }
       } else if (it.type === 'console') {
         it.ring.rotation.z += simDt * (it.done ? 0.5 : 1.5);
@@ -5420,17 +5420,17 @@
         statusHex = it.done ? COL_DONE : (inProg ? COL_ACTIVE : COL_PENDING);
         pulseSpeed = inProg ? 3.2 : 1.8;
         it.ringMat.color.setHex(statusHex);
-        it.ringMat.opacity = it.done ? 0.36 : (inProg ? 0.85 : 0.64);
+        it.ringMat.opacity = it.done ? 0.28 : (inProg ? 0.68 : 0.46);
         if (it.beaconMat) it.beaconMat.color.setHex(statusHex);
       } else if (it.type === 'exit') {
         it.ring.rotation.z += simDt * (exitUnlocked ? 2.4 : 0.7);
         statusHex = exitUnlocked ? COL_EXIT_RDY : (this.trainInStation ? COL_ACTIVE : COL_WARNING);
         pulseSpeed = exitUnlocked ? 2.8 : 1.2;
         it.ringMat.color.setHex(statusHex);
-        it.ringMat.opacity = exitUnlocked ? (0.72 + Math.sin(this.elapsedReal * 6) * 0.22) : 0.48;
+        it.ringMat.opacity = exitUnlocked ? (0.58 + Math.sin(this.elapsedReal * 6) * 0.16) : 0.36;
         if (it.mat && it.mat.color) {
           it.mat.color.setHex(statusHex);
-          it.mat.opacity = exitUnlocked ? (0.62 + Math.sin(this.elapsedReal * 4) * 0.14) : 0.34;
+          it.mat.opacity = exitUnlocked ? (0.56 + Math.sin(this.elapsedReal * 4) * 0.12) : 0.30;
         }
       }
 
@@ -5440,10 +5440,10 @@
         } else {
           it.pulseRing.visible = true;
           var ph = (this.elapsedReal * pulseSpeed * 0.45 + i * 0.27) % 1.0;
-          var pSc = pulseBaseScale * (1.0 + ph * 0.72);
+          var pSc = pulseBaseScale * (1.0 + ph * 0.65);
           it.pulseRing.scale.set(pSc, 1, pSc);
           it.pulseMat.color.setHex(statusHex);
-          it.pulseMat.opacity = (1.0 - ph) * (exitUnlocked && it.type === 'exit' ? 0.58 : 0.42);
+          it.pulseMat.opacity = (1.0 - ph) * (exitUnlocked && it.type === 'exit' ? 0.40 : 0.24);
         }
       }
 
