@@ -436,52 +436,375 @@
   }
 
   /* --------------------------------------------------------------------------
+   * Hades 3D Flipbook Player (2x2 UV Sequence + Dark Ink Smoke & Cel Highlight)
+   * Strict spatial separation:
+   *   - layer === 'ground': 100% flattened on XZ floor (y = 0.05) + walkable clamping
+   *   - layer === 'slash' : 20-32 deg tilted 3D plane anchored to slot.radius
+   * -------------------------------------------------------------------------- */
+  var FLIPBOOK_PRESETS = {
+    hades_cyan:         { layer: 'slash',  tiltDeg: 26, duration: 0.30, cols: 2, rows: 2, primary: 0x5ce8ff, secondary: 0xf6d57a, core: 0xffffff, ink: 0x05080f },
+    hades_flame:        { layer: 'slash',  tiltDeg: 28, duration: 0.34, cols: 2, rows: 2, primary: 0xff8424, secondary: 0xc852ff, core: 0xfff8dc, ink: 0x0a050c },
+    hades_emp:          { layer: 'ground', tiltDeg: 0,  duration: 0.44, cols: 2, rows: 2, primary: 0x48c6ff, secondary: 0x9aa4ff, core: 0xf0ffff, ink: 0x050812 },
+    hades_tao_ground:   { layer: 'ground', tiltDeg: 0,  duration: 0.56, cols: 2, rows: 2, primary: 0xf5cf64, secondary: 0xfff0b2, core: 0xffffff, ink: 0x0a0805 },
+    hades_occult_chain: { layer: 'slash',  tiltDeg: 24, duration: 0.44, cols: 2, rows: 2, primary: 0xc852ff, secondary: 0xf5cf64, core: 0xf6e8ff, ink: 0x09050e },
+    hades_heal_aegis:   { layer: 'ground', tiltDeg: 0,  duration: 0.52, cols: 2, rows: 2, primary: 0x46e88a, secondary: 0x5ce8ff, core: 0xeafff2, ink: 0x050d09 }
+  };
+
+  function getFlipbookTex(name) {
+    if (INFINITY.PixelSprites && typeof INFINITY.PixelSprites.getVfxFlipbookTexture === 'function') {
+      return INFINITY.PixelSprites.getVfxFlipbookTexture(name);
+    }
+    return null;
+  }
+
+  // Clamp ground decal / ground flipbook center and radius strictly inside walkable
+  // floor tiles so cracks, scorches and runes NEVER overhang into the sunken rail trench
+  // (grid === 4, x >= 50) or float inside solid walls / outside map bounds.
+  function clampGroundDecal(mapApi, x, z, radius) {
+    var cx = Number(x) || 0;
+    var cz = Number(z) || 0;
+    var r = Math.max(0.45, Number(radius) || 1.2);
+    if (!mapApi || typeof mapApi.isWalkable !== 'function') {
+      return { x: cx, z: cz, radius: r, clamped: false, valid: true };
+    }
+    var clamped = false;
+    if (!mapApi.isWalkable(cx, cz)) {
+      if (typeof mapApi.resolveCircleWallCollision === 'function') {
+        var resolved = mapApi.resolveCircleWallCollision(cx, cz, 0.55);
+        var moveDist = Math.sqrt((resolved.x - cx) * (resolved.x - cx) + (resolved.z - cz) * (resolved.z - cz));
+        if (mapApi.isWalkable(resolved.x, resolved.z) && moveDist <= 1.65) {
+          cx = resolved.x;
+          cz = resolved.z;
+          clamped = true;
+        } else {
+          return { x: cx, z: cz, radius: 0, clamped: true, valid: false };
+        }
+      } else {
+        return { x: cx, z: cz, radius: 0, clamped: true, valid: false };
+      }
+    }
+    // Pull center inward from nearby non-walkable boundaries (rail edge / walls),
+    // accepting the pull only if it remains strictly on a nearby walkable tile.
+    if (typeof mapApi.resolveCircleWallCollision === 'function') {
+      var margin = Math.min(r * 0.72, 1.35);
+      var pulled = mapApi.resolveCircleWallCollision(cx, cz, margin);
+      if (pulled.hit) {
+        var pullDist = Math.sqrt((pulled.x - cx) * (pulled.x - cx) + (pulled.z - cz) * (pulled.z - cz));
+        if (mapApi.isWalkable(pulled.x, pulled.z) && pullDist <= margin + 0.55) {
+          cx = pulled.x;
+          cz = pulled.z;
+          clamped = true;
+        }
+      }
+    }
+    if (!mapApi.isWalkable(cx, cz)) {
+      return { x: cx, z: cz, radius: 0, clamped: true, valid: false };
+    }
+    // Measure minimum clearance along 8 rays so decal radius never extends onto non-walkable tiles
+    var minClear = r;
+    var dirs = [
+      [1, 0], [-1, 0], [0, 1], [0, -1],
+      [0.7071, 0.7071], [0.7071, -0.7071], [-0.7071, 0.7071], [-0.7071, -0.7071]
+    ];
+    for (var d = 0; d < dirs.length; d++) {
+      var dx = dirs[d][0];
+      var dz = dirs[d][1];
+      for (var step = 0.25; step <= minClear; step += 0.22) {
+        if (!mapApi.isWalkable(cx + dx * step, cz + dz * step)) {
+          minClear = Math.max(0.42, step - 0.12);
+          clamped = true;
+          break;
+        }
+      }
+    }
+    return { x: cx, z: cz, radius: minClear, clamped: clamped, valid: true };
+  }
+
+  function createFlipbookShaderMaterial(THREE, tex, opts) {
+    var cfg = opts || {};
+    var isInkPass = cfg.pass === 'ink';
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uMap: { value: tex },
+        uCols: { value: Number(cfg.cols) || 2.0 },
+        uRows: { value: Number(cfg.rows) || 2.0 },
+        uFrame: { value: 0.0 },
+        uOpacity: { value: cfg.opacity !== undefined ? cfg.opacity : (isInkPass ? 0.78 : 1.0) },
+        uPrimary: { value: linearColor(THREE, cfg.primary || 0x5ce8ff) },
+        uSecondary: { value: linearColor(THREE, cfg.secondary || 0xf6d57a) },
+        uCore: { value: linearColor(THREE, cfg.core || 0xffffff) },
+        uInk: { value: linearColor(THREE, cfg.ink || 0x05080f) },
+        uIsInk: { value: isInkPass ? 1.0 : 0.0 }
+      },
+      vertexShader: [
+        'varying vec2 vUv;',
+        'void main() {',
+        '  vUv = uv;',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'precision mediump float;',
+        'uniform sampler2D uMap;',
+        'uniform float uCols;',
+        'uniform float uRows;',
+        'uniform float uFrame;',
+        'uniform float uOpacity;',
+        'uniform vec3 uPrimary;',
+        'uniform vec3 uSecondary;',
+        'uniform vec3 uCore;',
+        'uniform vec3 uInk;',
+        'uniform float uIsInk;',
+        'varying vec2 vUv;',
+        'void main() {',
+        '  float idx = floor(clamp(uFrame, 0.0, uCols * uRows - 1.0));',
+        '  float col = mod(idx, uCols);',
+        '  float row = floor(idx / uCols);',
+        '  vec2 cellUv = vec2((col + vUv.x) / uCols, 1.0 - (row + 1.0 - vUv.y) / uRows);',
+        '  vec4 smp = texture2D(uMap, cellUv);',
+        '  float luma = max(smp.r, max(smp.g, smp.b));',
+        '  float edgeFade = smoothstep(0.0, 0.06, vUv.x) * smoothstep(1.0, 0.94, vUv.x) * smoothstep(0.0, 0.06, vUv.y) * smoothstep(1.0, 0.94, vUv.y);',
+        '  if (uIsInk > 0.5) {',
+        '    // Dark ink smoke backing pass: gives Hades cel-shaded contrast against bright/lit floors',
+        '    float inkMask = smoothstep(0.06, 0.34, luma) * edgeFade;',
+        '    if (inkMask < 0.03) discard;',
+        '    vec3 inkCol = mix(uInk, uPrimary * 0.12, smoothstep(0.45, 0.9, luma));',
+        '    gl_FragColor = vec4(inkCol, inkMask * uOpacity);',
+        '    gl_FragColor = linearToOutputTexel(gl_FragColor);',
+        '    return;',
+        '  }',
+        '  // High-luminance hard-edge cel pass: preserves authored RGB tint + crisp stepped white core',
+        '  float energyMask = smoothstep(0.10, 0.28, luma) * edgeFade;',
+        '  if (energyMask < 0.03) discard;',
+        '  float coreMask = smoothstep(0.74, 0.92, luma);',
+        '  float midBand = smoothstep(0.24, 0.62, luma);',
+        '  vec3 tinted = mix(uSecondary, uPrimary, midBand);',
+        '  vec3 colOut = mix(tinted, smp.rgb * 1.15 + tinted * 0.35, 0.55);',
+        '  colOut = mix(colOut, uCore, coreMask * 0.85);',
+        '  gl_FragColor = vec4(colOut * 1.25, energyMask * uOpacity);',
+        '  gl_FragColor = linearToOutputTexel(gl_FragColor);',
+        '}'
+      ].join('\n'),
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: isInkPass ? THREE.NormalBlending : THREE.AdditiveBlending
+    });
+  }
+
+  function spawnFlipbookVfx(session, opts) {
+    if (!session || !session.THREE || !session.scene) return null;
+    var THREE = session.THREE;
+    var cfg = opts || {};
+    var name = String(cfg.name || 'hades_cyan').trim().toLowerCase();
+    var preset = FLIPBOOK_PRESETS[name] || FLIPBOOK_PRESETS.hades_cyan;
+    var layer = cfg.layer || preset.layer || 'slash';
+    var isGround = (layer === 'ground');
+    var cols = Math.max(1, Number(cfg.cols) || preset.cols || 2);
+    var rows = Math.max(1, Number(cfg.rows) || preset.rows || 2);
+    var totalFrames = cols * rows;
+    var duration = Math.max(0.16, Number(cfg.duration) || preset.duration || 0.34);
+
+    var rawX = Number(cfg.x) || 0;
+    var rawZ = Number(cfg.z) || 0;
+    var rawRadius = Math.max(1.1, Number(cfg.radius) || 2.6);
+    var x = rawX;
+    var z = rawZ;
+    var r = rawRadius;
+
+    if (isGround) {
+      var clamped = clampGroundDecal(session.mapApi || INFINITY.StationMap, rawX, rawZ, rawRadius);
+      if (clamped.valid === false) return null;
+      x = clamped.x;
+      z = clamped.z;
+      r = Math.max(0.95, clamped.radius);
+    } else {
+      // Slash layer strictly anchored to slot.radius (never swallows protagonist silhouette)
+      r = clamp(rawRadius, 1.4, 4.2);
+    }
+
+    var tiltDeg = isGround ? 0 : clamp(Number(cfg.tiltDeg !== undefined ? cfg.tiltDeg : preset.tiltDeg), 20, 32);
+    var tiltRad = (tiltDeg * Math.PI) / 180;
+    var baseY = isGround ? 0.05 : (typeof cfg.y === 'number' ? cfg.y : 0.92);
+    var tex = getFlipbookTex(name) || getTex(session, isGround ? 'vfx_fissure_crack' : 'vfx_slash_crescent');
+    var priHex = hexToInt(cfg.primaryColor, preset.primary);
+    var secHex = hexToInt(cfg.secondaryColor, preset.secondary);
+    var coreHex = hexToInt(cfg.coreColor, preset.core);
+    var inkHex = hexToInt(cfg.inkColor, preset.ink);
+
+    var group = new THREE.Group();
+    group.position.set(x, baseY, z);
+    if (!isGround) {
+      group.rotation.y = -(Number(cfg.angle) || 0);
+    } else if (typeof cfg.angle === 'number') {
+      group.rotation.y = -cfg.angle;
+    }
+
+    var planeGeo = getUnitFloorPlane(session);
+    var diameter = r * (isGround ? 2.05 : 1.92);
+
+    // Layer A: Dark Ink Smoke Backing (rendered slightly below/behind)
+    var inkMat = createFlipbookShaderMaterial(THREE, tex, {
+      pass: 'ink',
+      cols: cols,
+      rows: rows,
+      opacity: isGround ? 0.72 : 0.68,
+      primary: priHex,
+      secondary: secHex,
+      core: coreHex,
+      ink: inkHex
+    });
+    var inkMesh = new THREE.Mesh(planeGeo, inkMat);
+    inkMesh.scale.set(diameter * 1.07, 1, diameter * 1.07);
+    if (isGround) {
+      inkMesh.position.y = 0.004;
+    } else {
+      inkMesh.position.y = -0.06;
+      inkMesh.rotation.z = tiltRad;
+    }
+    inkMesh.renderOrder = 2;
+    group.add(inkMesh);
+
+    // Layer B: High-Luminance Hard-Edge Cel Pass (rendered slightly above/forward)
+    var brightMat = createFlipbookShaderMaterial(THREE, tex, {
+      pass: 'bright',
+      cols: cols,
+      rows: rows,
+      opacity: cfg.opacity !== undefined ? cfg.opacity : 0.98,
+      primary: priHex,
+      secondary: secHex,
+      core: coreHex,
+      ink: inkHex
+    });
+    var brightMesh = new THREE.Mesh(planeGeo, brightMat);
+    brightMesh.scale.set(diameter, 1, diameter);
+    if (isGround) {
+      brightMesh.position.y = 0.009;
+    } else {
+      brightMesh.position.y = 0.02;
+      brightMesh.rotation.z = tiltRad;
+    }
+    brightMesh.renderOrder = 3;
+    group.add(brightMesh);
+
+    session.scene.add(group);
+
+    var baseBrightOpacity = cfg.opacity !== undefined ? cfg.opacity : 0.98;
+    var baseInkOpacity = isGround ? 0.72 : 0.68;
+    var spinSpeed = isGround ? (Number(cfg.spin) || 0.25) : 0;
+
+    if (Array.isArray(session.vfxList)) {
+      session.vfxList.push({
+        ttl: duration,
+        maxTtl: duration,
+        update: function (dt) {
+          this.ttl -= dt;
+          var p = 1 - clamp(this.ttl / this.maxTtl, 0, 1);
+          var frameIdx = Math.min(totalFrames - 1, Math.floor(p * totalFrames));
+          inkMat.uniforms.uFrame.value = frameIdx;
+          brightMat.uniforms.uFrame.value = frameIdx;
+          var fade = 1.0 - Math.pow(p, 2.4);
+          inkMat.uniforms.uOpacity.value = baseInkOpacity * fade;
+          brightMat.uniforms.uOpacity.value = baseBrightOpacity * fade;
+          if (isGround) {
+            if (spinSpeed) group.rotation.y += dt * spinSpeed;
+            var gsc = 0.90 + p * 0.16;
+            group.scale.set(gsc, 1, gsc);
+          } else {
+            var ssc = 0.92 + p * 0.18;
+            group.scale.set(ssc, 1, ssc);
+            brightMesh.rotation.y = (p - 0.5) * 0.30;
+            inkMesh.rotation.y = (p - 0.5) * 0.26;
+          }
+        },
+        dispose: function () {
+          session.scene.remove(group);
+          disposeIfOwned(planeGeo);
+          disposeIfOwned(inkMat);
+          disposeIfOwned(brightMat);
+        }
+      });
+    }
+
+    return {
+      name: name,
+      layer: layer,
+      y: baseY,
+      tiltDeg: tiltDeg,
+      radius: r,
+      group: group,
+      inkMesh: inkMesh,
+      brightMesh: brightMesh
+    };
+  }
+
+  /* --------------------------------------------------------------------------
    * Core VFX Spawners (14 Distinct Archetypes + Reusable Shader Primitives)
    * -------------------------------------------------------------------------- */
 
-  // 1. SWORD ARC: Sweeping 3D GLSL Crescent Blade Shader + Cross-Slash + Sparks
+  // 1. SWORD ARC: Hades 3D Tilted Flipbook + Sweeping GLSL Crescent Blade Shader + Sparks
   function spawnSlashArc(session, x, z, angle, radius, colorHex, vfx) {
     var THREE = session.THREE;
     var c = resolveVfxColors(colorHex, vfx);
-    var r = Math.max(1.8, radius || 3.2) * (0.95 + (c.intensity - 1.0) * 0.25);
+    // Strictly anchor slash radius to slot.radius (never oversize-paste over protagonist!)
+    var r = clamp(radius || 3.2, 1.8, 4.0) * (0.94 + (c.intensity - 1.0) * 0.16);
     var slashTex = getTex(session, 'vfx_slash_crescent');
 
+    // Hades 3D Flipbook slash plane (tilted 26 deg, dual ink-smoke + bright cel layers)
+    var fbName = (c.motif === 'flame_solar' || c.motif === 'blood_sanguine' || c.motif === 'occult_meme')
+      ? 'hades_flame'
+      : 'hades_cyan';
+    spawnFlipbookVfx(session, {
+      name: fbName,
+      x: x + Math.cos(angle) * (r * 0.22),
+      z: z + Math.sin(angle) * (r * 0.22),
+      y: 0.92,
+      angle: angle,
+      radius: r * 0.88,
+      layer: 'slash',
+      tiltDeg: 26,
+      duration: 0.30,
+      primaryColor: c.primary,
+      secondaryColor: c.secondary,
+      coreColor: c.core
+    });
+
     var group = new THREE.Group();
-    group.position.set(x, 0.96, z);
+    group.position.set(x, 0.90, z);
     group.rotation.y = -angle;
 
     var planeGeo = getUnitFloorPlane(session);
-    var slashSize = r * 2.15;
+    var slashSize = r * 1.92;
 
     var matMain = createSlashShaderMaterial(THREE, c.primary, c.secondary, c.core, slashTex);
     var meshMain = new THREE.Mesh(planeGeo, matMain);
     meshMain.scale.set(slashSize, 1, slashSize);
-    meshMain.rotation.z = 0.22; // Dynamic angled sword cleave
+    meshMain.rotation.z = 0.44; // ~25 deg tilted 3D cleave plane
     group.add(meshMain);
 
     // Secondary crossed counter-slash for depth & weapon-art flair
     var matEcho = createSlashShaderMaterial(THREE, c.secondary, c.primary, c.core, slashTex);
     var meshEcho = new THREE.Mesh(planeGeo, matEcho);
-    meshEcho.position.y = 0.24;
-    meshEcho.rotation.z = -0.28;
-    meshEcho.scale.set(slashSize * 0.86, 1, slashSize * 0.86);
+    meshEcho.position.y = 0.18;
+    meshEcho.rotation.z = -0.38;
+    meshEcho.scale.set(slashSize * 0.82, 1, slashSize * 0.82);
     group.add(meshEcho);
 
-    // Bright ground cutting wave
+    // Bright ground cutting wave (flattened on XZ at y = 0.05)
     var waveGeo = planeGeo;
     var waveMat = createWaveRingShaderMaterial(THREE, c.primary, c.core, 0.0);
     var waveMesh = new THREE.Mesh(waveGeo, waveMat);
-    waveMesh.scale.set(r * 2.0, 1, r * 2.0);
-    waveMesh.position.y = -0.82;
+    waveMesh.scale.set(r * 1.85, 1, r * 1.85);
+    waveMesh.position.y = -0.85;
     group.add(waveMesh);
 
     session.scene.add(group);
 
     // Directional glowing blade sparks fanning forward
-    spawnSparkBurst(session, x + Math.cos(angle) * (r * 0.55), 0.95, z + Math.sin(angle) * (r * 0.55), c.primary, Math.round(12 * c.intensity));
+    spawnSparkBurst(session, x + Math.cos(angle) * (r * 0.52), 0.92, z + Math.sin(angle) * (r * 0.52), c.primary, Math.round(12 * c.intensity));
 
-    // Organic glowing floor slash scar (NOT a flat brown ring!)
-    spawnScorchDecal(session, x + Math.cos(angle) * (r * 0.58), z + Math.sin(angle) * (r * 0.58), r * 0.58, c.primary, 2.4);
+    // Organic glowing floor slash scar clamped strictly inside walkable tiles
+    spawnScorchDecal(session, x + Math.cos(angle) * (r * 0.52), z + Math.sin(angle) * (r * 0.52), r * 0.52, c.primary, 2.4);
 
     var maxTtl = 0.34;
     session.vfxList.push({
@@ -493,12 +816,12 @@
         matMain.uniforms.uProgress.value = p;
         matMain.uniforms.uOpacity.value = 1.0 - Math.pow(p, 2.2);
         matEcho.uniforms.uProgress.value = clamp((p - 0.08) * 1.15, 0, 1);
-        matEcho.uniforms.uOpacity.value = 0.78 * (1.0 - Math.pow(p, 2.0));
+        matEcho.uniforms.uOpacity.value = 0.72 * (1.0 - Math.pow(p, 2.0));
         waveMat.uniforms.uProgress.value = p;
-        waveMat.uniforms.uOpacity.value = 0.55 * (1 - p);
+        waveMat.uniforms.uOpacity.value = 0.52 * (1 - p);
         meshMain.rotation.y = (p - 0.5) * 0.42;
         meshEcho.rotation.y = -(p - 0.5) * 0.36;
-        var sc = 0.88 + p * 0.28;
+        var sc = 0.90 + p * 0.22;
         group.scale.set(sc, 1, sc);
       },
       dispose: function () {
@@ -512,10 +835,13 @@
     });
   }
 
-  // Organic Glowing Ground Fissure / Scorch Decal (replaces ugly flat brown RingGeometry!)
+  // Organic Glowing Ground Fissure / Scorch Decal (strictly clamped inside walkable floor tiles!)
   function spawnScorchDecal(session, x, z, radius, colorHex, duration) {
     var THREE = session.THREE;
-    var r = Math.max(0.75, radius || 1.3);
+    var rawR = Math.max(0.65, radius || 1.3);
+    var safe = clampGroundDecal(session.mapApi || INFINITY.StationMap, x, z, rawR);
+    if (safe.valid === false) return;
+    var r = safe.radius;
     var fissureTex = getTex(session, 'vfx_fissure_crack');
     var geo = getUnitFloorPlane(session);
     var mat = new THREE.MeshBasicMaterial({
@@ -527,8 +853,8 @@
       blending: THREE.AdditiveBlending
     });
     var mesh = new THREE.Mesh(geo, mat);
-    mesh.scale.set(r * 2.1, 1, r * 2.1);
-    mesh.position.set(x, 0.055, z);
+    mesh.scale.set(r * 2.0, 1, r * 2.0);
+    mesh.position.set(safe.x, 0.052, safe.z);
     mesh.rotation.y = Math.random() * Math.PI * 2;
     session.scene.add(mesh);
 
@@ -639,6 +965,17 @@
 
     session.scene.add(group);
     spawnWaveRing(session, x, z, radius * 1.15, c.primary, 0.55, 0);
+    spawnFlipbookVfx(session, {
+      name: 'hades_tao_ground',
+      x: x,
+      z: z,
+      radius: radius * 0.98,
+      layer: 'ground',
+      duration: 0.62,
+      primaryColor: c.primary,
+      secondaryColor: c.secondary,
+      coreColor: c.core
+    });
 
     return {
       x: x,
@@ -691,7 +1028,18 @@
     dome.scale.set(0.25, 0.25, 0.25);
     session.scene.add(dome);
 
-    // Dual expanding ground shockwaves + crisp core flash
+    // Dual expanding ground shockwaves + Hades ground EMP flipbook + crisp core flash
+    spawnFlipbookVfx(session, {
+      name: 'hades_emp',
+      x: x,
+      z: z,
+      radius: r * 0.95,
+      layer: 'ground',
+      duration: 0.46,
+      primaryColor: c.primary,
+      secondaryColor: c.secondary,
+      coreColor: c.core
+    });
     spawnWaveRing(session, x, z, r * 1.15, c.primary, 0.65, 0);
     spawnSigilPulse(session, x, z, r * 1.05, 'hex_grid', c.secondary, 0.72);
     spawnImpactStar(session, x, 0.95, z, c.primary, 1.9, 0.26);
@@ -1068,6 +1416,17 @@
     }
 
     session.scene.add(group);
+    spawnFlipbookVfx(session, {
+      name: 'hades_heal_aegis',
+      x: x,
+      z: z,
+      radius: r * 0.85,
+      layer: 'ground',
+      duration: 0.58,
+      primaryColor: c.primary,
+      secondaryColor: c.secondary,
+      coreColor: c.core
+    });
     spawnWaveRing(session, x, z, r, c.primary, 0.78, 0);
 
     var maxTtl = 1.15;
@@ -1251,6 +1610,20 @@
     group.add(cageGroup);
 
     session.scene.add(group);
+    spawnFlipbookVfx(session, {
+      name: 'hades_occult_chain',
+      x: x1,
+      z: z1,
+      y: 1.02,
+      angle: angle,
+      radius: 2.25,
+      layer: 'slash',
+      tiltDeg: 24,
+      duration: 0.44,
+      primaryColor: c.primary,
+      secondaryColor: c.secondary,
+      coreColor: c.core
+    });
     spawnSigilPulse(session, x1, z1, 2.8, 'occult_eye', c.primary, Math.min(2.2, duration || 2.0));
     spawnImpactStar(session, x1, 1.25, z1, c.core, 2.2, 0.35);
 
@@ -1445,7 +1818,32 @@
     var c = resolveVfxColors(colorHex || '#ff9a38', vfx);
     var r = Math.max(2.6, radius || 3.8);
 
-    // Massive glowing organic ground fissure crater (crisp fiery magma contrast, zero white washout!)
+    // Massive glowing organic ground fissure crater + Hades Flame/Tao dual Flipbooks
+    spawnFlipbookVfx(session, {
+      name: 'hades_flame',
+      x: x,
+      z: z,
+      y: 0.94,
+      angle: 0,
+      radius: clamp(r * 0.92, 2.0, 3.8),
+      layer: 'slash',
+      tiltDeg: 28,
+      duration: 0.36,
+      primaryColor: c.primary,
+      secondaryColor: c.secondary,
+      coreColor: c.core
+    });
+    spawnFlipbookVfx(session, {
+      name: 'hades_tao_ground',
+      x: x,
+      z: z,
+      radius: r * 0.96,
+      layer: 'ground',
+      duration: 0.56,
+      primaryColor: c.primary,
+      secondaryColor: c.secondary,
+      coreColor: c.core
+    });
     spawnScorchDecal(session, x, z, r * 1.12, c.primary, 3.8);
     spawnWaveRing(session, x, z, r * 1.32, c.primary, 0.58, 0);
     spawnImpactStar(session, x, 0.72, z, c.secondary, 2.0, 0.25);
@@ -1944,6 +2342,9 @@
   INFINITY.VfxStudio = {
     resolveVfxColors: resolveVfxColors,
     ARCHETYPE_VFX_SIGNATURE: ARCHETYPE_VFX_SIGNATURE,
+    FLIPBOOK_PRESETS: FLIPBOOK_PRESETS,
+    clampGroundDecal: clampGroundDecal,
+    spawnFlipbookVfx: spawnFlipbookVfx,
     spawnSlashArc: spawnSlashArc,
     spawnScorchDecal: spawnScorchDecal,
     buildWardCircle: buildWardCircle,

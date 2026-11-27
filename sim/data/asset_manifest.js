@@ -60,9 +60,53 @@
    */
   var TILES = {};
 
-  // Optional external icon & sprite overrides (zero-404 fallback to procedural synth)
+  // Optional external icon overrides (zero-404 fallback to procedural synth)
   var ICONS = {};
-  var SPRITES = {};
+
+  // Style-1 heavy-ink 4x1 horizontal transparent WebP character sprite sheets
+  // Frame order: [idle, walk1, walk2, action]. Missing files silently fall back to procedural canvases.
+  var SPRITES = {
+    player: {
+      sheet: 'assets/sprites/player_sheet.webp',
+      normal: 'assets/sprites/player_normal.webp',
+      emissive: 'assets/sprites/player_emissive.webp'
+    },
+    yanci: {
+      sheet: 'assets/sprites/yanci_sheet.webp',
+      normal: 'assets/sprites/yanci_normal.webp',
+      emissive: 'assets/sprites/yanci_emissive.webp'
+    },
+    lujin: {
+      sheet: 'assets/sprites/lujin_sheet.webp',
+      normal: 'assets/sprites/lujin_normal.webp',
+      emissive: 'assets/sprites/lujin_emissive.webp'
+    },
+    xutan: {
+      sheet: 'assets/sprites/xutan_sheet.webp',
+      normal: 'assets/sprites/xutan_normal.webp',
+      emissive: 'assets/sprites/xutan_emissive.webp'
+    },
+    shenyan: {
+      sheet: 'assets/sprites/shenyan_sheet.webp',
+      normal: 'assets/sprites/shenyan_normal.webp',
+      emissive: 'assets/sprites/shenyan_emissive.webp'
+    },
+    inspector: {
+      sheet: 'assets/sprites/inspector_sheet.webp',
+      normal: 'assets/sprites/inspector_normal.webp',
+      emissive: 'assets/sprites/inspector_emissive.webp'
+    }
+  };
+
+  // Hades hard-edge 2x2 black-ground VFX Flipbook sheets (graceful procedural fallback if missing)
+  var VFX_FLIPBOOKS = {
+    hades_cyan: 'assets/vfx/hades_cyan.webp',
+    hades_flame: 'assets/vfx/hades_flame.webp',
+    hades_emp: 'assets/vfx/hades_emp.webp',
+    hades_tao_ground: 'assets/vfx/hades_tao_ground.webp',
+    hades_occult_chain: 'assets/vfx/hades_occult_chain.webp',
+    hades_heal_aegis: 'assets/vfx/hades_heal_aegis.webp'
+  };
 
   function resolvePath(relPath) {
     if (!relPath || typeof relPath !== 'string') return null;
@@ -99,10 +143,31 @@
     return rel ? resolvePath(rel) : null;
   }
 
-  function getSpriteUrl(id) {
+  function getSpriteSheetUrls(id) {
     if (!id) return null;
     var key = String(id).trim().toLowerCase();
-    var rel = SPRITES[key];
+    var entry = SPRITES[key];
+    if (!entry) return null;
+    if (typeof entry === 'string') {
+      var single = resolvePath(entry);
+      return single ? { sheet: single, normal: null, emissive: null } : null;
+    }
+    return {
+      sheet: entry.sheet ? resolvePath(entry.sheet) : null,
+      normal: entry.normal ? resolvePath(entry.normal) : null,
+      emissive: entry.emissive ? resolvePath(entry.emissive) : null
+    };
+  }
+
+  function getSpriteUrl(id) {
+    var urls = getSpriteSheetUrls(id);
+    return urls ? urls.sheet : null;
+  }
+
+  function getVfxFlipbookUrl(name) {
+    if (!name) return null;
+    var key = String(name).trim().toLowerCase();
+    var rel = VFX_FLIPBOOKS[key];
     return rel ? resolvePath(rel) : null;
   }
 
@@ -112,10 +177,13 @@
     tiles: TILES,
     icons: ICONS,
     sprites: SPRITES,
+    vfxFlipbooks: VFX_FLIPBOOKS,
     resolvePath: resolvePath,
     getPortraitUrl: getPortraitUrl,
     getTileUrl: getTileUrl,
     getIconUrl: getIconUrl,
-    getSpriteUrl: getSpriteUrl
+    getSpriteUrl: getSpriteUrl,
+    getSpriteSheetUrls: getSpriteSheetUrls,
+    getVfxFlipbookUrl: getVfxFlipbookUrl
   };
 })(typeof window !== 'undefined' ? window : globalThis);

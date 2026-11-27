@@ -46,10 +46,11 @@ const sandbox = loadClassicScripts([
   'sim/world25d/scene_architect.js',
   'sim/world25d/vfx_studio.js',
   'sim/world25d/combat_feel.js',
+  'sim/world25d/engine_25d.js',
   'sim/ui/icon_synth.js'
 ]);
 
-const { ArtTokens, ASSETS, SHOP_CATALOG, StationMap, PixelSprites, Skills25D, SceneArchitect, VfxStudio, CombatFeel, IconSynth } = sandbox.INFINITY;
+const { ArtTokens, ASSETS, SHOP_CATALOG, StationMap, PixelSprites, Skills25D, SceneArchitect, VfxStudio, CombatFeel, World25D, IconSynth } = sandbox.INFINITY;
 
 test('VfxStudio defines distinct visual signatures for all 14 skill archetypes', () => {
   const expectedArchetypes = [
@@ -321,4 +322,327 @@ test('P1 input guard: pausing input cancels aim preview and keyup checks isTypin
   assert.ok(pauseBlock && /cancelAimPreview\(\)/.test(pauseBlock[0]), 'setInputPaused(true) must call cancelAimPreview()');
   const keyupBlock = engSrc.match(/this\.addListener\(global,\s*'keyup'[\s\S]*?\n    \}\);/);
   assert.ok(keyupBlock && /isTypingInDom\(\)/.test(keyupBlock[0]), 'keyup aim release must check isTypingInDom() before castSlot()');
+});
+
+test('P2 AssetManifest contract: 6 Style-1 sprite sheets and 6 Hades VFX flipbooks resolve cleanly', () => {
+  const expectedSprites = ['player', 'yanci', 'lujin', 'xutan', 'shenyan', 'inspector'];
+  const expectedFlipbooks = ['hades_cyan', 'hades_flame', 'hades_emp', 'hades_tao_ground', 'hades_occult_chain', 'hades_heal_aegis'];
+
+  assert.equal(typeof ASSETS.getSpriteSheetUrls, 'function');
+  assert.equal(typeof ASSETS.getVfxFlipbookUrl, 'function');
+
+  for (const id of expectedSprites) {
+    const urls = ASSETS.getSpriteSheetUrls(id);
+    assert.ok(urls, `Missing sprite sheet entry for ${id}`);
+    assert.ok(urls.sheet.endsWith(`assets/sprites/${id}_sheet.webp`), `Bad sheet path for ${id}: ${urls.sheet}`);
+    assert.ok(urls.normal.endsWith(`assets/sprites/${id}_normal.webp`), `Bad normal path for ${id}: ${urls.normal}`);
+    assert.ok(urls.emissive.endsWith(`assets/sprites/${id}_emissive.webp`), `Bad emissive path for ${id}: ${urls.emissive}`);
+  }
+  assert.equal(ASSETS.getSpriteSheetUrls('nonexistent'), null);
+
+  for (const name of expectedFlipbooks) {
+    const url = ASSETS.getVfxFlipbookUrl(name);
+    assert.ok(url && url.endsWith(`assets/vfx/${name}.webp`), `Bad flipbook path for ${name}: ${url}`);
+    const fbCanvas = PixelSprites._buildFlipbookCanvas(name);
+    assert.equal(fbCanvas.width, 512, `Procedural flipbook fallback ${name} must be 512x512`);
+    assert.equal(fbCanvas.height, 512, `Procedural flipbook fallback ${name} must be 512x512`);
+  }
+  assert.equal(typeof PixelSprites.getVfxFlipbookTexture, 'function');
+  assert.equal(typeof PixelSprites.reloadExternalSprites, 'function');
+  assert.equal(typeof PixelSprites.reloadExternalVfx, 'function');
+});
+
+test('P2 PostFX shader defines uImpactInvert after linearToSRGB and exposes triggerImpactFrame', () => {
+  const engSrc = fs.readFileSync(path.resolve(process.cwd(), 'sim/world25d/engine_25d.js'), 'utf8');
+  assert.ok(/uniform float uImpactInvert;/.test(engSrc), 'PostFX fragment shader must declare uniform float uImpactInvert');
+  assert.ok(/uImpactInvert:\s*\{\s*value:\s*0\s*\}/.test(engSrc), 'PostFX quadMat must initialize uImpactInvert uniform');
+  assert.ok(/EngineSession\.prototype\.triggerImpactFrame/.test(engSrc), 'EngineSession must expose triggerImpactFrame()');
+  const srgbIdx = engSrc.indexOf('col = linearToSRGB(col);');
+  const impactIdx = engSrc.indexOf('if (uImpactInvert > 0.01)');
+  assert.ok(srgbIdx > 0 && impactIdx > srgbIdx, 'uImpactInvert must execute after linearToSRGB(col)');
+});
+
+test('P2 VfxStudio.spawnFlipbookVfx enforces dual-layer ink/bright rendering and ground vs 20-32 deg tilted slash planes', () => {
+  assert.equal(typeof VfxStudio.spawnFlipbookVfx, 'function');
+  assert.ok(VfxStudio.FLIPBOOK_PRESETS, 'VfxStudio.FLIPBOOK_PRESETS must exist');
+  for (const name of ['hades_cyan', 'hades_flame', 'hades_emp', 'hades_tao_ground', 'hades_occult_chain', 'hades_heal_aegis']) {
+    assert.ok(VfxStudio.FLIPBOOK_PRESETS[name], `Missing flipbook preset: ${name}`);
+  }
+
+  // Minimal mock Three.js runtime to verify actual 3D spatial hierarchy & dual-layer meshes
+  function Vec3(x = 0, y = 0, z = 0) {
+    return { x, y, z, set(nx, ny, nz) { this.x = nx; this.y = ny; this.z = nz; } };
+  }
+  const MockTHREE = {
+    DoubleSide: 2,
+    NormalBlending: 1,
+    AdditiveBlending: 2,
+    Color: class {
+      constructor(hex) { this.hex = hex; }
+      convertSRGBToLinear() { return this; }
+    },
+    PlaneGeometry: class {
+      constructor(w, h) { this.w = w; this.h = h; this.userData = {}; }
+      rotateX(a) { this.rotX = a; }
+      dispose() {}
+    },
+    ShaderMaterial: class {
+      constructor(cfg) { Object.assign(this, cfg); }
+      dispose() {}
+    },
+    Mesh: class {
+      constructor(geo, mat) {
+        this.geometry = geo;
+        this.material = mat;
+        this.position = Vec3();
+        this.rotation = Vec3();
+        this.scale = Vec3(1, 1, 1);
+      }
+    },
+    Group: class {
+      constructor() {
+        this.children = [];
+        this.position = Vec3();
+        this.rotation = Vec3();
+        this.scale = Vec3(1, 1, 1);
+      }
+      add(...objs) { this.children.push(...objs); }
+    }
+  };
+  const session = {
+    THREE: MockTHREE,
+    mapApi: StationMap,
+    scene: { objects: [], add(o) { this.objects.push(o); }, remove() {} },
+    vfxList: [],
+    trackGeo(g) { return g; }
+  };
+
+  const groundFx = VfxStudio.spawnFlipbookVfx(session, {
+    name: 'hades_tao_ground',
+    x: 49.6,
+    z: 18.5,
+    radius: 2.8,
+    layer: 'ground'
+  });
+  assert.ok(groundFx, 'Ground flipbook should spawn');
+  assert.equal(groundFx.layer, 'ground');
+  assert.equal(groundFx.y, 0.05, 'Ground flipbook must be strictly flattened at y = 0.05');
+  assert.equal(groundFx.tiltDeg, 0, 'Ground flipbook must have 0 deg tilt');
+  assert.equal(groundFx.group.children.length, 2, 'Flipbook must render dual-layer (ink backing + bright cel)');
+  assert.equal(groundFx.inkMesh.material.blending, MockTHREE.NormalBlending);
+  assert.equal(groundFx.brightMesh.material.blending, MockTHREE.AdditiveBlending);
+  assert.ok(groundFx.group.position.x + groundFx.radius <= 50.05, 'Ground flipbook must clamp clear of rail_trench (x >= 50)');
+
+  const slashFx = VfxStudio.spawnFlipbookVfx(session, {
+    name: 'hades_cyan',
+    x: 12.0,
+    z: 10.0,
+    angle: 0.4,
+    radius: 3.2,
+    layer: 'slash',
+    tiltDeg: 26
+  });
+  assert.ok(slashFx, 'Slash flipbook should spawn');
+  assert.equal(slashFx.layer, 'slash');
+  assert.ok(slashFx.tiltDeg >= 20 && slashFx.tiltDeg <= 32, `Slash tilt must stay in 20-32 deg (got ${slashFx.tiltDeg})`);
+  assert.equal(slashFx.group.children.length, 2, 'Slash flipbook must render dual-layer (ink backing + bright cel)');
+  assert.ok(session.vfxList.length === 2, 'Both flipbook animations must be scheduled on session.vfxList');
+  session.vfxList[0].update(0.15);
+  session.vfxList[1].update(0.15);
+  assert.ok(slashFx.brightMesh.material.uniforms.uFrame.value >= 1, 'Flipbook uFrame must advance during update()');
+});
+
+test('P2 Art Bible Iron Rule 1: 2.5D golden actor/Boss world heights & viewport coverage ratios', () => {
+  const dims = World25D.ACTOR_DIMENSIONS;
+  const cam = World25D.CAMERA_25D_SPEC;
+  assert.ok(dims && cam, 'World25D must expose ACTOR_DIMENSIONS and CAMERA_25D_SPEC');
+
+  assert.ok(dims.player.height >= 1.70 && dims.player.height <= 1.85, `Player height ${dims.player.height}m outside 1.70-1.85m`);
+  assert.ok(dims.squad.height >= 1.70 && dims.squad.height <= 1.85, `Squad height ${dims.squad.height}m outside 1.70-1.85m`);
+  assert.ok(dims.inspector.height >= 2.60 && dims.inspector.height <= 2.85, `Inspector height ${dims.inspector.height}m outside 2.60-2.85m`);
+
+  const bossRatio = dims.inspector.height / dims.player.height;
+  assert.ok(bossRatio >= 1.45 && bossRatio <= 1.65, `Inspector/Player height ratio ${bossRatio.toFixed(2)}x outside 1.45x-1.65x`);
+
+  // Verify camera pitch (35-45 deg) and projected viewport height coverage (11-15% player, 18-23% Boss)
+  const dy = cam.offsetY - cam.lookAtY;
+  const dz = cam.offsetZ;
+  const pitchRad = Math.atan2(dy, dz);
+  const pitchDeg = (pitchRad * 180) / Math.PI;
+  assert.ok(pitchDeg >= 35 && pitchDeg <= 45, `Camera pitch ${pitchDeg.toFixed(1)} deg outside 35-45 deg`);
+
+  const dist = Math.hypot(dy, dz);
+  const viewHeight = 2 * dist * Math.tan(((cam.fov * 0.5) * Math.PI) / 180);
+  const projFactor = Math.cos(pitchRad - cam.spriteTiltRad);
+  const playerVp = (dims.player.height * projFactor) / viewHeight;
+  const bossVp = (dims.inspector.height * projFactor) / viewHeight;
+  assert.ok(playerVp >= 0.11 && playerVp <= 0.15, `Player viewport share ${(playerVp * 100).toFixed(1)}% outside 11%-15%`);
+  assert.ok(bossVp >= 0.18 && bossVp <= 0.23, `Inspector viewport share ${(bossVp * 100).toFixed(1)}% outside 18%-23%`);
+});
+
+test('P2 Art Bible Iron Rule 4: swept knockback blocks rail_trench (grid=4) & walls, and clamps ground decals', () => {
+  assert.equal(typeof World25D.resolveSweptMovement, 'function');
+  const grid = StationMap.getGrid();
+
+  // 1. Huge knockback near Platform 0 yellow line toward sunken rail_trench (x = 50..53, grid === 4)
+  const railPush = World25D.resolveSweptMovement(StationMap, 49.2, 18.5, 53.8, 18.5, 0.56);
+  assert.equal(railPush.hit, true, 'Knockback toward rail_trench must register collision');
+  assert.equal(railPush.hitRailEdge, true, 'Knockback toward rail_trench must flag hitRailEdge');
+  assert.ok(railPush.x < 50.0, `Actor crossed into rail_trench (x=${railPush.x.toFixed(2)})`);
+  assert.equal(StationMap.isWalkable(railPush.x, railPush.z), true, 'Final position must stay strictly walkable');
+  assert.notEqual(grid[Math.floor(railPush.z)][Math.floor(railPush.x)], 4, 'Actor must never land on grid===4 rail_trench');
+
+  // 2. High-speed knockback into Corridor cover pillar (x=25..26, z=16, grid === 1)
+  const wallPush = World25D.resolveSweptMovement(StationMap, 24.3, 16.5, 28.4, 16.5, 0.42);
+  assert.equal(wallPush.hit, true, 'Knockback into pillar must register collision');
+  assert.equal(wallPush.hitWall, true, 'Knockback into pillar must flag hitWall for rebound/debris');
+  assert.ok(wallPush.x < 25.0, `Actor tunneled through pillar (x=${wallPush.x.toFixed(2)})`);
+  assert.equal(StationMap.isWalkable(wallPush.x, wallPush.z), true);
+
+  // 3. Ground decal clamping near Platform 0 edge must never overhang into rail_trench
+  const decal = VfxStudio.clampGroundDecal(StationMap, 49.7, 18.5, 2.4);
+  assert.equal(decal.valid, true, 'Walkable platform edge decal should clamp validly');
+  assert.equal(StationMap.isWalkable(decal.x, decal.z), true, 'Clamped decal center must stay walkable');
+  assert.ok(decal.x + decal.radius <= 50.05, `Ground decal overhangs rail edge (x=${decal.x.toFixed(2)}, r=${decal.radius.toFixed(2)})`);
+
+  // 4. Ground decal deep inside non-walkable rail_trench / out-of-bounds must report valid: false and never push off-map
+  const offRail = VfxStudio.clampGroundDecal(StationMap, 52.5, 18.5, 4.8);
+  assert.equal(offRail.valid, false, 'Decal deep inside rail_trench must return valid: false');
+  const offWall = VfxStudio.clampGroundDecal(StationMap, 0.2, 0.2, 3.0);
+  assert.equal(offWall.valid, false, 'Decal inside outer wall must return valid: false');
+});
+
+test('P2 WebGL2 immutable texture guard: external sprite/flipbook hot-swap never mutates canvas width/height and covers all player weaponStyles', () => {
+  const loadedImages = [];
+  const drawLog = [];
+  const mockSandbox = {
+    Math, Number, String, Object, Array, Float32Array, Uint8Array, Int32Array,
+    console, Set, Map, RegExp, parseInt, parseFloat, isNaN, isFinite, setTimeout, clearTimeout,
+    document: {
+      createElement(tag) {
+        if (tag !== 'canvas') return {};
+        const c = {
+          width: 0,
+          height: 0,
+          _draws: 0,
+          getContext() {
+            return {
+              imageSmoothingEnabled: true,
+              clearRect() {},
+              fillRect() {},
+              strokeRect() {},
+              beginPath() {},
+              closePath() {},
+              moveTo() {},
+              lineTo() {},
+              arc() {},
+              ellipse() {},
+              quadraticCurveTo() {},
+              fill() {},
+              stroke() {},
+              save() {},
+              restore() {},
+              translate() {},
+              rotate() {},
+              scale() {},
+              clip() {},
+              rect() {},
+              createLinearGradient() { return { addColorStop() {} }; },
+              createRadialGradient() { return { addColorStop() {} }; },
+              drawImage(src, ...args) {
+                c._draws += 1;
+                drawLog.push({ target: c, src, args });
+              }
+            };
+          }
+        };
+        return c;
+      }
+    },
+    THREE: {
+      LinearFilter: 1006,
+      NearestFilter: 1003,
+      LinearMipmapLinearFilter: 1008,
+      NearestMipmapLinearFilter: 1007,
+      RepeatWrapping: 1000,
+      ClampToEdgeWrapping: 1001,
+      sRGBEncoding: 3001,
+      CanvasTexture: class {
+        constructor(image) {
+          this.image = image;
+          this.needsUpdate = false;
+        }
+      }
+    },
+    Image: class MockImage {
+      constructor() {
+        this.naturalWidth = 0;
+        this.naturalHeight = 0;
+        loadedImages.push(this);
+      }
+      set src(url) {
+        this._src = url;
+        if (url.includes('inspector_')) {
+          this.naturalWidth = 1280;
+          this.naturalHeight = 384;
+        } else if (url.includes('assets/vfx/')) {
+          this.naturalWidth = 1024;
+          this.naturalHeight = 1024;
+        } else {
+          this.naturalWidth = 1024;
+          this.naturalHeight = 256;
+        }
+      }
+      get src() { return this._src; }
+    }
+  };
+  mockSandbox.window = mockSandbox;
+  mockSandbox.globalThis = mockSandbox;
+  vm.createContext(mockSandbox);
+  for (const rel of ['sim/data/art_tokens.js', 'sim/data/asset_manifest.js', 'sim/world25d/pixel_sprites.js']) {
+    const code = fs.readFileSync(path.resolve(process.cwd(), rel), 'utf8');
+    vm.runInContext(code, mockSandbox, { filename: rel });
+  }
+
+  const PS = mockSandbox.INFINITY.PixelSprites;
+  const playerSwordTex = PS.getCharTexture('player', 'idle', 'sword');
+  const playerTacticalTex = PS.getCharTexture('player', 'idle', 'tactical');
+  const bossTex = PS.getCharTexture('inspector', 'idle');
+  const fbTex = PS.getVfxFlipbookTexture('hades_cyan');
+
+  // Lock initial WebGL2 texStorage2D dimensions upfront
+  assert.equal(playerSwordTex.image.width, 256);
+  assert.equal(playerSwordTex.image.height, 256);
+  assert.equal(playerTacticalTex.image.width, 256);
+  assert.equal(playerTacticalTex.image.height, 256);
+  assert.equal(bossTex.image.width, 320);
+  assert.equal(bossTex.image.height, 384);
+  assert.equal(fbTex.image.width, 1024);
+  assert.equal(fbTex.image.height, 1024);
+
+  const tacticalDrawsBefore = playerTacticalTex.image._draws;
+  const swordDrawsBefore = playerSwordTex.image._draws;
+  const bossDrawsBefore = bossTex.image._draws;
+  const fbDrawsBefore = fbTex.image._draws;
+
+  // Simulate async WebP image arrivals after first WebGL frame render
+  for (const img of loadedImages) {
+    if (typeof img.onload === 'function') img.onload();
+  }
+
+  // Dimensions MUST stay strictly immutable after external WebP hot-swap!
+  assert.equal(playerSwordTex.image.width, 256);
+  assert.equal(playerSwordTex.image.height, 256);
+  assert.equal(playerTacticalTex.image.width, 256);
+  assert.equal(playerTacticalTex.image.height, 256);
+  assert.equal(bossTex.image.width, 320);
+  assert.equal(bossTex.image.height, 384);
+  assert.equal(fbTex.image.width, 1024);
+  assert.equal(fbTex.image.height, 1024);
+
+  // Hot-swap must apply Style-1 external sheet to both sword & default-spawn tactical player, inspector, and flipbook
+  assert.ok(playerSwordTex.image._draws > swordDrawsBefore, 'player sword sprite must hot-swap external sheet');
+  assert.ok(playerTacticalTex.image._draws > tacticalDrawsBefore, 'player default tactical sprite must hot-swap external Style-1 sheet');
+  assert.ok(bossTex.image._draws > bossDrawsBefore, 'inspector sprite must hot-swap external sheet');
+  assert.ok(fbTex.image._draws > fbDrawsBefore, 'flipbook must hot-swap external WebP');
 });

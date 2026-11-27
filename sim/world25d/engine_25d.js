@@ -23,15 +23,121 @@
   var HUD_TICK_INTERVAL = 0.1; // ~10 Hz
   var INTERACT_RANGE = 2.4;
 
-  // Dark-horror lighting: actors are lit by the scene; only emissive-map accents
-  // (visors, blades, lantern) self-illuminate.
-  var ACTOR_EMISSIVE_BASE = 0.30;
-  var ACTOR_EMISSIVE_BOSS = 0.52;
+  // Dark-horror lighting: actors are lit by the scene; only selective emissive-map
+  // accents (visors, blades, lantern) self-illuminate while body fabric stays <= 0.05.
+  var ACTOR_EMISSIVE_BASE = 0.24;
+  var ACTOR_EMISSIVE_BOSS = 0.50;
+
+  // Art Bible Iron Rule 1 — 2.5D top-down golden proportions:
+  // Player/Squad world height 1.70-1.85m (~11%-15% viewport height);
+  // Inspector Boss 1.5x player height 2.60-2.85m (~18%-23% viewport height).
+  var ACTOR_DIMENSIONS = {
+    player:    { width: 1.54, height: 1.78 },
+    squad:     { width: 1.50, height: 1.75 },
+    inspector: { width: 2.24, height: 2.70 }
+  };
+
+  var CAMERA_25D_SPEC = {
+    fov: 38.0,
+    offsetY: 13.4,
+    offsetZ: 13.8,
+    lookAtY: 0.6,
+    spriteTiltRad: 0.34
+  };
 
   // Pooled station point lights: seconds to fade a slot out/in when it is reassigned.
   var LIGHT_POOL_FADE_SEC = 0.35;
   // Station fixtures within this radius of an EMP detonation black out.
   var EMP_BLACKOUT_RADIUS = 22.0;
+
+  // Sub-stepped swept collision against StationMap walls (grid=1) and rail_trench (grid=4).
+  // Prevents fast dashes, lunges or knockback from tunneling across walls or vaulting onto tracks.
+  function resolveSweptMovement(mapApi, fromX, fromZ, toX, toZ, radius) {
+    var r = (typeof radius === 'number' && radius > 0) ? radius : 0.4;
+    if (!mapApi || typeof mapApi.resolveCircleWallCollision !== 'function') {
+      return { x: toX, z: toZ, hit: false, hitWall: false, hitRailEdge: false, normalX: 0, normalZ: 0 };
+    }
+    var grid = (typeof mapApi.getGrid === 'function') ? mapApi.getGrid() : null;
+    var gridW = mapApi.GRID_W || 56;
+    var gridH = mapApi.GRID_H || 38;
+
+    function cellTypeAt(gx, gz) {
+      var ix = Math.floor(gx);
+      var iz = Math.floor(gz);
+      if (ix < 0 || iz < 0 || ix >= gridW || iz >= gridH) return 1;
+      if (grid && grid[iz] && grid[iz][ix] !== undefined) return grid[iz][ix];
+      return mapApi.isWalkable(ix, iz) ? 0 : 1;
+    }
+
+    var cx = fromX;
+    var cz = fromZ;
+    var totalDx = toX - fromX;
+    var totalDz = toZ - fromZ;
+    var totalDist = Math.sqrt(totalDx * totalDx + totalDz * totalDz);
+    var maxStep = Math.max(0.16, r * 0.45);
+    var steps = Math.max(1, Math.min(32, Math.ceil(totalDist / maxStep)));
+
+    var anyHit = false;
+    var hitWall = false;
+    var hitRailEdge = false;
+    var accNx = 0;
+    var accNz = 0;
+
+    for (var s = 1; s <= steps; s++) {
+      var stepDx = totalDx / steps;
+      var stepDz = totalDz / steps;
+      var tryX = cx + stepDx;
+      var tryZ = cz + stepDz;
+      var res = mapApi.resolveCircleWallCollision(tryX, tryZ, r);
+
+      // Extra hard guard: never allow center to end inside non-walkable / rail_trench (grid === 4)
+      var finalCell = cellTypeAt(res.x, res.z);
+      var forcedStop = false;
+      if (finalCell === 1 || finalCell === 4 || (typeof mapApi.isWalkable === 'function' && !mapApi.isWalkable(res.x, res.z))) {
+        res = { x: cx, z: cz, hit: true };
+        forcedStop = true;
+      }
+
+      if (res.hit) {
+        anyHit = true;
+        var pushX = res.x - tryX;
+        var pushZ = res.z - tryZ;
+        if (forcedStop && Math.abs(pushX) + Math.abs(pushZ) < 1e-4) {
+          pushX = -stepDx;
+          pushZ = -stepDz;
+        }
+        accNx += pushX;
+        accNz += pushZ;
+
+        // Classify whether blocked by rail_trench (grid === 4) or solid wall/pillar (grid === 1)
+        var probeLen = Math.sqrt(stepDx * stepDx + stepDz * stepDz);
+        var px = res.x + (probeLen > 1e-5 ? (stepDx / probeLen) * (r + 0.16) : 0);
+        var pz = res.z + (probeLen > 1e-5 ? (stepDz / probeLen) * (r + 0.16) : 0);
+        var probeCell = cellTypeAt(px, pz);
+        var rightCell = cellTypeAt(res.x + r + 0.16, res.z);
+        if (probeCell === 4 || (stepDx > 0.001 && rightCell === 4)) {
+          hitRailEdge = true;
+        }
+        if (probeCell === 1 || (!hitRailEdge && probeCell !== 4)) {
+          hitWall = true;
+        }
+      }
+
+      cx = res.x;
+      cz = res.z;
+    }
+
+    var nLen = Math.sqrt(accNx * accNx + accNz * accNz);
+    return {
+      x: cx,
+      z: cz,
+      hit: anyHit,
+      hitWall: hitWall,
+      hitRailEdge: hitRailEdge,
+      normalX: nLen > 1e-5 ? (accNx / nLen) : 0,
+      normalZ: nLen > 1e-5 ? (accNz / nLen) : 0
+    };
+  }
 
   function readArtTokens() {
     return global.INFINITY && global.INFINITY.ArtTokens ? global.INFINITY.ArtTokens : null;
@@ -328,6 +434,11 @@
     this.slowMoBlend = 0;
     this.lowHpBlend = 0;
     this.parryFlashTimer = 0;
+    this.impactFrameTimer = 0;
+    this.impactFrameDuration = 0.075;
+    this.puddleZones = [];
+    this.contactShadowTex = null;
+    this.castShadowTex = null;
 
     // Entities & Gameplay
     this.loadout = null;
@@ -540,7 +651,7 @@
         if (t) return t;
       } catch (_) {}
     }
-    return this.getCharTex(id, frame);
+    return null;
   };
 
   EngineSession.prototype.getPropTex = function (name, fallbackColor) {
@@ -1445,52 +1556,111 @@
   // ---------------------------------------------------------------------------
   // Actors: Player, Squad (4 Autonomous NPCs), Inspector Boss
   // ---------------------------------------------------------------------------
+  EngineSession.prototype.getContactShadowTex = function () {
+    if (this.contactShadowTex) return this.contactShadowTex;
+    var THREE = this.THREE;
+    var c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 128;
+    var ctx = c.getContext('2d');
+    var g = ctx.createRadialGradient(64, 64, 6, 64, 64, 60);
+    g.addColorStop(0.0, 'rgba(0, 0, 0, 0.96)');
+    g.addColorStop(0.50, 'rgba(0, 0, 0, 0.84)');
+    g.addColorStop(0.78, 'rgba(2, 4, 8, 0.36)');
+    g.addColorStop(1.0, 'rgba(2, 4, 8, 0.0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+    var tex = this.trackTex(new THREE.CanvasTexture(c));
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    tex.needsUpdate = true;
+    this.contactShadowTex = tex;
+    return tex;
+  };
+
+  EngineSession.prototype.getCastShadowTex = function () {
+    if (this.castShadowTex) return this.castShadowTex;
+    var THREE = this.THREE;
+    var c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 256;
+    var ctx = c.getContext('2d');
+    var g = ctx.createRadialGradient(64, 108, 10, 64, 128, 118);
+    g.addColorStop(0.0, 'rgba(2, 4, 8, 0.62)');
+    g.addColorStop(0.42, 'rgba(2, 4, 8, 0.38)');
+    g.addColorStop(0.78, 'rgba(2, 4, 8, 0.14)');
+    g.addColorStop(1.0, 'rgba(2, 4, 8, 0.0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(64, 128, 44, 114, 0, 0, Math.PI * 2);
+    ctx.fill();
+    var tex = this.trackTex(new THREE.CanvasTexture(c));
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    tex.needsUpdate = true;
+    this.castShadowTex = tex;
+    return tex;
+  };
+
   EngineSession.prototype.createActorVisual = function (id, width, height, accentHex, isBoss) {
     var THREE = this.THREE;
     var group = new THREE.Group();
 
-    // Grounded contact shadow disc + directional angled cast shadow
-    var shGeo = this.trackGeo(new THREE.CircleGeometry(isBoss ? 0.72 : 0.46, 20));
+    // Dual-Layer Grounding Shadow (Art Bible Iron Rule 2):
+    // Layer 1: Tight high-density pure-black Contact Shadow directly under boots (eliminates float)
+    var shW = isBoss ? 1.48 : 0.96;
+    var shD = isBoss ? 0.98 : 0.62;
+    var shGeo = this.trackGeo(new THREE.PlaneGeometry(shW, shD));
     shGeo.rotateX(-Math.PI / 2);
     var shMat = this.trackMat(new THREE.MeshBasicMaterial({
-      color: 0x020306,
+      map: this.getContactShadowTex(),
+      color: 0x000000,
       transparent: true,
-      opacity: 0.62,
+      opacity: isBoss ? 0.92 : 0.88,
       depthWrite: false
     }));
     var shadow = new THREE.Mesh(shGeo, shMat);
-    shadow.position.y = 0.058;
+    shadow.position.y = 0.059;
+    shadow.renderOrder = 1;
     group.add(shadow);
 
-    var castGeo = this.trackGeo(new THREE.CircleGeometry(isBoss ? 0.78 : 0.48, 18));
+    // Layer 2: Dynamic Directional Cast Shadow pivoted at feet (rotates & elongates away from
+    // player flashlight, Inspector crimson lantern, and nearest overhead station lamps!)
+    var castW = isBoss ? 1.38 : 0.88;
+    var castLen = isBoss ? 2.45 : 1.65;
+    var castGeo = this.trackGeo(new THREE.PlaneGeometry(castW, castLen));
     castGeo.rotateX(-Math.PI / 2);
+    castGeo.translate(0, 0, castLen * 0.44);
     var castMat = this.trackMat(new THREE.MeshBasicMaterial({
+      map: this.getCastShadowTex(),
       color: 0x020408,
       transparent: true,
-      opacity: 0.32,
+      opacity: isBoss ? 0.56 : 0.46,
       depthWrite: false
     }));
     var castShadow = new THREE.Mesh(castGeo, castMat);
-    castShadow.position.set(-0.32, 0.054, -0.34);
-    castShadow.scale.set(1.38, 1, 0.85);
+    castShadow.position.set(0, 0.055, 0);
     castShadow.rotation.y = 0.45;
     group.add(castShadow);
 
     // Subtle role accent base ring
-    var bGeo = this.trackGeo(new THREE.RingGeometry(isBoss ? 0.62 : 0.40, isBoss ? 0.74 : 0.49, 24));
+    var bGeo = this.trackGeo(new THREE.RingGeometry(isBoss ? 0.58 : 0.36, isBoss ? 0.69 : 0.44, 24));
     bGeo.rotateX(-Math.PI / 2);
     var bMat = this.trackMat(new THREE.MeshBasicMaterial({
       color: hexToInt(accentHex, 0x6fd8ea),
       transparent: true,
-      opacity: isBoss ? 0.62 : 0.38,
+      opacity: isBoss ? 0.56 : 0.34,
       side: THREE.DoubleSide,
       depthWrite: false
     }));
     var baseRing = new THREE.Mesh(bGeo, bMat);
-    baseRing.position.y = 0.068;
+    baseRing.position.y = 0.065;
     group.add(baseRing);
 
-    // Angled HD-2D PBR billboard sprite plane with tangent-space Normal Map + Selective Emissive Map!
+    // Angled 2.5D PBR billboard sprite plane with tangent-space Normal Map + Selective Emissive Map
+    // Low base emissive ensures actors eat cold cyan station lamps, flashlight & crimson lantern!
     var texIdle = this.getCharTex(id, 'idle');
     var normIdle = this.getCharNormalTex(id, 'idle');
     var emIdle = this.getCharEmissiveTex(id, 'idle');
@@ -1501,12 +1671,12 @@
     var pMat = this.trackMat(new THREE.MeshStandardMaterial({
       map: texIdle,
       normalMap: normIdle || null,
-      normalScale: new THREE.Vector2(1.25, 1.25),
-      emissiveMap: emIdle || texIdle,
-      emissive: 0xffffff,
+      normalScale: new THREE.Vector2(1.35, 1.35),
+      emissiveMap: emIdle || null,
+      emissive: emIdle ? 0xffffff : 0x10141c,
       emissiveIntensity: isBoss ? ACTOR_EMISSIVE_BOSS : ACTOR_EMISSIVE_BASE,
-      roughness: 0.56,
-      metalness: 0.16,
+      roughness: 0.60,
+      metalness: 0.14,
       transparent: true,
       alphaTest: 0.14,
       side: THREE.DoubleSide
@@ -1519,8 +1689,8 @@
       texelY: 1.0 / (dims.height || 128)
     });
     var sprite = new THREE.Mesh(pGeo, pMat);
-    sprite.position.y = height * 0.5 + 0.05;
-    sprite.rotation.x = -0.32;
+    sprite.position.y = height * 0.5 + 0.04;
+    sprite.rotation.x = -CAMERA_25D_SPEC.spriteTiltRad;
     group.add(sprite);
 
     this.scene.add(group);
@@ -1532,7 +1702,9 @@
       baseRing: baseRing,
       baseRingMat: bMat,
       shadow: shadow,
-      castShadow: castShadow
+      castShadow: castShadow,
+      castShadowMat: castMat,
+      baseCastOpacity: isBoss ? 0.56 : 0.46
     };
   };
 
@@ -1711,8 +1883,18 @@
     var maxSanity = Math.max(80, Number(pState.maxSanity) || 100);
 
     var charVis = (this.loadout && this.loadout.characterVisual) || {};
-    var pVis = this.createActorVisual('player', 1.68, 2.02, charVis.auraColor || '#6fd8ea', false);
+    var pVis = this.createActorVisual('player', ACTOR_DIMENSIONS.player.width, ACTOR_DIMENSIONS.player.height, charVis.auraColor || '#6fd8ea', false);
     pVis.group.position.set(pPos.x, 0, pPos.z);
+
+    // Cache wet puddle zones from SceneArchitect for footsteps water splash ripples
+    try {
+      var propSpecs = INFINITY.SceneArchitect && typeof INFINITY.SceneArchitect.getZonePropSpecs === 'function'
+        ? INFINITY.SceneArchitect.getZonePropSpecs()
+        : null;
+      this.puddleZones = (propSpecs && Array.isArray(propSpecs.puddles)) ? propSpecs.puddles : [];
+    } catch (_) {
+      this.puddleZones = [];
+    }
 
     // Personal Fresnel Hex-Geodesic Aegis Shield Dome (hidden until aegis_shield active)
     var aegisBuilt = (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.buildAegisShield === 'function')
@@ -1790,7 +1972,7 @@
       var meta = getCastMeta(sp.id);
       var zc = mapApi.getZoneCenter(sp.zone) || { x: 10, z: 10 };
       var safePos = mapApi.resolveCircleWallCollision(zc.x + sp.dx, zc.z + sp.dz, 0.4);
-      var vis = this.createActorVisual(sp.id, 1.64, 1.98, meta.accentColor, false);
+      var vis = this.createActorVisual(sp.id, ACTOR_DIMENSIONS.squad.width, ACTOR_DIMENSIONS.squad.height, meta.accentColor, false);
       vis.group.position.set(safePos.x, 0, safePos.z);
 
       var npc = {
@@ -1835,7 +2017,7 @@
     // Build Inspector Boss
     var bossCenter = mapApi.getZoneCenter('platform0') || { x: 46, z: 18 };
     var bossPos = mapApi.resolveCircleWallCollision(bossCenter.x - 2.0, bossCenter.z, 0.56);
-    var bossVis = this.createActorVisual('inspector', 2.25, 2.85, '#ff2a3c', true);
+    var bossVis = this.createActorVisual('inspector', ACTOR_DIMENSIONS.inspector.width, ACTOR_DIMENSIONS.inspector.height, '#ff2a3c', true);
     bossVis.group.position.set(bossPos.x, 0, bossPos.z);
 
     // Glowing crimson lantern orb attached to Inspector
@@ -2587,6 +2769,7 @@
         'uniform float uSlowMo;',
         'uniform float uLowHp;',
         'uniform float uFlash;',
+        'uniform float uImpactInvert;',
         'varying vec2 vUv;',
         '',
         '// Exact piecewise sRGB OETF. The RT holds linear color, so the post pass must',
@@ -2672,6 +2855,16 @@
         '    col += vec3(1.0, 0.88, 0.52) * uFlash * 0.24;',
         '  }',
         '',
+        '  // Hades / Style-1 high-contrast B&W comic Impact Frame (60-90ms on parry / heavy hit)',
+        '  if (uImpactInvert > 0.01) {',
+        '    float impLuma = dot(col, vec3(0.299, 0.587, 0.114));',
+        '    float inkCut = smoothstep(0.24, 0.50, impLuma);',
+        '    vec3 comicBw = mix(vec3(0.96, 0.97, 0.99), vec3(0.03, 0.04, 0.06), inkCut);',
+        '    float edgeFocus = smoothstep(0.28, 1.45, distSq);',
+        '    comicBw = mix(comicBw, vec3(0.02, 0.025, 0.04), edgeFocus * 0.28);',
+        '    col = mix(col, comicBw, clamp(uImpactInvert, 0.0, 1.0));',
+        '  }',
+        '',
         '  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);',
         '}'
       ].join('\n');
@@ -2685,7 +2878,8 @@
           uGlitch: { value: 0 },
           uSlowMo: { value: 0 },
           uLowHp: { value: 0 },
-          uFlash: { value: 0 }
+          uFlash: { value: 0 },
+          uImpactInvert: { value: 0 }
         },
         vertexShader: vertShader,
         fragmentShader: fragShader,
@@ -2749,6 +2943,12 @@
       u.uSlowMo.value = this.slowMoBlend;
       u.uLowHp.value = this.lowHpBlend;
       u.uFlash.value = clamp(this.parryFlashTimer / 0.22, 0, 1);
+      if (u.uImpactInvert) {
+        var impDur = Math.max(0.02, this.impactFrameDuration || 0.075);
+        u.uImpactInvert.value = this.impactFrameTimer > 0
+          ? clamp(this.impactFrameTimer / impDur, 0.45, 1.0)
+          : 0.0;
+      }
 
       // three r147 applies fog after output encoding and writes clear/background colors raw,
       // so all three are display-space values. Swap in their linear equivalents while
@@ -2982,12 +3182,15 @@
       this.checkWinLoss();
     }
 
-    // Smooth real-time decay for PostFX glitch, parry flash & inspector white hit-flash
+    // Smooth real-time decay for PostFX glitch, parry flash, impact frame & inspector white hit-flash
     if (this.glitchAmount > 0) {
       this.glitchAmount = Math.max(0, this.glitchAmount * Math.exp(-4.2 * realDt) - 0.04 * realDt);
     }
     if (this.parryFlashTimer > 0) {
       this.parryFlashTimer = Math.max(0, this.parryFlashTimer - realDt);
+    }
+    if (this.impactFrameTimer > 0) {
+      this.impactFrameTimer = Math.max(0, this.impactFrameTimer - realDt);
     }
     if (this.inspector && this.inspector.whiteFlash > 0) {
       this.inspector.whiteFlash = Math.max(0, this.inspector.whiteFlash - realDt);
@@ -3182,14 +3385,23 @@
       this.shakeIntensity *= Math.exp(-6.0 * realDt);
     }
 
-    // Elevated angled 2.5D perspective offset (0, 16.5, 13.5)
-    this.camera.position.set(this.camPos.x + sx + this.camKickX, 16.5 + sy, this.camPos.z + 13.5 + this.camKickZ);
-    this.camera.lookAt(this.camLook.x + this.camKickX * 0.35, 0.6, this.camLook.z + this.camKickZ * 0.35);
+    // Elevated angled 2.5D perspective offset calibrated to Art Bible Iron Rule 1
+    // (~42.8 deg pitch, Player ~12.6% viewport height, Inspector ~19.1% viewport height)
+    this.camera.position.set(
+      this.camPos.x + sx + this.camKickX,
+      CAMERA_25D_SPEC.offsetY + sy,
+      this.camPos.z + CAMERA_25D_SPEC.offsetZ + this.camKickZ
+    );
+    this.camera.lookAt(
+      this.camLook.x + this.camKickX * 0.35,
+      CAMERA_25D_SPEC.lookAtY,
+      this.camLook.z + this.camKickZ * 0.35
+    );
 
     // Subtle dynamic FOV modulation for Bullet-Time / Overclock + impact zoom punch
     this.camFovPunch *= Math.exp(-11.5 * realDt);
     if (Math.abs(this.camFovPunch) < 0.02) this.camFovPunch = 0;
-    var targetFov = ((this.slowMo || this.inputPaused) ? 35.8 : (p.overclockTimer > 0 ? 40.5 : 38.0)) + this.camFovPunch;
+    var targetFov = ((this.slowMo || this.inputPaused) ? 35.8 : (p.overclockTimer > 0 ? 40.5 : CAMERA_25D_SPEC.fov)) + this.camFovPunch;
     if (Math.abs(this.camera.fov - targetFov) > 0.04) {
       this.camera.fov = lerp(this.camera.fov, targetFov, 1 - Math.exp(-9.5 * realDt));
       this.camera.updateProjectionMatrix();
@@ -3199,6 +3411,287 @@
   // ---------------------------------------------------------------------------
   // Player Movement, Aim, Cooldowns & Buffs
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Impact Frame, Swept Physics Collision, Wall Bounce & Puddle Interaction
+  // ---------------------------------------------------------------------------
+  EngineSession.prototype.triggerImpactFrame = function (durationSec) {
+    var dur = clamp(Number(durationSec) || 0.075, 0.06, 0.095);
+    this.impactFrameDuration = dur;
+    this.impactFrameTimer = Math.max(this.impactFrameTimer || 0, dur);
+  };
+
+  EngineSession.prototype.moveEntityWithCollision = function (fromX, fromZ, toX, toZ, radius) {
+    return resolveSweptMovement(this.mapApi, fromX, fromZ, toX, toZ, radius);
+  };
+
+  EngineSession.prototype.isPointInPuddle = function (x, z) {
+    var list = this.puddleZones;
+    if (!list || list.length === 0) return false;
+    for (var i = 0; i < list.length; i++) {
+      var pd = list[i];
+      var dx = x - pd.x;
+      var dz = z - pd.z;
+      var cosR = Math.cos(-(pd.rot || 0));
+      var sinR = Math.sin(-(pd.rot || 0));
+      var lx = dx * cosR - dz * sinR;
+      var lz = dx * sinR + dz * cosR;
+      var rx = Math.max(0.4, (pd.sx || 2.0) * 0.48);
+      var rz = Math.max(0.4, (pd.sz || 1.5) * 0.48);
+      if ((lx * lx) / (rx * rx) + (lz * lz) / (rz * rz) <= 1.0) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  EngineSession.prototype.spawnPuddleSplash = function (x, z, isBoss) {
+    var THREE = this.THREE;
+    if (!THREE || !this.scene) return;
+    // Cold-cyan concentric water ripple + tiny water droplet scatter
+    this.spawnFootstepRipple(x, z, isBoss ? 0x8cc8e6 : 0x5ce8ff, isBoss ? 0.78 : 0.56);
+    var count = isBoss ? 8 : 5;
+    var positions = new Float32Array(count * 3);
+    var vels = [];
+    for (var i = 0; i < count; i++) {
+      var a = (i / count) * Math.PI * 2 + Math.random() * 0.5;
+      var spd = (isBoss ? 1.5 : 1.05) + Math.random() * 0.85;
+      positions[i * 3] = x + Math.cos(a) * 0.14;
+      positions[i * 3 + 1] = 0.08;
+      positions[i * 3 + 2] = z + Math.sin(a) * 0.14;
+      vels.push({ vx: Math.cos(a) * spd, vy: 1.5 + Math.random() * 1.1, vz: Math.sin(a) * spd });
+    }
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    var mat = new THREE.PointsMaterial({
+      color: 0x9cf0ff,
+      size: isBoss ? 0.16 : 0.12,
+      transparent: true,
+      opacity: 0.82,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    var pts = new THREE.Points(geo, mat);
+    this.scene.add(pts);
+    var self = this;
+    this.vfxList.push({
+      ttl: 0.30,
+      maxTtl: 0.30,
+      update: function (dt) {
+        this.ttl -= dt;
+        var attr = geo.attributes.position;
+        for (var k = 0; k < count; k++) {
+          vels[k].vy -= 9.8 * dt;
+          attr.array[k * 3] += vels[k].vx * dt;
+          attr.array[k * 3 + 1] = Math.max(0.05, attr.array[k * 3 + 1] + vels[k].vy * dt);
+          attr.array[k * 3 + 2] += vels[k].vz * dt;
+        }
+        attr.needsUpdate = true;
+        mat.opacity = 0.82 * clamp(this.ttl / this.maxTtl, 0, 1);
+      },
+      dispose: function () {
+        self.scene.remove(pts);
+        geo.dispose();
+        mat.dispose();
+      }
+    });
+  };
+
+  EngineSession.prototype.spawnWallImpactDebris = function (x, z, nx, nz) {
+    var THREE = this.THREE;
+    if (!THREE || !this.scene) return;
+    var baseAng = Math.atan2(nz || 0, nx || 1);
+    var group = new THREE.Group();
+    var chunkGeo = new THREE.DodecahedronGeometry(0.09, 0);
+    var chunkMat = new THREE.MeshStandardMaterial({
+      color: 0x626b7a,
+      roughness: 0.88,
+      metalness: 0.12,
+      transparent: true,
+      opacity: 0.96
+    });
+    var chunks = [];
+    for (var i = 0; i < 7; i++) {
+      var spread = baseAng + (Math.random() - 0.5) * 1.45;
+      var spd = 2.2 + Math.random() * 2.6;
+      var m = new THREE.Mesh(chunkGeo, chunkMat);
+      m.position.set(x, 0.55 + Math.random() * 0.75, z);
+      var sc = 0.65 + Math.random() * 0.7;
+      m.scale.set(sc, sc * 0.8, sc);
+      group.add(m);
+      chunks.push({
+        mesh: m,
+        vx: Math.cos(spread) * spd,
+        vy: 1.8 + Math.random() * 2.4,
+        vz: Math.sin(spread) * spd,
+        rx: (Math.random() - 0.5) * 14,
+        ry: (Math.random() - 0.5) * 14
+      });
+    }
+    this.scene.add(group);
+    // Concrete impact sparks bouncing off wall face
+    this.spawnSparkBurst(x + (nx || 0) * 0.15, 0.88, z + (nz || 0) * 0.15, 0xffc66e, 11);
+
+    var self = this;
+    this.vfxList.push({
+      ttl: 0.46,
+      maxTtl: 0.46,
+      update: function (dt) {
+        this.ttl -= dt;
+        var ratio = clamp(this.ttl / this.maxTtl, 0, 1);
+        chunkMat.opacity = 0.96 * ratio;
+        for (var k = 0; k < chunks.length; k++) {
+          var ch = chunks[k];
+          ch.vy -= 12.0 * dt;
+          ch.mesh.position.x += ch.vx * dt;
+          ch.mesh.position.y = Math.max(0.06, ch.mesh.position.y + ch.vy * dt);
+          ch.mesh.position.z += ch.vz * dt;
+          ch.mesh.rotation.x += ch.rx * dt;
+          ch.mesh.rotation.y += ch.ry * dt;
+        }
+      },
+      dispose: function () {
+        self.scene.remove(group);
+        chunkGeo.dispose();
+        chunkMat.dispose();
+      }
+    });
+  };
+
+  EngineSession.prototype.applyKnockbackWithWallBounce = function (actor, kbX, kbZ, scale, opts) {
+    if (!actor || (!kbX && !kbZ)) return null;
+    var factor = typeof scale === 'number' ? scale : 0.26;
+    var targetX = actor.x + (kbX || 0) * factor;
+    var targetZ = actor.z + (kbZ || 0) * factor;
+    var res = this.moveEntityWithCollision(actor.x, actor.z, targetX, targetZ, actor.radius || 0.42);
+    actor.x = res.x;
+    actor.z = res.z;
+
+    if (res.hit && res.hitWall) {
+      var impactX = res.x - res.normalX * (actor.radius || 0.42);
+      var impactZ = res.z - res.normalZ * (actor.radius || 0.42);
+      // Rebound cleanly off wall/pillar surface
+      if (Math.abs(res.normalX) + Math.abs(res.normalZ) > 0.05) {
+        var reb = this.moveEntityWithCollision(
+          actor.x,
+          actor.z,
+          actor.x + res.normalX * 0.26,
+          actor.z + res.normalZ * 0.26,
+          actor.radius || 0.42
+        );
+        actor.x = reb.x;
+        actor.z = reb.z;
+      }
+      // 35ms micro hit-stop + concrete debris sparks + impact squash
+      this.hitStopTimer = Math.max(this.hitStopTimer || 0, 0.035);
+      this.triggerActorSquash(actor, 0.76, 1.26);
+      this.spawnWallImpactDebris(impactX, impactZ, res.normalX, res.normalZ);
+      this.addCameraShake(0.16, 0.14);
+      if (opts && opts.announceWallSlam) {
+        this.spawnFloatingText(actor.x, actor.id === 'inspector' ? 2.75 : 2.15, actor.z, '撞墙震荡!', '#ffbe6b');
+      }
+    }
+    return res;
+  };
+
+  // Dynamic dual-layer shadow updater: rotates & elongates directional cast shadow away from
+  // the strongest nearby light source (player flashlight, Inspector red lantern, or station lamp).
+  EngineSession.prototype.updateActorShadows = function (actor, bobOffset) {
+    if (!actor || !actor.vis) return;
+    var bob = bobOffset || 0;
+    if (actor.vis.shadow) {
+      var shScale = 1.0 - bob * 0.55;
+      actor.vis.shadow.scale.set(shScale, 1, shScale);
+    }
+    var cast = actor.vis.castShadow;
+    if (!cast) return;
+
+    var sumDx = 0;
+    var sumDz = 0;
+    var totalW = 0;
+    var bestStrength = 0;
+
+    // 1. Player flashlight influence (casts strong directional shadows on Boss & teammates)
+    if (this.flashLight && this.player) {
+      var fx = actor.x - this.flashLight.position.x;
+      var fz = actor.z - this.flashLight.position.z;
+      var fDist = Math.sqrt(fx * fx + fz * fz);
+      if (actor.id === 'player') {
+        // Player holds flashlight forward -> cast subtle silhouette shadow behind aim direction
+        var aim = this.getAimDir();
+        sumDx += -aim.x * 0.42;
+        sumDz += -aim.z * 0.42;
+        totalW += 0.42;
+        bestStrength = Math.max(bestStrength, 0.35);
+      } else if (fDist > 0.25 && fDist < 16.0 && this.flashLight.intensity > 0.5) {
+        var fW = clamp((1.0 - fDist / 16.0) * 1.85, 0.15, 1.85);
+        sumDx += (fx / fDist) * fW;
+        sumDz += (fz / fDist) * fW;
+        totalW += fW;
+        bestStrength = Math.max(bestStrength, fW * 0.55);
+      }
+    }
+
+    // 2. Inspector's ominous crimson lantern (casts long dramatic shadows away from Boss)
+    if (this.inspector && this.inspector.alive && this.inspectorLantern && this.inspectorLantern.intensity > 0.4) {
+      var lx = actor.x - this.inspectorLantern.position.x;
+      var lz = actor.z - this.inspectorLantern.position.z;
+      var lDist = Math.sqrt(lx * lx + lz * lz);
+      if (actor.id !== 'inspector' && lDist > 0.25 && lDist < 15.5) {
+        var lW = clamp((1.0 - lDist / 15.5) * 1.95, 0.15, 1.95);
+        sumDx += (lx / lDist) * lW;
+        sumDz += (lz / lDist) * lW;
+        totalW += lW;
+        bestStrength = Math.max(bestStrength, lW * 0.6);
+      }
+    }
+
+    // 3. Nearest active overhead station lamp in pool
+    if (this.stationLightPool && this.stationLightPool.length > 0) {
+      var bestLampDist = 14.0;
+      var bestLamp = null;
+      for (var i = 0; i < this.stationLightPool.length; i++) {
+        var pl = this.stationLightPool[i];
+        if (!pl || pl.intensity < 0.25) continue;
+        var pd = dist2D(actor.x, actor.z, pl.position.x, pl.position.z);
+        if (pd < bestLampDist) {
+          bestLampDist = pd;
+          bestLamp = pl;
+        }
+      }
+      if (bestLamp) {
+        var sx = actor.x - bestLamp.position.x;
+        var sz = actor.z - bestLamp.position.z;
+        var sLen = Math.sqrt(sx * sx + sz * sz);
+        if (sLen > 0.2) {
+          var sW = clamp((1.0 - sLen / 14.0) * 1.15, 0.2, 1.15);
+          sumDx += (sx / sLen) * sW;
+          sumDz += (sz / sLen) * sW;
+          totalW += sW;
+          bestStrength = Math.max(bestStrength, clamp(sLen / 6.5, 0.25, 1.0));
+        }
+      }
+    }
+
+    // 4. Fallback station directional key light (-14, -16)
+    sumDx += -0.64 * 0.35;
+    sumDz += -0.76 * 0.35;
+    totalW += 0.35;
+
+    var dirLen = Math.sqrt(sumDx * sumDx + sumDz * sumDz);
+    var dirX = dirLen > 1e-4 ? (sumDx / dirLen) : -0.64;
+    var dirZ = dirLen > 1e-4 ? (sumDz / dirLen) : -0.76;
+
+    // Geometry extends along local +Z, so rotation.y = atan2(dirX, dirZ) points shadow along (dirX, dirZ)
+    cast.rotation.y = Math.atan2(dirX, dirZ);
+    var stretch = clamp(0.88 + bestStrength * 0.58 - bob * 0.4, 0.72, 1.62);
+    var widthScale = 1.0 - bob * 0.3;
+    cast.scale.set(widthScale, 1, stretch);
+    if (actor.vis.castShadowMat) {
+      var baseOp = actor.vis.baseCastOpacity || 0.46;
+      actor.vis.castShadowMat.opacity = clamp(baseOp * (0.72 + bestStrength * 0.35), 0.24, 0.68);
+    }
+  };
+
   EngineSession.prototype.updatePlayer = function (simDt, realDt) {
     var p = this.player;
     var isOverclock = p.overclockTimer > 0;
@@ -3359,17 +3852,27 @@
     if (p.vx !== 0 || p.vz !== 0) {
       var nx = p.x + p.vx * simDt;
       var nz = p.z + p.vz * simDt;
-      var res = this.mapApi.resolveCircleWallCollision(nx, nz, p.radius);
+      var res = this.moveEntityWithCollision(p.x, p.z, nx, nz, p.radius);
       p.x = res.x;
       p.z = res.z;
+      if (p.dashTimer > 0 && res.hit && res.hitWall) {
+        p.dashTimer = 0;
+        this.spawnWallImpactDebris(res.x - res.normalX * p.radius, res.z - res.normalZ * p.radius, res.normalX, res.normalZ);
+      }
 
       var stepDist = Math.sqrt(p.vx * p.vx + p.vz * p.vz) * simDt;
-      // Grounded wet-slate puddle ripples / boot dust
+      // Grounded wet-slate puddle splashes & boot ripples
+      var inPuddle = this.isPointInPuddle(p.x, p.z);
       p.stepRippleAccum = (p.stepRippleAccum || 0) + stepDist;
-      if (p.stepRippleAccum >= 1.35 && p.stealthTimer <= 0) {
+      var rippleStride = inPuddle ? 0.62 : 1.35;
+      if (p.stepRippleAccum >= rippleStride && p.stealthTimer <= 0) {
         p.stepRippleAccum = 0;
-        var rippleCol = isOverclock ? (p.overclockColor || 0x4df8ff) : (p.x >= 41 ? 0x9aa9be : 0x56b6cc);
-        this.spawnFootstepRipple(p.x, p.z, rippleCol, isOverclock ? 0.62 : 0.42);
+        if (inPuddle) {
+          this.spawnPuddleSplash(p.x, p.z, false);
+        } else {
+          var rippleCol = isOverclock ? (p.overclockColor || 0x4df8ff) : (p.x >= 41 ? 0x9aa9be : 0x56b6cc);
+          this.spawnFootstepRipple(p.x, p.z, rippleCol, isOverclock ? 0.62 : 0.42);
+        }
       }
 
       // Footsteps & acoustic ripples
@@ -3475,7 +3978,7 @@
       if (tex && actor.vis.mat.map !== tex) {
         actor.vis.mat.map = tex;
         if (norm) actor.vis.mat.normalMap = norm;
-        actor.vis.mat.emissiveMap = emTex || tex;
+        actor.vis.mat.emissiveMap = emTex || null;
         actor.vis.mat.needsUpdate = true;
       }
     }
@@ -3502,19 +4005,12 @@
     actor.leanZ = lerp(actor.leanZ || 0, targetLean, 1 - Math.exp(-12 * safeDt));
     actor.vis.sprite.rotation.z = actor.leanZ;
 
-    // Subtle grounded walk bob & contact/cast shadow sync
-    var spriteH = (actor.id === 'inspector' ? 2.85 : (actor.id === 'player' ? 2.02 : 1.98));
-    var baseY = spriteH * 0.5 + 0.05;
-    var bobOffset = moving ? Math.abs(Math.sin(actor.animTimer * Math.PI)) * 0.085 : 0;
+    // Subtle grounded walk bob & dynamic dual-layer shadow sync
+    var spriteH = (actor.id === 'inspector' ? ACTOR_DIMENSIONS.inspector.height : (actor.id === 'player' ? ACTOR_DIMENSIONS.player.height : ACTOR_DIMENSIONS.squad.height));
+    var baseY = spriteH * 0.5 + 0.04;
+    var bobOffset = moving ? Math.abs(Math.sin(actor.animTimer * Math.PI)) * 0.075 : 0;
     actor.vis.sprite.position.y = baseY + bobOffset + (actor.squashY - 1) * (spriteH * 0.35);
-    if (actor.vis.shadow) {
-      var shScale = 1.0 - bobOffset * 0.65;
-      actor.vis.shadow.scale.set(shScale, shScale, 1);
-    }
-    if (actor.vis.castShadow) {
-      var cScale = 1.0 - bobOffset * 0.45;
-      actor.vis.castShadow.scale.set(1.38 * cScale, 1, 0.85 * cScale);
-    }
+    this.updateActorShadows(actor, bobOffset);
 
     // Hit flash / status emissive tint (pure-white impact flash takes top priority!)
     if (actor.whiteFlash > 0) {
@@ -3798,6 +4294,7 @@
           });
           this.hitStopTimer = 0.08;
           this.parryFlashTimer = 0.24;
+          this.triggerImpactFrame(0.085);
           this.camFovPunch = -3.4;
           this.addCameraShake(0.48, 0.34);
           this.addCameraKick(dir.x * 0.62, dir.z * 0.62);
@@ -3899,8 +4396,9 @@
             var frac = ai / 5;
             this.spawnAfterimage(lerp(ox, bx, frac), lerp(oz, bz, frac), 'player', p.facingLeft, ai % 2 === 0 ? colorHex : secHex, 0.46 - frac * 0.06, 'dash');
           }
-          p.x = bx;
-          p.z = bz;
+          var safeBlink = this.mapApi.resolveCircleWallCollision(bx, bz, p.radius);
+          p.x = safeBlink.x;
+          p.z = safeBlink.z;
           p.invulnTimer = 0.55;
           this.triggerActorSquash(p, 0.82, 1.24);
           this.camFovPunch = -2.2;
@@ -3929,6 +4427,18 @@
         }
         if (p.shieldRingMat && p.shieldRingMat.color) p.shieldRingMat.color.setHex(secHex);
         this.spawnShockRing(p.x, p.z, 2.4, colorHex, 0.40);
+        if (INFINITY.VfxStudio && typeof INFINITY.VfxStudio.spawnFlipbookVfx === 'function') {
+          INFINITY.VfxStudio.spawnFlipbookVfx(this, {
+            name: 'hades_heal_aegis',
+            x: p.x,
+            z: p.z,
+            radius: 2.2,
+            layer: 'ground',
+            duration: 0.46,
+            primaryColor: colorHex,
+            secondaryColor: secHex
+          });
+        }
         playSfxSafe('ward_place');
         this.spawnFloatingText(p.x, 2.1, p.z, (sl.name || '护盾') + ' +' + p.shieldHp, vfx.primaryColor || '#66e8ff');
         sl.cooldownLeft = sl.cooldownMax;
@@ -5401,10 +5911,17 @@
       npc.vx = vx;
       npc.vz = vz;
       if (Math.abs(vx) + Math.abs(vz) > 0.05) {
-        var step = this.mapApi.resolveCircleWallCollision(npc.x + vx * simDt, npc.z + vz * simDt, npc.radius);
+        var step = this.moveEntityWithCollision(npc.x, npc.z, npc.x + vx * simDt, npc.z + vz * simDt, npc.radius);
         npc.x = step.x;
         npc.z = step.z;
         if (Math.abs(vx) > 0.25) npc.facingLeft = vx < 0;
+        if (this.isPointInPuddle(npc.x, npc.z)) {
+          npc.puddleAccum = (npc.puddleAccum || 0) + Math.sqrt(vx * vx + vz * vz) * simDt;
+          if (npc.puddleAccum >= 0.85) {
+            npc.puddleAccum = 0;
+            this.spawnPuddleSplash(npc.x, npc.z, false);
+          }
+        }
       }
 
       // Role special actions + NPC signature visual VFX!
@@ -5564,18 +6081,29 @@
       return;
     }
 
-    // Active Lunge Dash execution
+    // Active Lunge Dash execution (swept collision + wall bounce + walkable-clamped shears scar)
     if (ins.lungeActive > 0) {
       ins.lungeActive = Math.max(0, ins.lungeActive - simDt);
       var dashSpeed = 19.0;
       var nx = ins.x + ins.lungeDirX * dashSpeed * simDt;
       var nz = ins.z + ins.lungeDirZ * dashSpeed * simDt;
-      var step = mapApi.resolveCircleWallCollision(nx, nz, ins.radius);
+      var step = this.moveEntityWithCollision(ins.x, ins.z, nx, nz, ins.radius);
       ins.x = step.x;
       ins.z = step.z;
       this.enforceWardBlockOnInspector();
       // Crimson phantom wake + boot sparks during execution lunge
       this.spawnAfterimage(ins.x, ins.z, 'inspector', ins.facingLeft, 0xff2238, 0.24, 'dash');
+      if (step.hit && step.hitWall) {
+        ins.lungeActive = 0;
+        ins.stunTimer = Math.max(ins.stunTimer, 0.55);
+        this.hitStopTimer = Math.max(this.hitStopTimer || 0, 0.035);
+        this.triggerActorSquash(ins, 0.78, 1.24);
+        this.spawnWallImpactDebris(step.x - step.normalX * ins.radius, step.z - step.normalZ * ins.radius, step.normalX, step.normalZ);
+        this.addCameraShake(0.24, 0.18);
+        this.spawnScorchDecal(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 1.9, 0xff2238);
+      } else if (ins.lungeActive <= 0) {
+        this.spawnScorchDecal(ins.x, ins.z, Math.atan2(ins.lungeDirZ, ins.lungeDirX), 1.8, 0xff2238);
+      }
 
       // Check damage to player or squad during lunge
       if (!ins.lungeHitDone) {
@@ -5759,11 +6287,18 @@
     if (d > 0.15) {
       var mx = (dx / d) * baseSpeed;
       var mz = (dz / d) * baseSpeed;
-      var res = mapApi.resolveCircleWallCollision(ins.x + mx * simDt, ins.z + mz * simDt, ins.radius);
+      var res = this.moveEntityWithCollision(ins.x, ins.z, ins.x + mx * simDt, ins.z + mz * simDt, ins.radius);
       ins.x = res.x;
       ins.z = res.z;
       if (Math.abs(mx) > 0.2) ins.facingLeft = mx < 0;
       moving = true;
+      if (this.isPointInPuddle(ins.x, ins.z)) {
+        ins.puddleAccum = (ins.puddleAccum || 0) + baseSpeed * simDt;
+        if (ins.puddleAccum >= 0.78) {
+          ins.puddleAccum = 0;
+          this.spawnPuddleSplash(ins.x, ins.z, true);
+        }
+      }
     }
 
     // Physical Ward Circle blocking enforcement!
@@ -5789,6 +6324,9 @@
     if (opts && opts.playerImpact) {
       ins.whiteFlash = Math.max(ins.whiteFlash || 0, 0.09);
       this.hitStopTimer = Math.max(this.hitStopTimer, opts.hitStop || 0.05);
+      if (isCrit) {
+        this.triggerImpactFrame(0.068);
+      }
       if (kbX || kbZ) {
         var kLen = Math.max(0.01, Math.sqrt((kbX || 0) * (kbX || 0) + (kbZ || 0) * (kbZ || 0)));
         this.addCameraKick(((kbX || 0) / kLen) * 0.42, ((kbZ || 0) / kLen) * 0.42);
@@ -5796,9 +6334,7 @@
     }
 
     if (kbX || kbZ) {
-      var kbRes = this.mapApi.resolveCircleWallCollision(ins.x + (kbX || 0) * 0.28, ins.z + (kbZ || 0) * 0.28, ins.radius);
-      ins.x = kbRes.x;
-      ins.z = kbRes.z;
+      this.applyKnockbackWithWallBounce(ins, kbX, kbZ, 0.28, { announceWallSlam: !!(opts && opts.playerImpact) });
       this.enforceWardBlockOnInspector();
     }
 
@@ -5858,6 +6394,7 @@
     this.stats.inspectorDefeated = true;
     this.stats.inspectorSealed = !!sealed;
     this.hitStopTimer = 0.14;
+    this.triggerImpactFrame(0.09);
     this.camFovPunch = -4.2;
     this.addCameraShake(0.65, 0.48);
     var finCol = sealed ? 0xf0c46c : 0xff3b4f;
@@ -5958,9 +6495,7 @@
     if (kbX || kbZ) {
       var kLenP = Math.max(0.01, Math.sqrt((kbX || 0) * (kbX || 0) + (kbZ || 0) * (kbZ || 0)));
       this.addCameraKick(((kbX || 0) / kLenP) * 0.48, ((kbZ || 0) / kLenP) * 0.48);
-      var res = this.mapApi.resolveCircleWallCollision(p.x + kbX * 0.22, p.z + kbZ * 0.22, p.radius);
-      p.x = res.x;
-      p.z = res.z;
+      this.applyKnockbackWithWallBounce(p, kbX, kbZ, 0.22, null);
     }
 
     this.spawnFloatingText(p.x, 2.3, p.z, '-' + dmg + ' HP', '#ff3b4f');
@@ -6380,8 +6915,9 @@
   EngineSession.prototype.spawnAfterimage = function (x, z, actorId, facingLeft, colorHex, duration, frame) {
     var THREE = this.THREE;
     var isBoss = actorId === 'inspector';
+    var dim = isBoss ? ACTOR_DIMENSIONS.inspector : (actorId === 'player' ? ACTOR_DIMENSIONS.player : ACTOR_DIMENSIONS.squad);
     var tex = this.getCharTex(actorId, frame || 'action');
-    var geo = new THREE.PlaneGeometry(isBoss ? 2.15 : 1.65, isBoss ? 2.8 : 2.0);
+    var geo = new THREE.PlaneGeometry(dim.width, dim.height);
     var mat = new THREE.MeshBasicMaterial({
       map: tex,
       color: colorHex || 0x4df8ff,
@@ -6392,8 +6928,8 @@
       blending: THREE.AdditiveBlending
     });
     var mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, isBoss ? 1.4 : 1.04, z);
-    mesh.rotation.x = -0.32;
+    mesh.position.set(x, dim.height * 0.5 + 0.04, z);
+    mesh.rotation.x = -CAMERA_25D_SPEC.spriteTiltRad;
     mesh.scale.x = facingLeft ? -1 : 1;
     this.scene.add(mesh);
 
@@ -7068,7 +7604,7 @@
         tag.el.style.display = 'none';
         continue;
       }
-      var yOff = tid === 'inspector' ? 2.85 : 2.12;
+      var yOff = tid === 'inspector' ? (ACTOR_DIMENSIONS.inspector.height + 0.14) : (ACTOR_DIMENSIONS.squad.height + 0.18);
       var scr = this.projectToScreen(actor.x, yOff, actor.z);
       var visibleInFog = (tid !== 'inspector') || (dist2D(this.player.x, this.player.z, actor.x, actor.z) < 18 || this.reconRevealTimer > 0);
       if (!scr || !visibleInFog || scr.x < -60 || scr.x > w + 60 || scr.y < -40 || scr.y > h + 40) {
@@ -7487,6 +8023,8 @@
     this.fogGrid = null;
     this.fogRayPts = null;
     this.stationBulbMat = null;
+    this.contactShadowTex = null;
+    this.castShadowTex = null;
     this.scene = null;
     this.camera = null;
     this.speechBubbles = Object.create(null);
@@ -7594,8 +8132,12 @@
       return postFxGlobalEnabled;
     },
 
+    ACTOR_DIMENSIONS: ACTOR_DIMENSIONS,
+    CAMERA_25D_SPEC: CAMERA_25D_SPEC,
+    resolveSweptMovement: resolveSweptMovement,
+
     _getSession: function () {
       return activeSession;
     }
   };
-})(window);
+})(typeof window !== 'undefined' ? window : globalThis);

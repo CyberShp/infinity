@@ -1764,10 +1764,9 @@
       var luma = r * 0.299 + g * 0.587 + b * 0.114;
 
       // Preserve glowing accents (weapons, visors, cyan/amber/crimson eyes, storm lantern) at high emissive,
-      // while keeping coats/skin at a subtle 0.22 floor so dynamic PBR normal lighting truly sculpts the body!
+      // while keeping coats/skin <= 0.05 so scene lighting (cold cyan lamps, flashlight, crimson lantern) sculpts the figure.
       var isGlowAccent = (maxC > 0.72 && sat > 0.42) || (luma > 0.90) || (isBoss && r > 0.75 && g < 0.38);
-      // Body floor kept very low so scene lighting (flashlight, zone lamps, lantern) sculpts the figure.
-      var weight = isGlowAccent ? 1.0 : 0.08;
+      var weight = isGlowAccent ? 1.0 : 0.05;
 
       dst[i]     = Math.min(255, Math.round(src[i] * weight));
       dst[i + 1] = Math.min(255, Math.round(src[i + 1] * weight));
@@ -2439,6 +2438,578 @@
     }
   }
 
+  /* --------------------------------------------------------------------------
+   * External Sprite Sheet (4x1 Style-1 WebP) & 2x2 Hades VFX Flipbook Loader
+   * Async hot-swap with silent procedural fallback (zero runtime errors if missing)
+   * -------------------------------------------------------------------------- */
+  var FRAME_TO_SHEET_INDEX = {
+    idle: 0,
+    idle2: 0,
+    channel: 0,
+    walk1: 1,
+    walk2: 2,
+    action: 3,
+    dash: 3,
+    hurt: 3
+  };
+
+  var charTexRegistries = Object.create(null); // cid -> { albedo:[], normal:[], emissive:[] }
+  var charExternalState = Object.create(null); // cid -> { sheetStatus, normalStatus, emissiveStatus, sheetImg, normalImg, emissiveImg }
+  var flipbookEntries = Object.create(null);   // name -> { name, canvas, tex, loadedUrl, status }
+
+  // Fixed immutable GPU texture dimensions for WebGL2 texStorage2D compatibility:
+  // External WebP hot-swaps draw into these locked canvases without ever mutating width/height.
+  var FLIPBOOK_TEX_SIZE = 1024;
+
+  function getFixedCharCanvasSize(cid) {
+    if (cid === 'inspector') return { width: 320, height: 384 };
+    return { width: 256, height: 256 };
+  }
+
+  function shouldUseExternalSprite(cid, weaponStyle) {
+    // Until dedicated per-weapon Style-1 heavy-ink sheets are produced, all player weaponStyles
+    // (including default-spawn 'tactical', 'sword', 'cyber', 'occult') use Style-1 player_sheet.webp
+    // so the player never regresses to legacy chibi procedural sprites next to Lineup-A cast/Boss.
+    void cid;
+    void weaponStyle;
+    return true;
+  }
+
+  function cloneCanvasToFixedSize(src, targetW, targetH) {
+    var w = Math.max(16, Number(targetW) || (src && src.width) || 256);
+    var h = Math.max(16, Number(targetH) || (src && src.height) || 256);
+    var c = makeCanvas(w, h);
+    var ctx = c.getContext ? c.getContext('2d') : null;
+    if (ctx && src && typeof ctx.drawImage === 'function') {
+      try {
+        ctx.imageSmoothingEnabled = true;
+        if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(src, 0, 0, w, h);
+      } catch (_) {}
+    }
+    return c;
+  }
+
+  function resolveExternalSpriteUrls(cid) {
+    try {
+      if (INFINITY.ASSETS && typeof INFINITY.ASSETS.getSpriteSheetUrls === 'function') {
+        return INFINITY.ASSETS.getSpriteSheetUrls(cid);
+      }
+      if (INFINITY.ASSETS && typeof INFINITY.ASSETS.getSpriteUrl === 'function') {
+        var s = INFINITY.ASSETS.getSpriteUrl(cid);
+        if (s) return { sheet: s, normal: null, emissive: null };
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function resolveExternalFlipbookUrl(name) {
+    try {
+      if (INFINITY.ASSETS && typeof INFINITY.ASSETS.getVfxFlipbookUrl === 'function') {
+        var url = INFINITY.ASSETS.getVfxFlipbookUrl(name);
+        if (typeof url === 'string' && url.length > 0) return url;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function getCharRegistry(cid) {
+    if (!charTexRegistries[cid]) {
+      charTexRegistries[cid] = { albedo: [], normal: [], emissive: [] };
+    }
+    return charTexRegistries[cid];
+  }
+
+  function getCharExtState(cid) {
+    if (!charExternalState[cid]) {
+      charExternalState[cid] = {
+        sheetStatus: 'idle',
+        normalStatus: 'idle',
+        emissiveStatus: 'idle',
+        sheetImg: null,
+        normalImg: null,
+        emissiveImg: null
+      };
+    }
+    return charExternalState[cid];
+  }
+
+  function applyLinearSpriteFiltering(tex) {
+    var THREE = global.THREE;
+    if (!tex || !THREE) return;
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+  }
+
+  function sliceSheetImageIntoEntry(img, entry) {
+    if (!img || !entry || !entry.canvas) return false;
+    var nw = img.naturalWidth || img.width || 0;
+    var nh = img.naturalHeight || img.height || 0;
+    if (nw < 4 || nh < 4) return false;
+
+    // Never resize entry.canvas after creation (WebGL2 texStorage2D allocates immutable storage)
+    var dstW = entry.canvas.width || 256;
+    var dstH = entry.canvas.height || 256;
+    var frameW = Math.floor(nw / 4);
+    var frameH = nh;
+    var ctx = entry.canvas.getContext ? entry.canvas.getContext('2d') : null;
+    if (!ctx) return false;
+    ctx.imageSmoothingEnabled = true;
+    if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
+    ctx.clearRect(0, 0, dstW, dstH);
+    var idx = FRAME_TO_SHEET_INDEX[entry.frame];
+    if (typeof idx !== 'number') idx = 0;
+    ctx.drawImage(img, idx * frameW, 0, frameW, frameH, 0, 0, dstW, dstH);
+    applyLinearSpriteFiltering(entry.tex);
+    return true;
+  }
+
+  function deriveNormalFromAlbedoCanvas(albedoCanvas, targetCanvas) {
+    if (!albedoCanvas || !targetCanvas) return false;
+    var w = targetCanvas.width || albedoCanvas.width || 256;
+    var h = targetCanvas.height || albedoCanvas.height || 256;
+    var srcWork = (albedoCanvas.width === w && albedoCanvas.height === h)
+      ? albedoCanvas
+      : cloneCanvasToFixedSize(albedoCanvas, w, h);
+    var srcCtx = srcWork.getContext ? srcWork.getContext('2d') : null;
+    if (!srcCtx || typeof srcCtx.getImageData !== 'function') return false;
+    var dstCtx = targetCanvas.getContext ? targetCanvas.getContext('2d') : null;
+    if (!dstCtx) return false;
+
+    var src = srcCtx.getImageData(0, 0, w, h).data;
+    var dstImg = dstCtx.createImageData(w, h);
+    var dst = dstImg.data;
+    var hf = new Float32Array(w * h);
+
+    for (var y = 0; y < h; y++) {
+      var minX = w;
+      var maxX = -1;
+      for (var x = 0; x < w; x++) {
+        if (src[(y * w + x) * 4 + 3] > 28) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+        }
+      }
+      if (maxX <= minX) continue;
+      var span = Math.max(4, maxX - minX);
+      var midX = (minX + maxX) * 0.5;
+      for (var x2 = minX; x2 <= maxX; x2++) {
+        var idx = (y * w + x2) * 4;
+        var a = src[idx + 3] / 255.0;
+        if (a < 0.1) continue;
+        var u = (x2 - midX) / (span * 0.5);
+        var cyl = Math.sqrt(Math.max(0.0, 1.0 - Math.min(1.0, u * u)));
+        var luma = (src[idx] * 0.299 + src[idx + 1] * 0.587 + src[idx + 2] * 0.114) / 255.0;
+        hf[y * w + x2] = (cyl * 0.7 + luma * 0.3) * a;
+      }
+    }
+
+    function readH(px, py) {
+      if (px < 0 || py < 0 || px >= w || py >= h) return 0.0;
+      return hf[py * w + px];
+    }
+
+    for (var py = 0; py < h; py++) {
+      for (var px = 0; px < w; px++) {
+        var oIdx = (py * w + px) * 4;
+        if (src[oIdx + 3] < 20) {
+          dst[oIdx] = 128; dst[oIdx + 1] = 128; dst[oIdx + 2] = 255; dst[oIdx + 3] = 255;
+          continue;
+        }
+        var dX = (readH(px + 1, py - 1) + 2.0 * readH(px + 1, py) + readH(px + 1, py + 1)) -
+                 (readH(px - 1, py - 1) + 2.0 * readH(px - 1, py) + readH(px - 1, py + 1));
+        var dY = (readH(px - 1, py + 1) + 2.0 * readH(px, py + 1) + readH(px + 1, py + 1)) -
+                 (readH(px - 1, py - 1) + 2.0 * readH(px, py - 1) + readH(px + 1, py - 1));
+        var nx = -dX * 2.8;
+        var ny = dY * 2.8;
+        var nz = 1.0;
+        var inv = 1.0 / Math.sqrt(nx * nx + ny * ny + nz * nz);
+        dst[oIdx]     = Math.max(0, Math.min(255, Math.round((nx * inv * 0.5 + 0.5) * 255)));
+        dst[oIdx + 1] = Math.max(0, Math.min(255, Math.round((ny * inv * 0.5 + 0.5) * 255)));
+        dst[oIdx + 2] = Math.max(0, Math.min(255, Math.round((nz * inv * 0.5 + 0.5) * 255)));
+        dst[oIdx + 3] = 255;
+      }
+    }
+    dstCtx.putImageData(dstImg, 0, 0);
+    return true;
+  }
+
+  function deriveEmissiveFromAlbedoCanvas(albedoCanvas, targetCanvas, isBoss) {
+    if (!albedoCanvas || !targetCanvas) return false;
+    var w = targetCanvas.width || albedoCanvas.width || 256;
+    var h = targetCanvas.height || albedoCanvas.height || 256;
+    var srcWork = (albedoCanvas.width === w && albedoCanvas.height === h)
+      ? albedoCanvas
+      : cloneCanvasToFixedSize(albedoCanvas, w, h);
+    var srcCtx = srcWork.getContext ? srcWork.getContext('2d') : null;
+    if (!srcCtx || typeof srcCtx.getImageData !== 'function') return false;
+    var dstCtx = targetCanvas.getContext ? targetCanvas.getContext('2d') : null;
+    if (!dstCtx) return false;
+
+    var src = srcCtx.getImageData(0, 0, w, h).data;
+    var dstImg = dstCtx.createImageData(w, h);
+    var dst = dstImg.data;
+    for (var i = 0; i < src.length; i += 4) {
+      var a = src[i + 3];
+      if (a < 24) {
+        dst[i] = 0; dst[i + 1] = 0; dst[i + 2] = 0; dst[i + 3] = 0;
+        continue;
+      }
+      var r = src[i] / 255.0;
+      var g = src[i + 1] / 255.0;
+      var b = src[i + 2] / 255.0;
+      var maxC = Math.max(r, Math.max(g, b));
+      var minC = Math.min(r, Math.min(g, b));
+      var sat = maxC > 0.001 ? (maxC - minC) / maxC : 0.0;
+      var luma = r * 0.299 + g * 0.587 + b * 0.114;
+      var isGlow = (maxC > 0.72 && sat > 0.45) || (luma > 0.92) || (isBoss && r > 0.72 && g < 0.36);
+      var wt = isGlow ? 1.0 : 0.04;
+      dst[i] = Math.min(255, Math.round(src[i] * wt));
+      dst[i + 1] = Math.min(255, Math.round(src[i + 1] * wt));
+      dst[i + 2] = Math.min(255, Math.round(src[i + 2] * wt));
+      dst[i + 3] = a;
+    }
+    dstCtx.putImageData(dstImg, 0, 0);
+    return true;
+  }
+
+  function syncDerivedCharMaps(cid) {
+    var st = getCharExtState(cid);
+    if (st.sheetStatus !== 'loaded' || !st.sheetImg) return;
+    var reg = getCharRegistry(cid);
+    var isBoss = (cid === 'inspector');
+
+    if (st.normalStatus === 'error') {
+      for (var ni = 0; ni < reg.normal.length; ni++) {
+        var nEnt = reg.normal[ni];
+        var tmpN = makeCanvas(nEnt.canvas.width || 256, nEnt.canvas.height || 256);
+        if (sliceSheetImageIntoEntry(st.sheetImg, { canvas: tmpN, tex: null, frame: nEnt.frame })) {
+          if (deriveNormalFromAlbedoCanvas(tmpN, nEnt.canvas)) {
+            applyLinearSpriteFiltering(nEnt.tex);
+          }
+        }
+      }
+    }
+    if (st.emissiveStatus === 'error') {
+      for (var ei = 0; ei < reg.emissive.length; ei++) {
+        var eEnt = reg.emissive[ei];
+        var tmpE = makeCanvas(eEnt.canvas.width || 256, eEnt.canvas.height || 256);
+        if (sliceSheetImageIntoEntry(st.sheetImg, { canvas: tmpE, tex: null, frame: eEnt.frame })) {
+          if (deriveEmissiveFromAlbedoCanvas(tmpE, eEnt.canvas, isBoss)) {
+            applyLinearSpriteFiltering(eEnt.tex);
+          }
+        }
+      }
+    }
+  }
+
+  function loadExternalCharChannel(cid, kind, url, forceReload) {
+    if (!url || typeof global.Image !== 'function') return;
+    var st = getCharExtState(cid);
+    var statusKey = kind === 'albedo' ? 'sheetStatus' : (kind === 'normal' ? 'normalStatus' : 'emissiveStatus');
+    var imgKey = kind === 'albedo' ? 'sheetImg' : (kind === 'normal' ? 'normalImg' : 'emissiveImg');
+
+    if (!forceReload && (st[statusKey] === 'loading' || st[statusKey] === 'loaded' || st[statusKey] === 'error')) {
+      return;
+    }
+    st[statusKey] = 'loading';
+
+    var img = new global.Image();
+    if (/^https?:\/\//i.test(url) && global.location && global.location.origin && url.indexOf(global.location.origin) !== 0) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = function () {
+      try {
+        st[imgKey] = img;
+        st[statusKey] = 'loaded';
+        var reg = getCharRegistry(cid);
+        var list = reg[kind] || [];
+        for (var i = 0; i < list.length; i++) {
+          sliceSheetImageIntoEntry(img, list[i]);
+        }
+        if (kind === 'albedo') {
+          syncDerivedCharMaps(cid);
+        }
+      } catch (_) {}
+    };
+    img.onerror = function () {
+      st[statusKey] = 'error';
+      if (kind !== 'albedo' && st.sheetStatus === 'loaded') {
+        try { syncDerivedCharMaps(cid); } catch (_) {}
+      }
+    };
+    img.src = url;
+  }
+
+  function triggerExternalSpriteLoad(cid, forceReload) {
+    var urls = resolveExternalSpriteUrls(cid);
+    if (!urls) return;
+    if (urls.sheet) loadExternalCharChannel(cid, 'albedo', urls.sheet, forceReload);
+    if (urls.normal) loadExternalCharChannel(cid, 'normal', urls.normal, forceReload);
+    if (urls.emissive) loadExternalCharChannel(cid, 'emissive', urls.emissive, forceReload);
+  }
+
+  function reloadExternalSprites() {
+    var ids = Object.keys(charTexRegistries);
+    for (var i = 0; i < ids.length; i++) {
+      triggerExternalSpriteLoad(ids[i], true);
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   * Procedural 2x2 Hades Hard-Edge VFX Flipbook Fallback (512x512, black bg)
+   * Provides 4 distinct stepped animation frames immediately before/without WebP.
+   * -------------------------------------------------------------------------- */
+  function buildFlipbookCanvas(name) {
+    var S = 512;
+    var F = 256;
+    var c = makeCanvas(S, S);
+    var ctx = c.getContext ? c.getContext('2d') : null;
+    if (!ctx) return c;
+
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, S, S);
+    ctx.imageSmoothingEnabled = true;
+
+    var key = String(name || 'hades_cyan').toLowerCase();
+    var palettes = {
+      hades_cyan:         { pri: '#5ce8ff', sec: '#f6d57a', core: '#ffffff', smoke: '#142636' },
+      hades_flame:        { pri: '#ff8424', sec: '#c852ff', core: '#fff8dc', smoke: '#2a1228' },
+      hades_emp:          { pri: '#48c6ff', sec: '#9aa4ff', core: '#f0ffff', smoke: '#121d38' },
+      hades_tao_ground:   { pri: '#f5cf64', sec: '#fff0b2', core: '#ffffff', smoke: '#261e10' },
+      hades_occult_chain: { pri: '#c852ff', sec: '#f5cf64', core: '#f6e8ff', smoke: '#20102c' },
+      hades_heal_aegis:   { pri: '#46e88a', sec: '#5ce8ff', core: '#eafff2', smoke: '#102820' }
+    };
+    var pal = palettes[key] || palettes.hades_cyan;
+    var rng = createRng(key.length * 1337 + 91);
+
+    for (var frame = 0; frame < 4; frame++) {
+      var col = frame % 2;
+      var row = Math.floor(frame / 2);
+      var ox = col * F;
+      var oy = row * F;
+      var cx = ox + F * 0.5;
+      var cy = oy + F * 0.5;
+      var p = frame / 3;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(ox, oy, F, F);
+      ctx.clip();
+
+      // Subtle smoke/ink aura halo behind hard-edge cel bands
+      var smR = 54 + p * 52;
+      var smGrad = ctx.createRadialGradient(cx, cy, smR * 0.25, cx, cy, smR);
+      smGrad.addColorStop(0, pal.smoke);
+      smGrad.addColorStop(0.7, 'rgba(18, 22, 32, 0.35)');
+      smGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = smGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, smR, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (key === 'hades_cyan' || key === 'hades_flame') {
+        // Hard-edge stepped crescent cleave expanding across frames 0..3
+        var startA = -Math.PI * (0.68 - p * 0.14);
+        var endA = Math.PI * (0.35 + p * 0.38);
+        var rOut = 72 + p * 42;
+        var rMid = rOut - (34 - p * 14);
+        var rIn = Math.max(22, rOut - (52 - p * 18));
+
+        // Outer cel band (secondary)
+        ctx.fillStyle = pal.sec;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rOut, startA, endA, false);
+        ctx.arc(cx - 10, cy, rIn, endA, startA, true);
+        ctx.closePath();
+        ctx.fill();
+
+        // Main cel band (primary)
+        ctx.fillStyle = pal.pri;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rOut - 4, startA + 0.08, endA - 0.04, false);
+        ctx.arc(cx - 6, cy, rMid, endA - 0.04, startA + 0.08, true);
+        ctx.closePath();
+        ctx.fill();
+
+        // Razor white core leading edge
+        ctx.strokeStyle = pal.core;
+        ctx.lineWidth = Math.max(2.5, 9 - p * 5);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(cx, cy, rOut - 6, startA + 0.16, endA - 0.06, false);
+        ctx.stroke();
+
+        // Hard-edge diamond sparks flying outward
+        for (var sp = 0; sp < 8; sp++) {
+          var sa = startA + (endA - startA) * ((sp + 0.5) / 8);
+          var sr = rOut + 6 + p * 16 + (rng() * 14);
+          var sx = cx + Math.cos(sa) * sr;
+          var sy = cy + Math.sin(sa) * sr;
+          var ds = (1.1 - p * 0.55) * (5 + (sp % 3) * 2.5);
+          ctx.fillStyle = sp % 2 === 0 ? pal.core : pal.pri;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy - ds);
+          ctx.lineTo(sx + ds * 0.6, sy);
+          ctx.lineTo(sx, sy + ds);
+          ctx.lineTo(sx - ds * 0.6, sy);
+          ctx.closePath();
+          ctx.fill();
+        }
+      } else if (key === 'hades_emp') {
+        // Hard-edge jagged shockwave ring + branching electric bolts
+        var empR = 38 + p * 74;
+        ctx.strokeStyle = pal.pri;
+        ctx.lineWidth = Math.max(3, 12 - p * 6);
+        ctx.beginPath();
+        ctx.arc(cx, cy, empR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = pal.core;
+        ctx.lineWidth = Math.max(2, 5 - p * 2.5);
+        ctx.beginPath();
+        ctx.arc(cx, cy, empR, 0, Math.PI * 2);
+        ctx.stroke();
+        for (var b = 0; b < 6; b++) {
+          var ba = (b / 6) * Math.PI * 2 + frame * 0.4;
+          ctx.strokeStyle = b % 2 === 0 ? pal.core : pal.sec;
+          ctx.lineWidth = 3.2 - p * 1.4;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(ba + 0.18) * (empR * 0.55), cy + Math.sin(ba + 0.18) * (empR * 0.55));
+          ctx.lineTo(cx + Math.cos(ba - 0.12) * (empR * 1.05), cy + Math.sin(ba - 0.12) * (empR * 1.05));
+          ctx.stroke();
+        }
+      } else if (key === 'hades_tao_ground') {
+        // Ground-flattened octagonal Tao sigil + crack flares
+        var taoR = 52 + p * 56;
+        ctx.strokeStyle = pal.pri;
+        ctx.lineWidth = Math.max(3, 10 - p * 4);
+        ctx.beginPath();
+        for (var o = 0; o < 8; o++) {
+          var oa = (o / 8) * Math.PI * 2 + frame * 0.18;
+          var px = cx + Math.cos(oa) * taoR;
+          var py = cy + Math.sin(oa) * taoR;
+          if (o === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.strokeStyle = pal.core;
+        ctx.lineWidth = Math.max(2, 5 - p * 2);
+        ctx.beginPath();
+        ctx.arc(cx, cy, taoR * 0.62, 0, Math.PI * 2);
+        ctx.stroke();
+        for (var r2 = 0; r2 < 8; r2++) {
+          var ra2 = (r2 / 8) * Math.PI * 2 + frame * 0.18;
+          ctx.strokeStyle = r2 % 2 === 0 ? pal.sec : pal.pri;
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(ra2) * (taoR * 0.62), cy + Math.sin(ra2) * (taoR * 0.62));
+          ctx.lineTo(cx + Math.cos(ra2) * (taoR * 1.12), cy + Math.sin(ra2) * (taoR * 1.12));
+          ctx.stroke();
+        }
+      } else if (key === 'hades_occult_chain') {
+        // Crossed diagonal occult binding chains + seal flash
+        var chR = 46 + p * 60;
+        ctx.strokeStyle = pal.pri;
+        ctx.lineWidth = Math.max(4, 11 - p * 4);
+        ctx.beginPath();
+        ctx.moveTo(cx - chR, cy - chR * 0.72); ctx.lineTo(cx + chR, cy + chR * 0.72);
+        ctx.moveTo(cx + chR, cy - chR * 0.72); ctx.lineTo(cx - chR, cy + chR * 0.72);
+        ctx.stroke();
+        ctx.strokeStyle = pal.sec;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, chR * 0.55, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = pal.core;
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(6, 22 - p * 12), 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // hades_heal_aegis: layered sanctuary lotus/hex ring + rising cross motes
+        var hR = 44 + p * 64;
+        ctx.strokeStyle = pal.pri;
+        ctx.lineWidth = Math.max(3, 11 - p * 5);
+        ctx.beginPath();
+        ctx.arc(cx, cy, hR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = pal.sec;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, hR * 0.68, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = pal.core;
+        var cw = Math.max(4, 12 - p * 6);
+        var cl = 26 + p * 18;
+        ctx.fillRect(cx - cw * 0.5, cy - cl * 0.5, cw, cl);
+        ctx.fillRect(cx - cl * 0.5, cy - cw * 0.5, cl, cw);
+      }
+
+      ctx.restore();
+    }
+    return c;
+  }
+
+  function applyExternalFlipbook(entry, forceReload) {
+    if (!entry || !entry.canvas) return;
+    var url = resolveExternalFlipbookUrl(entry.name);
+    if (!url) return;
+    if (!forceReload && (entry.status === 'loading' || entry.status === 'loaded' || entry.status === 'error')) {
+      return;
+    }
+    if (typeof global.Image !== 'function') return;
+
+    entry.status = 'loading';
+    var img = new global.Image();
+    if (/^https?:\/\//i.test(url) && global.location && global.location.origin && url.indexOf(global.location.origin) !== 0) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = function () {
+      try {
+        // Never resize entry.canvas after creation (WebGL2 texStorage2D immutable storage)
+        var dstW = entry.canvas.width || FLIPBOOK_TEX_SIZE;
+        var dstH = entry.canvas.height || FLIPBOOK_TEX_SIZE;
+        var ctx = entry.canvas.getContext ? entry.canvas.getContext('2d') : null;
+        if (!ctx) return;
+        ctx.imageSmoothingEnabled = true;
+        if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
+        ctx.clearRect(0, 0, dstW, dstH);
+        ctx.drawImage(img, 0, 0, dstW, dstH);
+        entry.loadedUrl = url;
+        entry.status = 'loaded';
+        applyLinearSpriteFiltering(entry.tex);
+      } catch (_) {}
+    };
+    img.onerror = function () {
+      entry.status = 'error';
+    };
+    img.src = url;
+  }
+
+  function getVfxFlipbookTexture(name) {
+    var fbName = String(name || 'hades_cyan').trim().toLowerCase();
+    var key = 'flipbook:' + fbName;
+    if (textureCache[key]) return textureCache[key];
+    var fallbackCanvas = buildFlipbookCanvas(fbName);
+    var canvas = cloneCanvasToFixedSize(fallbackCanvas, FLIPBOOK_TEX_SIZE, FLIPBOOK_TEX_SIZE);
+    var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4, nearest: false });
+    textureCache[key] = tex;
+    var entry = { name: fbName, canvas: canvas, tex: tex, loadedUrl: null, status: 'idle' };
+    flipbookEntries[fbName] = entry;
+    applyExternalFlipbook(entry, false);
+    return tex;
+  }
+
+  function reloadExternalVfx() {
+    var names = Object.keys(flipbookEntries);
+    for (var i = 0; i < names.length; i++) {
+      applyExternalFlipbook(flipbookEntries[names[i]], true);
+    }
+  }
+
   var VALID_CHAR_FRAMES = {
     idle: true,
     idle2: true,
@@ -2456,14 +3027,28 @@
   }
 
   // Optional 3rd arg weaponStyle ('sword' | 'cyber' | 'occult' | 'tactical'); 2-arg calls unchanged.
+  // Locks GPU CanvasTexture size upfront (256x256 cast, 320x384 inspector) for WebGL2 texStorage2D safety.
+  // All player weaponStyles prefer Style-1 external player_sheet.webp when available, falling back to procedural.
   function getCharTexture(id, frame, weaponStyle) {
     var cid = String(id || 'player');
     var cframe = normalizeCharFrame(frame);
     var key = 'char:' + charCacheKey(cid, cframe, weaponStyle);
     if (textureCache[key]) return textureCache[key];
-    var canvas = getCachedCharCanvas(cid, cframe, weaponStyle);
-    var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4, nearest: true });
+    var fixed = getFixedCharCanvasSize(cid);
+    var canvas = cloneCanvasToFixedSize(getCachedCharCanvas(cid, cframe, weaponStyle), fixed.width, fixed.height);
+    var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4, nearest: false });
     textureCache[key] = tex;
+
+    if (shouldUseExternalSprite(cid, weaponStyle)) {
+      var entry = { frame: cframe, canvas: canvas, tex: tex };
+      getCharRegistry(cid).albedo.push(entry);
+      var st = getCharExtState(cid);
+      if (st.sheetStatus === 'loaded' && st.sheetImg) {
+        sliceSheetImageIntoEntry(st.sheetImg, entry);
+      } else {
+        triggerExternalSpriteLoad(cid, false);
+      }
+    }
     return tex;
   }
 
@@ -2472,9 +3057,23 @@
     var cframe = normalizeCharFrame(frame);
     var key = 'charNormal:' + charCacheKey(cid, cframe, weaponStyle);
     if (textureCache[key]) return textureCache[key];
-    var canvas = buildCharNormalCanvas(cid, cframe, weaponStyle);
-    var tex = toTexture(canvas, false, { srgb: false, mipmaps: false, anisotropy: 4, nearest: true });
+    var fixed = getFixedCharCanvasSize(cid);
+    var canvas = cloneCanvasToFixedSize(buildCharNormalCanvas(cid, cframe, weaponStyle), fixed.width, fixed.height);
+    var tex = toTexture(canvas, false, { srgb: false, mipmaps: false, anisotropy: 4, nearest: false });
     textureCache[key] = tex;
+
+    if (shouldUseExternalSprite(cid, weaponStyle)) {
+      var entry = { frame: cframe, canvas: canvas, tex: tex };
+      getCharRegistry(cid).normal.push(entry);
+      var st = getCharExtState(cid);
+      if (st.normalStatus === 'loaded' && st.normalImg) {
+        sliceSheetImageIntoEntry(st.normalImg, entry);
+      } else if (st.sheetStatus === 'loaded' && st.normalStatus === 'error') {
+        syncDerivedCharMaps(cid);
+      } else {
+        triggerExternalSpriteLoad(cid, false);
+      }
+    }
     return tex;
   }
 
@@ -2483,9 +3082,23 @@
     var cframe = normalizeCharFrame(frame);
     var key = 'charEmissive:' + charCacheKey(cid, cframe, weaponStyle);
     if (textureCache[key]) return textureCache[key];
-    var canvas = buildCharEmissiveCanvas(cid, cframe, weaponStyle);
-    var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4, nearest: true });
+    var fixed = getFixedCharCanvasSize(cid);
+    var canvas = cloneCanvasToFixedSize(buildCharEmissiveCanvas(cid, cframe, weaponStyle), fixed.width, fixed.height);
+    var tex = toTexture(canvas, false, { srgb: true, mipmaps: false, anisotropy: 4, nearest: false });
     textureCache[key] = tex;
+
+    if (shouldUseExternalSprite(cid, weaponStyle)) {
+      var entry = { frame: cframe, canvas: canvas, tex: tex };
+      getCharRegistry(cid).emissive.push(entry);
+      var st = getCharExtState(cid);
+      if (st.emissiveStatus === 'loaded' && st.emissiveImg) {
+        sliceSheetImageIntoEntry(st.emissiveImg, entry);
+      } else if (st.sheetStatus === 'loaded' && st.emissiveStatus === 'error') {
+        syncDerivedCharMaps(cid);
+      } else {
+        triggerExternalSpriteLoad(cid, false);
+      }
+    }
     return tex;
   }
 
@@ -2511,9 +3124,12 @@
     getTileNormalTexture: getTileNormalTexture,
     getTileRoughnessTexture: getTileRoughnessTexture,
     reloadExternalTiles: reloadExternalTiles,
+    reloadExternalSprites: reloadExternalSprites,
+    reloadExternalVfx: reloadExternalVfx,
     getCharTexture: getCharTexture,
     getCharNormalTexture: getCharNormalTexture,
     getCharEmissiveTexture: getCharEmissiveTexture,
+    getVfxFlipbookTexture: getVfxFlipbookTexture,
     getPropTexture: getPropTexture,
     getSpriteDimensions: getSpriteDimensions,
     WEAPON_BY_STYLE: WEAPON_BY_STYLE,
@@ -2525,6 +3141,7 @@
     _buildCharCanvas: buildCharCanvas,
     _buildCharNormalCanvas: buildCharNormalCanvas,
     _buildCharEmissiveCanvas: buildCharEmissiveCanvas,
+    _buildFlipbookCanvas: buildFlipbookCanvas,
     _buildPropCanvas: buildPropCanvas
   };
 })(typeof window !== 'undefined' ? window : globalThis);
