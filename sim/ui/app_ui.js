@@ -495,6 +495,13 @@
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
 
+    if (uiState._lastHallTab !== uiState.hallTab) {
+      uiState._lastHallTab = uiState.hallTab;
+      container.classList.remove('ink-wipe-enter');
+      void container.offsetWidth;
+      container.classList.add('ink-wipe-enter');
+    }
+
     if (uiState.hallTab === 'shop') {
       renderShopView(container, state);
     } else if (uiState.hallTab === 'fusion') {
@@ -1668,6 +1675,18 @@
     if (uiState.speakerGlitchTimer) {
       clearTimeout(uiState.speakerGlitchTimer);
       uiState.speakerGlitchTimer = null;
+    }
+
+    if (frame) {
+      var stNow = (INFINITY.Engine && typeof INFINITY.Engine.getState === 'function') ? INFINITY.Engine.getState() : null;
+      var plNow = stNow && stNow.player;
+      var mood = 'calm';
+      if (plNow && ((plNow.hp != null && plNow.hp < 45) || (plNow.san != null && plNow.san < 45))) {
+        mood = 'injured';
+      } else if (isGlitch || (o && (o.mood === 'tense' || o.urgent))) {
+        mood = 'tense';
+      }
+      frame.setAttribute('data-mood', mood);
     }
 
     if (isGlitch) {

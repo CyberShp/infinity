@@ -445,11 +445,11 @@
     hades_cyan:             { layer: 'slash',  tiltDeg: 26, duration: 0.30, cols: 2, rows: 2, primary: 0x5ce8ff, secondary: 0xf6d57a, core: 0xffffff, ink: 0x05080f },
     hades_cyan_16f:         { layer: 'slash',  tiltDeg: 25, duration: 0.38, cols: 4, rows: 4, primary: 0x5ce8ff, secondary: 0xf6d57a, core: 0xffffff, ink: 0x04070e },
     hades_crimson_boss_16f: { layer: 'slash',  tiltDeg: 24, duration: 0.44, cols: 4, rows: 4, primary: 0xff243c, secondary: 0xff7852, core: 0xfff4f4, ink: 0x0c0306 },
-    hades_flame:            { layer: 'slash',  tiltDeg: 28, duration: 0.34, cols: 2, rows: 2, primary: 0xff8424, secondary: 0xc852ff, core: 0xfff8dc, ink: 0x0a050c },
-    hades_emp:              { layer: 'ground', tiltDeg: 0,  duration: 0.44, cols: 2, rows: 2, primary: 0x48c6ff, secondary: 0x9aa4ff, core: 0xf0ffff, ink: 0x050812 },
-    hades_tao_ground:       { layer: 'ground', tiltDeg: 0,  duration: 0.56, cols: 2, rows: 2, primary: 0xf5cf64, secondary: 0xfff0b2, core: 0xffffff, ink: 0x0a0805 },
-    hades_occult_chain:     { layer: 'slash',  tiltDeg: 24, duration: 0.44, cols: 2, rows: 2, primary: 0xc852ff, secondary: 0xf5cf64, core: 0xf6e8ff, ink: 0x09050e },
-    hades_heal_aegis:       { layer: 'ground', tiltDeg: 0,  duration: 0.52, cols: 2, rows: 2, primary: 0x46e88a, secondary: 0x5ce8ff, core: 0xeafff2, ink: 0x050d09 }
+    hades_flame:            { layer: 'slash',  tiltDeg: 27, duration: 0.42, cols: 4, rows: 4, primary: 0xff8424, secondary: 0xc852ff, core: 0xfff8dc, ink: 0x0a050c },
+    hades_emp:              { layer: 'ground', tiltDeg: 0,  duration: 0.48, cols: 4, rows: 4, primary: 0x48c6ff, secondary: 0x9aa4ff, core: 0xf0ffff, ink: 0x050812 },
+    hades_tao_ground:       { layer: 'ground', tiltDeg: 0,  duration: 0.62, cols: 4, rows: 4, primary: 0xf5cf64, secondary: 0xfff0b2, core: 0xffffff, ink: 0x0a0805 },
+    hades_occult_chain:     { layer: 'slash',  tiltDeg: 24, duration: 0.48, cols: 4, rows: 4, primary: 0xc852ff, secondary: 0xf5cf64, core: 0xf6e8ff, ink: 0x09050e },
+    hades_heal_aegis:       { layer: 'ground', tiltDeg: 0,  duration: 0.56, cols: 4, rows: 4, primary: 0x46e88a, secondary: 0x5ce8ff, core: 0xeafff2, ink: 0x050d09 }
   };
 
   function getFlipbookTex(name) {

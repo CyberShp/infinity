@@ -278,6 +278,44 @@
     regroup: '向我汇合'
   };
 
+  // True Infinite-Flow dispersion: player spawns alone in Z-01 Concourse while all 4 examinees
+  // enter separate sectors and execute independent multi-zone survival routines unless explicitly ordered.
+  var DEFAULT_NPC_SPAWNS = [
+    { id: 'yanci',   zone: 'corridor',   dx: -24.0, dz: -4.0,  hp: 110, speed: 6.6 },
+    { id: 'lujin',   zone: 'platform0',  dx: -14.0, dz: -18.0, hp: 135, speed: 7.4 },
+    { id: 'xutan',   zone: 'dispatch',   dx: -10.0, dz: 4.0,   hp: 95,  speed: 6.9 },
+    { id: 'shenyan', zone: 'substation', dx: 14.0,  dz: 10.0,  hp: 115, speed: 6.7 }
+  ];
+
+  var NPC_PATROL_ROUTES = {
+    yanci: [
+      { zone: 'corridor',   x: 104.5, z: 68.5,  dwell: 6.5, task: 'corridor_survey' },
+      { zone: 'dispatch',   x: 149.5, z: 16.5,  dwell: 7.0, task: 'archive_audit' },
+      { zone: 'corridor',   x: 122.5, z: 92.5,  dwell: 5.5, task: 'gallery_scan' },
+      { zone: 'tunnel',     x: 122.5, z: 114.5, dwell: 6.5, task: 'tunnel_trace' },
+      { zone: 'substation', x: 66.5,  z: 116.5, dwell: 6.5, task: 'relay_check' }
+    ],
+    lujin: [
+      { zone: 'platform0',  x: 182.5, z: 68.5,  dwell: 5.0, task: 'platform_watch' },
+      { zone: 'corridor',   x: 151.5, z: 74.5,  dwell: 4.5, task: 'approach_sweep' },
+      { zone: 'platform0',  x: 182.5, z: 30.5,  dwell: 5.0, task: 'north_exit_guard' },
+      { zone: 'corridor',   x: 122.5, z: 74.5,  dwell: 4.5, task: 'hub_patrol' },
+      { zone: 'tunnel',     x: 149.5, z: 134.5, dwell: 5.0, task: 'flank_check' }
+    ],
+    xutan: [
+      { zone: 'dispatch',   x: 122.5, z: 19.5,  dwell: 6.0, task: 'signal_diag' },
+      { zone: 'substation', x: 41.5,  z: 110.5, dwell: 6.0, task: 'grid_probe' },
+      { zone: 'platform0',  x: 182.5, z: 24.5,  dwell: 7.0, task: 'exit_interlock' }
+    ],
+    shenyan: [
+      { zone: 'substation', x: 66.5,  z: 116.5, dwell: 6.0, task: 'scavenge_east' },
+      { zone: 'tunnel',     x: 122.5, z: 134.5, dwell: 6.5, task: 'culvert_lurk' },
+      { zone: 'platform0',  x: 186.5, z: 124.5, dwell: 6.0, task: 'freight_prowl' },
+      { zone: 'tunnel',     x: 95.5,  z: 134.5, dwell: 5.5, task: 'valve_hide' },
+      { zone: 'substation', x: 16.5,  z: 116.5, dwell: 6.0, task: 'switchgear_snoop' }
+    ]
+  };
+
   var DEFAULT_ZONES = {
     concourse:  { id: 'concourse',  name: 'B1 检票大厅',   code: 'Z-01', cx: 10, cz: 10, color: '#68c8de' },
     corridor:   { id: 'corridor',   name: 'B2 换乘长廊',   code: 'Z-02', cx: 26, cz: 18, color: '#d6b274' },
@@ -1155,6 +1193,11 @@
     // Elevated angled 2.5D camera (deep far plane for 224x152 mega-station scrolling)
     this.camera = new THREE.PerspectiveCamera(38, width / height, 0.5, 190);
 
+    // Preload all Style-1 external sprite sheets, player combat poses & 16f flipbooks upfront
+    if (this.spritesApi && typeof this.spritesApi.preloadAllExternalSprites === 'function') {
+      try { this.spritesApi.preloadAllExternalSprites(); } catch (_) {}
+    }
+
     // Build combat loadout & entities
     this._tmpColor = new THREE.Color();
     this._tmpClearColor = new THREE.Color(0x070a10);
@@ -1198,9 +1241,10 @@
       '主目标：联动信号调度室与旧变电间反转主轨至 100%，或正面肃清/封印零号检票员后从 0 号站台撤离。',
       { zoneId: 'concourse' }
     );
-    this.showSpeechBubble('yanci', '全员核对腕表秒针。别信未经校验的站台广播。');
-    this.showSpeechBubble('xutan', '我去信号调度室查道岔协议，有情况立刻切无线电！');
-    this.showSpeechBubble('lujin', '我守换乘长廊，检票员露头我会第一时间拦住。');
+    this.emitRadio({
+      type: 'narration',
+      text: '【考场切入】空间折跃存在离散偏差——其余考生已分散落入不同扇区各自行动。你独自处于 B1 检票大厅（Z-01）。'
+    });
     this.emitHudSnapshot();
 
     // Start 60fps loop (with gentle yield pacing on software WebGL so UI/browser stays responsive)
@@ -1268,7 +1312,9 @@
 
     var cutIn = document.createElement('div');
     cutIn.className = 'w25d-cutin-banner';
-    cutIn.innerHTML = '<div class="w25d-cutin-sub"></div><div class="w25d-cutin-title"></div>';
+    cutIn.innerHTML =
+      '<div class="w25d-cutin-art-wrap"><img class="w25d-cutin-art" alt="" /><div class="w25d-cutin-speedlines"></div></div>' +
+      '<div class="w25d-cutin-copy"><div class="w25d-cutin-sub"></div><div class="w25d-cutin-title"></div></div>';
     root.appendChild(cutIn);
 
     // Non-blocking top-center Zone Transition Banner (zero backdrop-filter over WebGL!)
@@ -1276,11 +1322,11 @@
     zoneBanner.className = 'w25d-zone-banner';
     zoneBanner.setAttribute('aria-live', 'polite');
     zoneBanner.style.cssText =
-      'position:absolute;top:18px;left:50%;transform:translate(-50%,-10px);opacity:0;' +
-      'display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 20px 8px;' +
-      'background:rgba(8,12,19,0.88);border:1px solid rgba(104,200,222,0.42);' +
-      'border-top:2px solid #68c8de;border-radius:4px;pointer-events:none;white-space:nowrap;' +
-      'box-shadow:0 8px 24px rgba(0,0,0,0.55);transition:opacity 0.35s ease,transform 0.35s ease;';
+      'position:absolute;top:16px;left:50%;transform:translate(-50%,-10px);opacity:0;' +
+      'display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 22px 8px;' +
+      'background:rgba(7,10,16,0.92);border:1px solid rgba(104,200,222,0.45);' +
+      'border-top:2px solid #68c8de;border-radius:1px;pointer-events:none;white-space:nowrap;' +
+      'box-shadow:0 6px 0 #04060a,0 10px 24px rgba(0,0,0,0.65);transition:opacity 0.3s ease,transform 0.3s ease;';
     root.appendChild(zoneBanner);
 
     this.containerEl.appendChild(root);
@@ -1294,22 +1340,44 @@
     this.zoneBannerEl = zoneBanner;
   };
 
-  EngineSession.prototype.triggerSkillCutIn = function (title, subtitle, accentCss) {
+  EngineSession.prototype.triggerSkillCutIn = function (title, subtitle, accentCss, speakerId) {
     if (!this.cutInBannerEl || !title) return;
     var el = this.cutInBannerEl;
     var accent = accentCss || '#5ce8ff';
     var subEl = el.querySelector('.w25d-cutin-sub');
     var titleEl = el.querySelector('.w25d-cutin-title');
+    var artEl = el.querySelector('.w25d-cutin-art');
+    var isBossCut = speakerId === 'boss' || speakerId === 'inspector' ||
+      (typeof accent === 'string' && /^#ff[0-3]/i.test(accent.trim()));
+    if (artEl && INFINITY.ASSETS && typeof INFINITY.ASSETS.getCutInUrl === 'function') {
+      var artUrl = INFINITY.ASSETS.getCutInUrl(speakerId || (isBossCut ? 'boss' : 'player'));
+      if (artUrl) {
+        artEl.src = artUrl;
+        el.classList.add('has-art');
+      }
+    }
+    el.classList.toggle('boss-cutin', isBossCut);
     if (subEl) subEl.textContent = subtitle || 'SKILL EXECUTION';
     if (titleEl) {
       titleEl.textContent = title;
-      titleEl.style.textShadow = '-2px -2px 0 #04060b, 2px 2px 0 #04060b, 0 0 18px ' + accent;
+      titleEl.style.textShadow = '-2px -2px 0 #04060b, 2px 2px 0 #04060b, 0 0 16px ' + accent;
     }
+    el.style.setProperty('--cutin-accent', accent);
     el.style.borderLeftColor = accent;
     el.style.borderBottomColor = accent;
     el.classList.remove('out');
     el.classList.add('active');
-    this.cutInTimer = 0.72;
+    this.cutInTimer = 0.82;
+    // Trigger punchy comic clash camera zoom beat if DirectorTimeline is available
+    if (this.directorTimeline && typeof this.directorTimeline.triggerBeat === 'function') {
+      this.directorTimeline.triggerBeat({
+        zoom: isBossCut ? 0.74 : 0.72,
+        holdSec: 0.34,
+        letterbox: 0.055,
+        chromatic: isBossCut ? 0.55 : 0.25,
+        inkEdge: 0.68
+      });
+    }
   };
 
   EngineSession.prototype.triggerOnomatopoeia = function (x, y, z, glyph, colorCss) {
@@ -2217,14 +2285,8 @@
         .replace(
           '#include <tonemapping_fragment>',
           [
-            '  if (statusHpHigh > 0.005) {',
-            '    float breathe = 0.72 + 0.28 * sin(uStatusTime * 2.6 + uGlitchSeed * 6.2831);',
-            '    float sheenPhase = fract(uStatusTime * 0.28 + uGlitchSeed);',
-            '    float diag = statusUv.y * 0.82 + statusUv.x * 0.18;',
-            '    float sheenBand = smoothstep(0.18, 0.0, abs(diag - sheenPhase)) * 0.22;',
-            '    vec3 softGlow = uVitalColor * (statusRim * 0.58 * breathe + sheenBand * (0.45 + 0.55 * breathe) + 0.06 * breathe);',
-            '    gl_FragColor.rgb += softGlow * statusHpHigh;',
-            '  }',
+            '  // Healthy actors preserve pure heavy-ink silhouettes without white sticker rim glow;',
+            '  // only critical low-HP pulse and low-SAN anomaly glitch add chromatic edge emission.',
             '  if (statusHpLow > 0.005) {',
             '    float beat1 = pow(max(0.0, sin(uStatusTime * 5.2 + uGlitchSeed)), 4.0);',
             '    float beat2 = pow(max(0.0, sin(uStatusTime * 5.2 + 0.75 + uGlitchSeed)), 6.0) * 0.65;',
@@ -2335,18 +2397,13 @@
       vis: pVis
     };
 
-    // Build 4 Autonomous Squad NPCs (paced smoothly for 224x152 mega-station traversal)
-    var npcSpawns = [
-      { id: 'yanci',   zone: 'concourse', dx: -2.8, dz: 1.8,  hp: 110, speed: 6.6 },
-      { id: 'lujin',   zone: 'corridor',  dx: -3.2, dz: 0.0,  hp: 135, speed: 7.4 },
-      { id: 'xutan',   zone: 'concourse', dx: 2.8,  dz: -1.8, hp: 95,  speed: 6.9 },
-      { id: 'shenyan', zone: 'concourse', dx: 4.2,  dz: 3.0,  hp: 115, speed: 6.7 }
-    ];
+    // Build 4 Autonomous Squad NPCs dispersed across separate sectors (true infinite-flow survival start)
+    var npcSpawns = DEFAULT_NPC_SPAWNS;
 
     for (var i = 0; i < npcSpawns.length; i++) {
       var sp = npcSpawns[i];
       var meta = getCastMeta(sp.id);
-      var zc = mapApi.getZoneCenter(sp.zone) || { x: 10, z: 10 };
+      var zc = mapApi.getZoneCenter(sp.zone) || { x: 122, z: 74 };
       var safePos = mapApi.resolveCircleWallCollision(zc.x + sp.dx, zc.z + sp.dz, 0.4);
       var vis = this.createActorVisual(sp.id, ACTOR_DIMENSIONS.squad.width, ACTOR_DIMENSIONS.squad.height, meta.accentColor, false);
       vis.group.position.set(safePos.x, 0, safePos.z);
@@ -2372,6 +2429,9 @@
         orderLabel: ORDER_LABELS.auto,
         holdX: safePos.x,
         holdZ: safePos.z,
+        roamIndex: 0,
+        dwellTimer: 1.5 + i * 0.8,
+        loggedClues: Object.create(null),
         path: [],
         pathIndex: 0,
         repathTimer: 0.2 + i * 0.25,
@@ -2555,6 +2615,41 @@
       ? INFINITY.CombatFeel.buildBossWeakpointVisual(THREE, bossVis.group, this.trackGeo.bind(this), this.trackMat.bind(this))
       : null;
 
+    // Phase-2 Heavy-Ink Crimson Rule-Rift Mutation Rig (visible when ins.phase >= 2)
+    var phase2AuraGroup = new THREE.Group();
+    phase2AuraGroup.visible = false;
+    var p2FloorGeo = this.trackGeo(new THREE.PlaneGeometry(3.2, 3.2));
+    p2FloorGeo.rotateX(-Math.PI / 2);
+    var p2FloorMat = this.trackMat(new THREE.MeshBasicMaterial({
+      map: this.getPropTex('sigil_occult_eye', '#ff243c'),
+      color: 0xff2038,
+      transparent: true,
+      opacity: 0.62,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var p2FloorRing = new THREE.Mesh(p2FloorGeo, p2FloorMat);
+    p2FloorRing.position.y = 0.085;
+    phase2AuraGroup.add(p2FloorRing);
+    var p2OrbitGeo = this.trackGeo(new THREE.TorusGeometry(1.18, 0.028, 6, 36));
+    var p2OrbitMat = this.trackMat(new THREE.MeshBasicMaterial({
+      color: 0xff2842,
+      transparent: true,
+      opacity: 0.78,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }));
+    var p2BladeL = new THREE.Mesh(p2OrbitGeo, p2OrbitMat);
+    p2BladeL.position.set(0, 1.38, 0);
+    p2BladeL.rotation.x = Math.PI * 0.36;
+    var p2BladeR = new THREE.Mesh(p2OrbitGeo, p2OrbitMat);
+    p2BladeR.position.set(0, 1.38, 0);
+    p2BladeR.rotation.x = -Math.PI * 0.36;
+    p2BladeR.scale.set(0.84, 0.84, 0.84);
+    phase2AuraGroup.add(p2BladeL, p2BladeR);
+    bossVis.group.add(phase2AuraGroup);
+
     this.inspector = {
       id: 'inspector',
       name: '零号检票员',
@@ -2566,6 +2661,10 @@
       hp: BOSS_DEATH_EXAM_CONFIG.maxHp,
       maxHp: BOSS_DEATH_EXAM_CONFIG.maxHp,
       phase: 1,
+      phase2AuraGroup: phase2AuraGroup,
+      p2FloorRing: p2FloorRing,
+      p2BladeL: p2BladeL,
+      p2BladeR: p2BladeR,
       mutated: false,
       mutationTier: 'dormant',
       threatTier: 'low',
@@ -3713,14 +3812,14 @@
         '    col += vec3(1.0, 0.88, 0.52) * uFlash * 0.24;',
         '  }',
         '',
-        '  // Hades / Style-1 high-contrast B&W comic Impact Frame (60-90ms on parry / heavy hit)',
+        '  // Hades / Style-1 hard-binary B&W graphic woodcut Impact Frame (zero 50% grey fog wash)',
         '  if (uImpactInvert > 0.01) {',
         '    float impLuma = dot(col, vec3(0.299, 0.587, 0.114));',
-        '    float inkCut = smoothstep(0.24, 0.50, impLuma);',
-        '    vec3 comicBw = mix(vec3(0.96, 0.97, 0.99), vec3(0.03, 0.04, 0.06), inkCut);',
-        '    float edgeFocus = smoothstep(0.28, 1.45, distSq);',
-        '    comicBw = mix(comicBw, vec3(0.02, 0.025, 0.04), edgeFocus * 0.28);',
-        '    col = mix(col, comicBw, clamp(uImpactInvert, 0.0, 1.0));',
+        '    float inkCut = step(0.27, impLuma);',
+        '    vec3 comicBw = mix(vec3(0.95, 0.97, 1.0), vec3(0.025, 0.032, 0.052), inkCut);',
+        '    float edgeFocus = smoothstep(0.32, 1.38, distSq);',
+        '    comicBw = mix(comicBw, vec3(0.02, 0.025, 0.04), edgeFocus * 0.42);',
+        '    col = mix(col, comicBw, step(0.5, uImpactInvert));',
         '  }',
         '',
         '  // Cinematic skill cut-in letterbox bars (Limbus Company style beat framing)',
@@ -3811,10 +3910,7 @@
       u.uLowHp.value = this.lowHpBlend;
       u.uFlash.value = clamp(this.parryFlashTimer / 0.22, 0, 1);
       if (u.uImpactInvert) {
-        var impDur = Math.max(0.02, this.impactFrameDuration || 0.075);
-        u.uImpactInvert.value = this.impactFrameTimer > 0
-          ? clamp(this.impactFrameTimer / impDur, 0.45, 1.0)
-          : 0.0;
+        u.uImpactInvert.value = this.impactFrameTimer > 0 ? 1.0 : 0.0;
       }
       var dirSt = this.directorState || { letterbox: 0, chromatic: 0, inkEdge: 0 };
       if (u.uChromatic) u.uChromatic.value = clamp(dirSt.chromatic || 0, 0, 1);
@@ -4342,6 +4438,10 @@
       CAMERA_25D_SPEC.lookAtY + (1.0 - zoom) * 0.45,
       this.camLook.z + this.camKickZ * 0.35
     );
+
+    if (this._cutawayFocus && this._cutawayFocus.value && p) {
+      this._cutawayFocus.value.set(p.x, 0, p.z);
+    }
 
     // Subtle dynamic FOV modulation for Bullet-Time / Overclock + impact zoom punch
     this.camFovPunch *= Math.exp(-11.5 * realDt);
@@ -6501,15 +6601,22 @@
       var pulseBaseScale = it.type === 'exit' ? 1.85 : 1.0;
 
       if (it.type === 'clue') {
-        it.sprite.position.y = 0.78 + Math.sin(it.bobPhase) * 0.12;
-        it.ring.rotation.z += simDt * 1.4;
-        statusHex = it.done ? COL_DONE : COL_PENDING;
+        var baseY = it.spriteBaseY !== undefined ? it.spriteBaseY : 0.78;
+        var bobAmp = it.spriteBobAmp !== undefined ? it.spriteBobAmp : 0.12;
+        var baseRingOp = it.ringBaseOpacity !== undefined ? it.ringBaseOpacity : 0.38;
+        it.sprite.position.y = baseY + Math.sin(it.bobPhase) * bobAmp;
+        it.ring.rotation.z += simDt * 0.85;
+        statusHex = it.done ? COL_DONE : (it.id === 'int_clue_concourse' ? 0xdcb46a : COL_PENDING);
         it.ringMat.color.setHex(statusHex);
         if (it.done) {
-          it.mat.opacity = 0.22;
-          it.ringMat.opacity = 0.12;
+          it.mat.opacity = 0.16;
+          it.ringMat.opacity = 0.08;
         } else {
-          it.ringMat.opacity = 0.38 + Math.sin(this.elapsedReal * 4.2 + i) * 0.10;
+          it.ringMat.opacity = baseRingOp + Math.sin(this.elapsedReal * 3.4 + i) * (baseRingOp * 0.25);
+        }
+        if (it.beaconMat && it.id === 'int_clue_concourse') {
+          var sparkOn = !it.done && Math.sin(this.elapsedReal * 23.0) > -0.45;
+          it.beaconMat.color.setHex(sparkOn ? 0xffa838 : 0x26180d);
         }
       } else if (it.type === 'console') {
         it.ring.rotation.z += simDt * (it.done ? 0.5 : 1.5);
@@ -7072,100 +7179,142 @@
     return (ack[npcId] && ack[npcId][order]) || '收到战术指令。';
   };
 
-  EngineSession.prototype.getNpcGoal = function (npc) {
-    var p = this.player;
-    var ins = this.inspector;
-    var mapApi = this.mapApi;
+  function pickSafestNonConcourseZone(mapApi, threatX, threatZ) {
+    var candidates = ['tunnel', 'substation', 'dispatch', 'corridor'];
+    var bestZone = 'tunnel';
+    var bestDist = -1;
+    for (var i = 0; i < candidates.length; i++) {
+      var zc = mapApi.getZoneCenter(candidates[i]);
+      if (!zc) continue;
+      var d = dist2D(zc.x, zc.z, threatX, threatZ);
+      if (d > bestDist) {
+        bestDist = d;
+        bestZone = candidates[i];
+      }
+    }
+    return mapApi.getZoneCenter(bestZone) || { x: 122.5, z: 124.5 };
+  }
 
-    // Explicit player order overrides autonomous routine
+  function resolveAutonomousNpcGoal(npc, ctx) {
+    var p = ctx.player;
+    var ins = ctx.inspector;
+    var mapApi = ctx.mapApi;
+    var interactables = ctx.interactables || [];
+    var squadById = ctx.squadById || {};
+
+    // Explicit player radio order always overrides autonomous routine
     if (npc.order && npc.order !== 'auto') {
       if (npc.order === 'follow' || npc.order === 'regroup') {
-        return { x: p.x, z: p.z, stopDist: 2.0 };
+        return { x: p.x, z: p.z, stopDist: 2.0, explicitOrder: true };
       }
       if (npc.order === 'hold') {
-        return { x: npc.holdX, z: npc.holdZ, stopDist: 0.45 };
+        return { x: npc.holdX, z: npc.holdZ, stopDist: 0.45, explicitOrder: true };
       }
       if (npc.order === 'engage') {
-        if (ins.alive) return { x: ins.x, z: ins.z, stopDist: npc.id === 'lujin' ? 2.1 : 5.2 };
-        return { x: p.x, z: p.z, stopDist: 2.2 };
+        if (ins && ins.alive) return { x: ins.x, z: ins.z, stopDist: npc.id === 'lujin' ? 2.1 : 5.2, explicitOrder: true };
+        return { x: npc.x, z: npc.z, stopDist: 1.0, explicitOrder: true };
       }
       if (npc.order.indexOf('goto_') === 0) {
         var zoneId = npc.order.slice(5);
-        // If ordered to dispatch/substation and there's an unfinished console there, walk right to it!
-        for (var ci = 0; ci < this.interactables.length; ci++) {
-          var obj = this.interactables[ci];
+        for (var ci = 0; ci < interactables.length; ci++) {
+          var obj = interactables[ci];
           if (obj.type === 'console' && obj.zoneId === zoneId && !obj.done) {
-            return { x: obj.x, z: obj.z, stopDist: 1.5, workConsole: obj };
+            return { x: obj.x, z: obj.z, stopDist: 1.5, workConsole: obj, explicitOrder: true };
           }
         }
         var zc = mapApi.getZoneCenter(zoneId);
-        return { x: zc.x, z: zc.z, stopDist: 1.6 };
+        return { x: zc.x, z: zc.z, stopDist: 1.6, explicitOrder: true };
       }
     }
 
-    // Autonomous Role AI
+    var route = NPC_PATROL_ROUTES[npc.id] || [];
+    var rIdx = route.length > 0 ? ((npc.roamIndex || 0) % route.length) : 0;
+    var wp = route[rIdx] || { x: 122.5, z: 74.5, dwell: 5.5, task: 'patrol' };
+
+    // 1. Xu Tan — independent console hacker; evades to safest non-concourse room when Inspector closes in
     if (npc.id === 'xutan') {
-      var dInsX = ins.alive ? dist2D(npc.x, npc.z, ins.x, ins.z) : 99;
+      var dInsX = (ins && ins.alive) ? dist2D(npc.x, npc.z, ins.x, ins.z) : 99;
       if (dInsX < 9.5) {
-        if (npc.shoutCd <= 0) {
-          npc.shoutCd = 14;
-          var line = '检票员摸过来了！红色提灯光就在走廊外，快拦一下！';
-          this.showSpeechBubble('xutan', line);
-          this.emitRadio({ type: 'dialogue', npcId: 'xutan', speaker: '许檀', text: line });
-        }
-        // Flee away from Inspector toward concourse or player
-        var fleeCenter = mapApi.getZoneCenter('concourse');
-        return { x: fleeCenter.x, z: fleeCenter.z, stopDist: 1.6 };
+        var safeEvade = pickSafestNonConcourseZone(mapApi, ins.x, ins.z);
+        return { x: safeEvade.x, z: safeEvade.z, stopDist: 1.8, evading: true };
       }
-      // Work on dispatch console first, then substation console
-      var dispCon = this.findUnfinishedConsole('dispatch') || this.findUnfinishedConsole('substation');
+      var dispCon = null;
+      for (var xi = 0; xi < interactables.length; xi++) {
+        if (interactables[xi].type === 'console' && !interactables[xi].done && interactables[xi].zoneId === 'dispatch') {
+          dispCon = interactables[xi];
+          break;
+        }
+      }
+      if (!dispCon) {
+        for (var xj = 0; xj < interactables.length; xj++) {
+          if (interactables[xj].type === 'console' && !interactables[xj].done && interactables[xj].zoneId === 'substation') {
+            dispCon = interactables[xj];
+            break;
+          }
+        }
+      }
       if (dispCon) {
         return { x: dispCon.x, z: dispCon.z, stopDist: 1.5, workConsole: dispCon };
       }
-      var p0 = mapApi.getZoneCenter('platform0');
-      return { x: p0.x - 1.5, z: p0.z, stopDist: 2.0 };
+      return { x: wp.x, z: wp.z, stopDist: 2.0, patrolStop: wp };
     }
 
+    // 2. Lu Jin — independent vanguard sweeping outer corridors & Platform 0, intercepting local threats on sight
     if (npc.id === 'lujin') {
-      if (ins.alive) {
-        var dInsP = dist2D(ins.x, ins.z, p.x, p.z);
-        var xutan = this.squadById['xutan'];
+      if (ins && ins.alive) {
+        var xutan = squadById.xutan;
         var dInsXu = (xutan && xutan.alive) ? dist2D(ins.x, ins.z, xutan.x, xutan.z) : 99;
-        if (dInsP < 14 || dInsXu < 12 || dist2D(npc.x, npc.z, ins.x, ins.z) < 11) {
+        var dInsLu = dist2D(npc.x, npc.z, ins.x, ins.z);
+        if (dInsLu < 13.5 || dInsXu < 10.5) {
           return { x: ins.x, z: ins.z, stopDist: 2.1, intercept: true };
         }
       }
-      var corr = mapApi.getZoneCenter('corridor');
-      return { x: corr.x, z: corr.z, stopDist: 2.2 };
+      return { x: wp.x, z: wp.z, stopDist: 2.0, patrolStop: wp };
     }
 
+    // 3. Yan Ci — independent multi-sector rule investigator (never follows player or summons player to pick up clues)
     if (npc.id === 'yanci') {
-      if (ins.alive && dist2D(npc.x, npc.z, ins.x, ins.z) < 6.5) {
-        // Smart tactical kite away from Inspector
+      if (ins && ins.alive && dist2D(npc.x, npc.z, ins.x, ins.z) < 7.5) {
         var ax = npc.x - ins.x;
         var az = npc.z - ins.z;
         var al = Math.max(0.01, Math.sqrt(ax * ax + az * az));
-        var safeKite = mapApi.resolveCircleWallCollision(npc.x + (ax / al) * 5.5, npc.z + (az / al) * 5.5, 0.5);
-        return { x: safeKite.x, z: safeKite.z, stopDist: 1.0 };
+        var safeKite = mapApi.resolveCircleWallCollision(npc.x + (ax / al) * 6.0, npc.z + (az / al) * 6.0, 0.5);
+        return { x: safeKite.x, z: safeKite.z, stopDist: 1.0, evading: true };
       }
-      // Inspect nearest undiscovered clue in concourse/corridor, else escort player
-      for (var k = 0; k < this.interactables.length; k++) {
-        var cl = this.interactables[k];
-        if (cl.type === 'clue' && !cl.done && (cl.zoneId === 'concourse' || cl.zoneId === 'corridor')) {
-          return { x: cl.x, z: cl.z, stopDist: 1.8, inspectClue: cl };
-        }
-      }
-      return { x: p.x, z: p.z, stopDist: 3.4 };
+      return { x: wp.x, z: wp.z, stopDist: 1.8, patrolStop: wp };
     }
 
+    // 4. Shen Yan — solitary opportunist prowling Substation/Tunnel/Platform South; drifts away if player crowds him
     if (npc.id === 'shenyan') {
-      // Sneak between substation and platform0, emitting suspicious noise spikes when alone
-      var targetZone = (Math.floor(this.elapsedSim / 24) % 2 === 0) ? 'substation' : 'platform0';
-      var sz = mapApi.getZoneCenter(targetZone);
-      return { x: sz.x - 1.5, z: sz.z + 1.0, stopDist: 2.0 };
+      if (p && dist2D(npc.x, npc.z, p.x, p.z) < 8.5 && route.length > 1) {
+        var nextWp = route[(rIdx + 1) % route.length];
+        return { x: nextWp.x, z: nextWp.z, stopDist: 1.8, patrolStop: nextWp, advanceFromPlayer: true };
+      }
+      return { x: wp.x, z: wp.z, stopDist: 2.0, patrolStop: wp };
     }
 
-    return { x: p.x, z: p.z, stopDist: 2.5 };
+    return { x: wp.x, z: wp.z, stopDist: 2.0, patrolStop: wp };
+  }
+
+  EngineSession.prototype.getNpcGoal = function (npc) {
+    var goal = resolveAutonomousNpcGoal(npc, {
+      player: this.player,
+      inspector: this.inspector,
+      mapApi: this.mapApi,
+      interactables: this.interactables,
+      squadById: this.squadById
+    });
+    if (npc.id === 'xutan' && goal.evading && npc.shoutCd <= 0) {
+      npc.shoutCd = 18;
+      var line = '【加密频段 · 许檀】调度通道出现异常提灯信号，我先绕去下层避开。';
+      this.emitRadio({ type: 'dialogue', npcId: 'xutan', speaker: '许檀', text: line });
+    }
+    if (npc.id === 'shenyan' && goal.advanceFromPlayer) {
+      var rLen = (NPC_PATROL_ROUTES.shenyan || []).length || 1;
+      npc.roamIndex = ((npc.roamIndex || 0) + 1) % rLen;
+      npc.dwellTimer = 2.0;
+    }
+    return goal;
   };
 
   EngineSession.prototype.findUnfinishedConsole = function (zoneId) {
@@ -7209,6 +7358,24 @@
 
       var goal = this.getNpcGoal(npc);
       var dGoal = dist2D(npc.x, npc.z, goal.x, goal.z);
+
+      // Autonomous multi-zone patrol dwell & sector advancement
+      if (goal.patrolStop && dGoal <= goal.stopDist + 0.4) {
+        npc.dwellTimer = (npc.dwellTimer || 0) - simDt;
+        if (npc.dwellTimer <= 0) {
+          var myRoute = NPC_PATROL_ROUTES[npc.id] || [];
+          if (myRoute.length > 1) {
+            npc.roamIndex = ((npc.roamIndex || 0) + 1) % myRoute.length;
+            npc.dwellTimer = myRoute[npc.roamIndex].dwell || 5.5;
+            npc.repathTimer = 0;
+          } else {
+            npc.dwellTimer = 5.5;
+          }
+          if (npc.id === 'yanci') {
+            this.spawnNpcSignatureVfx('yanci', npc.x, npc.z, 0);
+          }
+        }
+      }
 
       // Repath via A*
       npc.repathTimer -= simDt;
@@ -7280,13 +7447,25 @@
         }
       }
 
-      // Yan Ci flags nearby clue on radio + manifests golden law-scale sigil!
-      if (npc.id === 'yanci' && goal.inspectClue && !goal.inspectClue.done && dist2D(npc.x, npc.z, goal.inspectClue.x, goal.inspectClue.z) <= 2.4 && npc.shoutCd <= 0) {
-        npc.shoutCd = 18;
-        this.spawnNpcSignatureVfx('yanci', npc.x, npc.z, 0);
-        var cMsg = '我这边发现一处物证（' + goal.inspectClue.label + '），你过来回收一下。';
-        this.showSpeechBubble('yanci', cMsg);
-        this.emitRadio({ type: 'dialogue', npcId: 'yanci', speaker: '严辞', text: cMsg });
+      // Yan Ci independently logs anomalies he passes in outer sectors (cold field note, never summoning player!)
+      if (npc.id === 'yanci' && npc.shoutCd <= 0) {
+        var yZone = this.mapApi.getZoneAt(npc.x, npc.z);
+        if (yZone !== 'concourse') {
+          for (var yci = 0; yci < this.interactables.length; yci++) {
+            var yClue = this.interactables[yci];
+            if (yClue.type === 'clue' && !yClue.done && !npc.loggedClues[yClue.id] && dist2D(npc.x, npc.z, yClue.x, yClue.z) <= 5.5) {
+              npc.loggedClues[yClue.id] = true;
+              npc.shoutCd = 28;
+              this.spawnNpcSignatureVfx('yanci', npc.x, npc.z, 0);
+              var zInfo = getZoneInfo(this.mapApi, yZone);
+              this.emitRadio({
+                type: 'narration',
+                text: '【外勤记录 · 严辞】' + zInfo.name + '存有规则残片痕迹，已同步坐标备查，继续向下一扇区推进。'
+              });
+              break;
+            }
+          }
+        }
       }
 
       // Lu Jin & Yan Ci fire tactical shots/slashes at Inspector with signature VFX!
@@ -7305,8 +7484,8 @@
             this.spawnSlashArc(npc.x, npc.z, aimAng, 2.7, 0xff9c3b, 0.24, false, { primaryColor: '#ff9c3b', secondaryColor: '#58e6ff', coreColor: '#fff5cc' });
             this.damageInspector(12, bdx * 2.8, bdz * 2.8, false, { impactColor: 0xff9c3b });
             if (npc.shoutCd <= 0) {
-              npc.shoutCd = 12;
-              this.showSpeechBubble('lujin', '我顶住正面！趁现在拉道岔！');
+              npc.shoutCd = 16;
+              this.showSpeechBubble('lujin', '正面交火中——别管我，各自干活！');
             }
           } else {
             npc.attackCd = npc.id === 'lujin' ? 1.3 : 1.9;
@@ -7473,11 +7652,35 @@
         this.glitchAmount = Math.max(this.glitchAmount, 0.72);
         this.spawnFloatingText(ins.x, 3.05, ins.z, '【二阶段变异 · 频段过载】', '#ff2942', 'mutation');
       }
+      this.triggerSkillCutIn(
+        mutEval.mutationTier === 'overdrive' ? '高危异变 · 过载剪裁' : '二阶段变异 · 频段过载',
+        'ANOMALY PHASE II // RULE OVERDRIVE',
+        '#ff243c',
+        'boss'
+      );
       if (mutEval.radioAlert) {
         this.emitRadio({
           type: 'system',
           text: mutEval.radioAlert
         });
+      }
+    }
+
+    // Boss Phase-2 visual mutation aura (rotating crimson occult floor sigil + slim counter-rotating orbital seal rings)
+    if (ins.phase2AuraGroup) {
+      ins.phase2AuraGroup.visible = isPhase2;
+      if (isPhase2) {
+        var p2Pulse = 0.92 + 0.10 * Math.sin(this.elapsedReal * 6.0);
+        if (ins.p2FloorRing) {
+          ins.p2FloorRing.rotation.y -= simDt * 1.15;
+          ins.p2FloorRing.scale.set(p2Pulse, p2Pulse, p2Pulse);
+        }
+        if (ins.p2BladeL && ins.p2BladeR) {
+          ins.p2BladeL.rotation.y += simDt * 1.85;
+          ins.p2BladeL.rotation.z += simDt * 0.95;
+          ins.p2BladeR.rotation.y -= simDt * 2.15;
+          ins.p2BladeR.rotation.z -= simDt * 1.1;
+        }
       }
     }
 
@@ -9358,6 +9561,11 @@
     if (!this.bubblesLayer || !text) return;
     var actor = this.getActorById(actorId);
     if (!actor) return;
+    // True infinite-flow spatial isolation: distant teammates in other sectors speak via radio log, not on-screen bubbles
+    if (actorId !== 'player' && this.player) {
+      var dBubble = dist2D(actor.x, actor.z, this.player.x, this.player.z);
+      if (dBubble > 18.0 || !this.canSeeWorldPoint(actor.x, actor.z)) return;
+    }
 
     var prev = this.speechBubbles[actorId];
     if (prev && prev.el && prev.el.parentNode) {
@@ -10096,6 +10304,9 @@
     CAMERA_25D_SPEC: CAMERA_25D_SPEC,
     ZONE_SCENE_CONFIGS: ZONE_SCENE_CONFIGS,
     BOSS_DEATH_EXAM_CONFIG: BOSS_DEATH_EXAM_CONFIG,
+    DEFAULT_NPC_SPAWNS: DEFAULT_NPC_SPAWNS,
+    NPC_PATROL_ROUTES: NPC_PATROL_ROUTES,
+    resolveAutonomousNpcGoal: resolveAutonomousNpcGoal,
     computePlayerOrbiterCount: computePlayerOrbiterCount,
     hasPassiveReconItem: hasPassiveReconItem,
     evaluatePointVisibility: evaluatePointVisibility,

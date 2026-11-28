@@ -210,13 +210,21 @@
     addPartition(73, 27, 76, 32);
     addPartition(73, 40, 76, 45);
 
-    // Z-01B Central Clock Atrium colonnade & seating planters framing open spawn plaza (41.5, 37.5)
+    // Z-01B Central Clock Atrium colonnade, flanking metro booths & seating planters framing spawn plaza (41.5, 37.5)
     addPillar(26, 25, 27, 25);
     addPillar(55, 25, 56, 25);
     addPillar(26, 51, 27, 51);
     addPillar(55, 51, 56, 51);
     addPillar(18, 13, 19, 13);
     addPillar(63, 13, 64, 13);
+    // Inner atrium heavy-steel columns visible inside the opening viewport
+    addPillar(33, 29, 33, 29);
+    addPillar(49, 29, 49, 29);
+    addPillar(33, 44, 33, 44);
+    addPillar(49, 44, 49, 44);
+    // West Atrium Station Inquiry Booth & East Shuttered Subway Newsstand framing the central concourse
+    addPartition(28, 35, 30, 39);
+    addPartition(52, 35, 54, 39);
     // Waist-high tactical concourse cover & info counters framing spawn plaza & side lanes
     addCover(30, 31, 32, 31);
     addCover(50, 31, 52, 31);

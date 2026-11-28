@@ -402,64 +402,260 @@
     var ctx = c.getContext('2d');
     if (ctx) {
       var cx = S * 0.5, cy = S * 0.5;
-      // Outer dark ink terrazzo ring
-      ctx.strokeStyle = 'rgba(8, 13, 20, 0.86)';
-      ctx.lineWidth = 10;
+      // Weathered dark slate-terrazzo recessed metro concourse medallion (subtle, grounded, non-arcade)
+      ctx.strokeStyle = 'rgba(5, 8, 13, 0.90)';
+      ctx.lineWidth = 12;
       ctx.beginPath(); ctx.arc(cx, cy, 232, 0, Math.PI * 2); ctx.stroke();
 
-      // Subtle pale cyan-brass inlaid terrazzo disc
-      var grad = ctx.createRadialGradient(cx, cy, 36, cx, cy, 230);
-      grad.addColorStop(0.0, 'rgba(104, 200, 222, 0.16)');
-      grad.addColorStop(0.55, 'rgba(34, 52, 70, 0.34)');
-      grad.addColorStop(0.88, 'rgba(20, 32, 46, 0.44)');
-      grad.addColorStop(1.0, 'rgba(14, 22, 32, 0.0)');
+      var grad = ctx.createRadialGradient(cx, cy, 28, cx, cy, 230);
+      grad.addColorStop(0.0, 'rgba(30, 42, 56, 0.42)');
+      grad.addColorStop(0.62, 'rgba(20, 29, 40, 0.46)');
+      grad.addColorStop(0.92, 'rgba(12, 18, 26, 0.54)');
+      grad.addColorStop(1.0, 'rgba(10, 15, 22, 0.0)');
       ctx.fillStyle = grad;
       ctx.beginPath(); ctx.arc(cx, cy, 230, 0, Math.PI * 2); ctx.fill();
 
-      // Concentric inlaid brass/cyan rings
-      ctx.strokeStyle = 'rgba(104, 200, 222, 0.46)';
+      // Subtle inlaid tarnished-brass & slate architectural rings
+      ctx.strokeStyle = 'rgba(182, 152, 102, 0.34)';
       ctx.lineWidth = 4;
       ctx.beginPath(); ctx.arc(cx, cy, 214, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx, cy, 162, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = 'rgba(214, 178, 116, 0.44)';
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(cx, cy, 118, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(92, 152, 172, 0.24)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(cx, cy, 166, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(182, 152, 102, 0.28)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, 98, 0, Math.PI * 2); ctx.stroke();
 
-      // 8-point transit compass spokes
+      // Grout joints dividing terrazzo stone slabs
       for (var i = 0; i < 8; i++) {
         var ang = (i * Math.PI) / 4;
-        var isCard = (i % 2 === 0);
-        ctx.strokeStyle = isCard ? 'rgba(104, 200, 222, 0.55)' : 'rgba(214, 178, 116, 0.36)';
-        ctx.lineWidth = isCard ? 5 : 2.5;
+        ctx.strokeStyle = 'rgba(5, 8, 13, 0.65)';
+        ctx.lineWidth = (i % 2 === 0) ? 4 : 2.5;
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(ang) * 48, cy + Math.sin(ang) * 48);
-        ctx.lineTo(cx + Math.cos(ang) * (isCard ? 210 : 162), cy + Math.sin(ang) * (isCard ? 210 : 162));
+        ctx.moveTo(cx + Math.cos(ang) * 58, cy + Math.sin(ang) * 58);
+        ctx.lineTo(cx + Math.cos(ang) * 228, cy + Math.sin(ang) * 228);
         ctx.stroke();
       }
 
-      // Octagon emblem center
-      ctx.fillStyle = 'rgba(10, 18, 28, 0.72)';
-      ctx.beginPath(); ctx.arc(cx, cy, 52, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = 'rgba(104, 200, 222, 0.72)';
-      ctx.lineWidth = 3.5;
+      // Worn central brass station emblem
+      ctx.fillStyle = 'rgba(10, 15, 22, 0.78)';
+      ctx.beginPath(); ctx.arc(cx, cy, 56, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(196, 164, 108, 0.52)';
+      ctx.lineWidth = 3;
       ctx.stroke();
 
-      ctx.fillStyle = 'rgba(182, 234, 248, 0.85)';
-      ctx.font = 'bold 34px "JetBrains Mono",monospace';
+      ctx.fillStyle = 'rgba(198, 172, 122, 0.72)';
+      ctx.font = 'bold 30px "JetBrains Mono",monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('00', cx, cy - 4);
-      ctx.font = 'bold 13px "JetBrains Mono",monospace';
-      ctx.fillStyle = 'rgba(214, 178, 116, 0.82)';
-      ctx.fillText('STATION ZERO', cx, cy + 22);
+      ctx.fillText('00', cx, cy - 5);
+      ctx.font = 'bold 11px "JetBrains Mono",monospace';
+      ctx.fillStyle = 'rgba(148, 178, 192, 0.62)';
+      ctx.fillText('B1 CONCOURSE', cx, cy + 20);
 
-      // Cardinal sector stencils
-      ctx.fillStyle = 'rgba(180, 226, 240, 0.62)';
-      ctx.font = 'bold 18px "JetBrains Mono",monospace';
-      ctx.fillText('TICKETS ↑', cx, cy - 184);
-      ctx.fillText('SUB-04 ↓', cx, cy + 188);
-      ctx.fillText('SEC ←', cx - 184, cy);
-      ctx.fillText('→ B2', cx + 184, cy);
+      // Subtle architectural boot scuffs & dark ink grime weathering
+      ctx.fillStyle = 'rgba(5, 8, 12, 0.24)';
+      for (var sc = 0; sc < 26; sc++) {
+        var sx = cx + Math.cos(sc * 2.1) * (60 + (sc * 19) % 150);
+        var sy = cy + Math.sin(sc * 1.7) * (60 + (sc * 23) % 150);
+        ctx.fillRect(sx, sy, 8 + (sc % 14), 3 + (sc % 5));
+      }
+    }
+    var tex = session.trackTex(new THREE.CanvasTexture(c));
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  function createTactilePavingTexture(THREE, session) {
+    var W = 128, H = 256;
+    var c = makeCanvas(W, H);
+    var ctx = c.getContext('2d');
+    if (ctx) {
+      // Weathered ochre subway blind-guide tactile paving strip (盲道砖)
+      ctx.fillStyle = '#8b6a24';
+      ctx.fillRect(0, 0, W, H);
+      // Heavy-ink outer concrete border
+      ctx.fillStyle = '#070a10';
+      ctx.fillRect(0, 0, 8, H);
+      ctx.fillRect(W - 8, 0, 8, H);
+      // Tile joints
+      ctx.fillStyle = 'rgba(8, 11, 16, 0.78)';
+      ctx.fillRect(0, 0, W, 6);
+      ctx.fillRect(0, H * 0.5 - 3, W, 6);
+      // Four longitudinal raised guide ribs with top highlight & ink shadow
+      var ribX = [22, 46, 70, 94];
+      for (var i = 0; i < ribX.length; i++) {
+        ctx.fillStyle = '#b98f32';
+        ctx.fillRect(ribX[i], 10, 12, H * 0.5 - 18);
+        ctx.fillRect(ribX[i], H * 0.5 + 8, 12, H * 0.5 - 18);
+        ctx.fillStyle = 'rgba(7, 10, 15, 0.62)';
+        ctx.fillRect(ribX[i] + 10, 12, 4, H * 0.5 - 18);
+        ctx.fillRect(ribX[i] + 10, H * 0.5 + 10, 4, H * 0.5 - 18);
+      }
+      // Grime wear patches so it feels decades old
+      ctx.fillStyle = 'rgba(12, 15, 20, 0.28)';
+      ctx.fillRect(10, 44, 108, 18);
+      ctx.fillRect(14, 188, 96, 22);
+    }
+    var tex = session.trackTex(new THREE.CanvasTexture(c));
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  function createWayfindingStripeTexture(THREE, session, hexColor, labelText) {
+    var W = 512, H = 96;
+    var c = makeCanvas(W, H);
+    var ctx = c.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, W, H);
+      // Heavy-ink dark painted metro floor tape backing
+      ctx.fillStyle = 'rgba(8, 12, 18, 0.82)';
+      ctx.fillRect(4, 10, W - 8, H - 20);
+      // Colored transit line bands (top & bottom rail stripes)
+      ctx.fillStyle = hexColor || '#d69b3c';
+      ctx.globalAlpha = 0.78;
+      ctx.fillRect(8, 14, W - 16, 10);
+      ctx.fillRect(8, H - 24, W - 16, 10);
+      // Stenciled transit typography inside stripe
+      ctx.globalAlpha = 0.86;
+      ctx.fillStyle = '#dce6ef';
+      ctx.font = 'bold 26px "PingFang SC","Microsoft YaHei","JetBrains Mono",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(labelText || 'B2 换乘长廊 →', W * 0.5, H * 0.5 + 1, W - 36);
+      // Worn shoe-scuff breaks for realistic painted floor feel
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = 'rgba(10, 14, 20, 0.42)';
+      ctx.fillRect(72, 12, 14, 72);
+      ctx.fillRect(398, 12, 18, 72);
+    }
+    var tex = session.trackTex(new THREE.CanvasTexture(c));
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  function createIncidentClueDecalTexture(THREE, session) {
+    var S = 512;
+    var c = makeCanvas(S, S);
+    var ctx = c.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, S, S);
+      // Heavy-ink oil/ash impact stain under sheared turnstile
+      var sg = ctx.createRadialGradient(240, 260, 18, 256, 256, 210);
+      sg.addColorStop(0.0, 'rgba(6, 9, 14, 0.84)');
+      sg.addColorStop(0.55, 'rgba(10, 14, 20, 0.42)');
+      sg.addColorStop(1.0, 'rgba(10, 14, 20, 0.0)');
+      ctx.fillStyle = sg;
+      ctx.fillRect(0, 0, S, S);
+
+      // Dried dark-crimson drag streak leading west toward security lane
+      ctx.save();
+      ctx.strokeStyle = 'rgba(122, 22, 30, 0.78)';
+      ctx.lineWidth = 26;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(378, 240);
+      ctx.bezierCurveTo(310, 265, 225, 250, 118, 292);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(68, 10, 16, 0.82)';
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(356, 254);
+      ctx.bezierCurveTo(286, 278, 210, 266, 134, 304);
+      ctx.stroke();
+      ctx.restore();
+
+      // Scattered punched cream-white metro ticket stubs & torn timetable scraps
+      var papers = [
+        { x: 184, y: 178, w: 34, h: 18, rot: -0.42, stub: true },
+        { x: 294, y: 318, w: 38, h: 20, rot: 0.35, stub: true },
+        { x: 342, y: 204, w: 32, h: 17, rot: 0.78, stub: true },
+        { x: 158, y: 332, w: 46, h: 32, rot: -0.22, stub: false },
+        { x: 256, y: 146, w: 30, h: 16, rot: 0.14, stub: true },
+        { x: 374, y: 310, w: 42, h: 28, rot: -0.64, stub: false }
+      ];
+      for (var pi = 0; pi < papers.length; pi++) {
+        var pp = papers[pi];
+        ctx.save();
+        ctx.translate(pp.x, pp.y);
+        ctx.rotate(pp.rot);
+        ctx.fillStyle = '#05070c';
+        ctx.fillRect(-pp.w * 0.5 - 3, -pp.h * 0.5 - 3, pp.w + 6, pp.h + 6);
+        ctx.fillStyle = pp.stub ? '#dfd6be' : '#c6ccd4';
+        ctx.fillRect(-pp.w * 0.5, -pp.h * 0.5, pp.w, pp.h);
+        if (pp.stub) {
+          ctx.fillStyle = '#9c2c34';
+          ctx.fillRect(-pp.w * 0.5 + 4, -3, 10, 6);
+          ctx.fillStyle = '#182230';
+          ctx.fillRect(2, -4, 10, 3);
+          ctx.fillRect(2, 2, 8, 2);
+        } else {
+          ctx.fillStyle = '#243040';
+          ctx.fillRect(-pp.w * 0.5 + 5, -8, pp.w - 10, 3);
+          ctx.fillRect(-pp.w * 0.5 + 5, -1, pp.w - 14, 3);
+          ctx.fillRect(-pp.w * 0.5 + 5, 6, pp.w - 18, 3);
+        }
+        ctx.restore();
+      }
+    }
+    var tex = session.trackTex(new THREE.CanvasTexture(c));
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  function createVendingFrontTexture(THREE, session) {
+    var W = 128, H = 256;
+    var c = makeCanvas(W, H);
+    var ctx = c.getContext('2d');
+    if (ctx) {
+      // Heavy-ink dark vending glass recess
+      ctx.fillStyle = '#0a121b';
+      ctx.fillRect(0, 0, W, H);
+      // Subtle interior cool tube glow
+      var vg = ctx.createLinearGradient(0, 0, 0, H);
+      vg.addColorStop(0.0, 'rgba(92, 184, 212, 0.36)');
+      vg.addColorStop(0.65, 'rgba(42, 86, 112, 0.24)');
+      vg.addColorStop(1.0, 'rgba(10, 16, 24, 0.90)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(6, 6, W - 12, H - 12);
+
+      // 4 dark-ink product shelves with silhouette drink cans/bottles
+      var canCols = ['#529ab2', '#b8883c', '#8c343e', '#468c74', '#6c7c92'];
+      for (var row = 0; row < 4; row++) {
+        var sy = 44 + row * 46;
+        ctx.fillStyle = '#060a10';
+        ctx.fillRect(8, sy, W - 16, 6);
+        for (var col = 0; col < 5; col++) {
+          var cx = 14 + col * 21;
+          var ch = 22 + ((row + col) % 3) * 4;
+          ctx.fillStyle = '#05080d';
+          ctx.fillRect(cx - 2, sy - ch - 2, 16, ch + 2);
+          ctx.fillStyle = canCols[(row * 3 + col) % canCols.length];
+          ctx.fillRect(cx, sy - ch, 12, ch);
+          ctx.fillStyle = 'rgba(220, 242, 250, 0.45)';
+          ctx.fillRect(cx + 2, sy - ch + 2, 3, ch - 4);
+        }
+      }
+      // Pickup chute & coin slot panel at bottom
+      ctx.fillStyle = '#05080d';
+      ctx.fillRect(14, 214, W - 28, 28);
+      ctx.strokeStyle = '#3b5166';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(4, 4, W - 8, H - 8);
     }
     var tex = session.trackTex(new THREE.CanvasTexture(c));
     tex.minFilter = THREE.LinearFilter;
@@ -900,6 +1096,14 @@
         reserveProp(cpTurnstileX[cpt], 21.5);
       }
     }
+    // Z-01B Inner Atrium Entry Turnstile Banks framing the Clock Totem between inner columns (33.5 & 49.5)
+    var atriumTurnstileX = [35.2, 36.7, 38.2, 44.8, 46.3, 47.8];
+    for (var atx = 0; atx < atriumTurnstileX.length; atx++) {
+      if (isClearForProp(atriumTurnstileX[atx], 29.5, 1.15, 2.5, 1.9)) {
+        turnstiles.push({ x: atriumTurnstileX[atx], z: 29.5, rotY: 0 });
+        reserveProp(atriumTurnstileX[atx], 29.5);
+      }
+    }
     // Concourse east transfer gate turnstile wing (flanking doorway z=54..66)
     var eastTsZ = [47.5, 49.5, 51.5, 68.5];
     for (var et = 0; et < eastTsZ.length; et++) {
@@ -919,9 +1123,11 @@
         reserveProp(x, z);
       }
     }
-    // Signature twin benches framing Concourse Clock Totem right in opening viewport
-    tryAddBench(34.5, 29.5, 0);
-    tryAddBench(48.5, 29.5, 0);
+    // Grounded benches backed against Z-01B inner column planters & flanking booths (zero floating open-floor benches)
+    tryAddBench(31.2, 44.0, 0);
+    tryAddBench(51.8, 44.0, 0);
+    tryAddBench(31.8, 32.4, 0);
+    tryAddBench(51.2, 32.4, 0);
     // East Lounge clustered passenger benches
     tryAddBench(66.5, 28.5, 0);
     tryAddBench(66.5, 42.5, 0);
@@ -954,7 +1160,9 @@
       // Concourse north illuminated route-map kiosk (mounted flush on north wall face)
       { kind: 'route_map', x: 41.5, y: 1.78, z: cB.z0 + 0.08, rotY: 0, w: 5.6, h: 2.35 },
       // Concourse sub-zone headers (Z-01A Ticket Lobby, Z-01B Clock Atrium, Z-01C Security Bay, Z-01D East Lounge)
-      { kind: 'hanging_sign', title: 'B1 检票大厅 · 零号换乘中枢', sub: 'CONCOURSE Z-01B  ·  CLOCK ATRIUM', accent: '#68c8de', x: 41.5, y: 2.96, z: 23.8, rotY: 0, w: 5.4, h: 1.04 },
+      { kind: 'hanging_sign', title: 'B1 检票闸口 · GATE 01–08', sub: 'LINE-00 · 00:00 SUSPENDED · 售票厅 ↑', accent: '#68c8de', x: 41.5, y: 3.22, z: 29.5, rotY: 0, w: 5.6, h: 0.94 },
+      { kind: 'hanging_sign', title: '← 西侧安检 · 东侧换乘 B2 →', sub: 'Z-01B ATRIUM  ·  SUB-04 旧变电间 ↓', accent: '#d6b274', x: 41.5, y: 3.16, z: 48.6, rotY: 0, w: 5.2, h: 0.92 },
+      { kind: 'hanging_sign', title: 'B1 检票大厅 · 零号换乘中枢', sub: 'CONCOURSE Z-01A  ·  TICKET CHECKPOINT', accent: '#68c8de', x: 41.5, y: 2.98, z: 19.6, rotY: 0, w: 5.4, h: 0.98 },
       { kind: 'hanging_sign', title: '自助售票机 / 补票窗口', sub: 'Z-01A  ·  TICKET MACHINES', accent: '#68c8de', x: 19.5, y: 2.94, z: 14.5, rotY: 0, w: 4.4, h: 0.94 },
       { kind: 'hanging_sign', title: '← 西侧安检与行李扫描区', sub: 'Z-01C  ·  SECURITY & X-RAY BAY', accent: '#ffaa3b', x: 14.0, y: 2.94, z: 39.5, rotY: 0, w: 4.4, h: 0.94 },
       { kind: 'hanging_sign', title: '东侧商业候车廊 · 便利店停业 →', sub: 'Z-01D  ·  EAST PASSENGER LOUNGE', accent: '#d6b274', x: 68.0, y: 2.94, z: 39.5, rotY: 0, w: 4.6, h: 0.94 },
@@ -1113,6 +1321,8 @@
     ], 1.3, 2.5, 1.9);
     var vendingMachines = [];
     collectWalkable(vendingMachines, [
+      { x: 51.35, z: 36.2, rotY: -Math.PI * 0.5 },
+      { x: 51.35, z: 38.6, rotY: -Math.PI * 0.5 },
       { x: 77.3, z: 23.8, rotY: -Math.PI * 0.5 },
       { x: 77.3, z: 25.4, rotY: -Math.PI * 0.5 },
       { x: 77.3, z: 35.8, rotY: -Math.PI * 0.5 },
@@ -1124,8 +1334,8 @@
     collectWalkable(luggageClusters, [
       { x: 8.2, z: 32.2, rotY: 0.35 }, { x: 8.5, z: 49.4, rotY: -0.42 },
       { x: 15.2, z: 27.6, rotY: 0.22 }, { x: 15.6, z: 56.4, rotY: -0.25 },
-      { x: 32.8, z: 27.4, rotY: 0.45 }, { x: 50.2, z: 27.6, rotY: -0.30 },
-      { x: 64.5, z: 36.5, rotY: 0.18 }, { x: 64.8, z: 52.5, rotY: -0.40 }
+      { x: 31.4, z: 40.6, rotY: 0.42 }, { x: 51.6, z: 40.6, rotY: -0.34 },
+      { x: 16.4, z: 42.6, rotY: 0.28 }, { x: 64.8, z: 52.5, rotY: -0.40 }
     ], 1.2, 2.8, 1.9);
 
     // Z-02 Corridor Set-Pieces (Mud-Smeared Ad Lightboxes, Fire Hydrant Cabinets, Payphone Alcoves)
@@ -1216,6 +1426,15 @@
     var zoneSetPieces = {
       concourse: {
         ticketBooth: { x: 41.5, z: 12.5, w: 7.0, d: 3.0 },
+        atriumDutyBooth: { x: 29.5, z: 37.5, w: 3.0, d: 5.0 },
+        atriumNewsstand: { x: 53.5, z: 37.5, w: 3.0, d: 5.0 },
+        atriumClockPlinth: { x: 41.5, z: 29.5 },
+        atriumGirders: [
+          { x: 41.5, z: 21.5, spanX: 38.0 },
+          { x: 41.5, z: 29.5, spanX: 38.0 },
+          { x: 41.5, z: 45.5, spanX: 38.0 },
+          { x: 41.5, z: 60.5, spanX: 38.0 }
+        ],
         tvmBanks: tvmBanks,
         xrayScanners: [{ x: 12.0, z: 32.0 }, { x: 12.0, z: 49.0 }],
         metalDetectors: metalDetectors,
@@ -1636,8 +1855,22 @@
       session.scene.add(m);
     }
 
-    // Z-01B Concourse Grand Terrazzo Compass Medallion right under the Central Clock Atrium spawn plaza
-    addFloorInlay(createFloorCompassTexture(THREE, session), 41.5, FLOOR_Y + 0.015, 37.5, 11.5, 11.5, 0.86);
+    // Z-01B Concourse Weathered Terrazzo Station Crest under Central Atrium
+    addFloorInlay(createFloorCompassTexture(THREE, session), 41.5, FLOOR_Y + 0.020, 37.5, 6.8, 6.8, 0.72);
+    // Z-01 Subway Tactile Blind-Guide Paving (盲道砖) framing central atrium aisles & branching into Z-01C Security Bay
+    var tactileTexNS = createTactilePavingTexture(THREE, session);
+    addFloorInlay(tactileTexNS, 37.6, FLOOR_Y + 0.024, 45.5, 0.56, 36.0, 0.86, 1, 22);
+    var tactileTexNS2 = createTactilePavingTexture(THREE, session);
+    addFloorInlay(tactileTexNS2, 45.4, FLOOR_Y + 0.024, 45.5, 0.56, 36.0, 0.86, 1, 22);
+    var tactileTexWest = createTactilePavingTexture(THREE, session);
+    addFloorInlay(tactileTexWest, 27.2, FLOOR_Y + 0.024, 33.0, 0.56, 19.6, 0.86, 1, 12, Math.PI * 0.5);
+    var tactileTexEast = createTactilePavingTexture(THREE, session);
+    addFloorInlay(tactileTexEast, 61.5, FLOOR_Y + 0.024, 60.5, 0.56, 34.0, 0.86, 1, 20, Math.PI * 0.5);
+    // Z-01 Diegetic Painted Metro Floor Wayfinding Ribbons (cleanly offset from tactile strips & HUD corners)
+    addFloorInlay(createWayfindingStripeTexture(THREE, session, '#d89b3c', '← Z-01C 安检通道 · SECURITY'), 34.4, FLOOR_Y + 0.028, 34.25, 4.9, 0.90, 0.88);
+    addFloorInlay(createWayfindingStripeTexture(THREE, session, '#d89b3c', 'B2 换乘长廊 / 0号站台 →'), 48.4, FLOOR_Y + 0.028, 40.9, 5.1, 0.90, 0.88);
+    addFloorInlay(createWayfindingStripeTexture(THREE, session, '#58b4cc', '↑ 售票大厅 · TICKETS'), 41.5, FLOOR_Y + 0.028, 32.8, 4.6, 0.86, 0.88);
+    addFloorInlay(createWayfindingStripeTexture(THREE, session, '#5d84d4', '↓ 旧变电间 · SUB-04'), 41.5, FLOOR_Y + 0.028, 43.2, 4.6, 0.86, 0.88);
     // Z-01C West Security Bay Floor Frame
     addFloorInlay(createZoneFloorFrameTexture(THREE, session, 'SECURITY X-RAY CHECK · 安检通道', '#ffaa3b'), 13.0, FLOOR_Y + 0.014, 40.5, 14.5, 22.0, 0.68);
     // Z-03B Dispatch Control Deck Anti-Static Technical Floor Overlay
@@ -1875,9 +2108,85 @@
       return ZONE_ACCENT_HEX[zid] || 0x68c8de;
     }
 
+    if (!session._cutawayFocus) {
+      session._cutawayFocus = { value: new THREE.Vector3(41.5, 0, 37.5) };
+    }
+    function applyWallCutawayShader(mat, cacheKey) {
+      if (!mat || !session._cutawayFocus) return mat;
+      var focusUniform = session._cutawayFocus;
+      mat.customProgramCacheKey = function () { return 'wall_cutaway_v1_' + cacheKey; };
+      mat.onBeforeCompile = function (shader) {
+        shader.uniforms.uCutawayFocus = focusUniform;
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vCutawayWorldPos;')
+          .replace(
+            '#include <project_vertex>',
+            [
+              '#include <project_vertex>',
+              'vec4 cwWp = vec4(transformed, 1.0);',
+              '#ifdef USE_INSTANCING',
+              '  cwWp = instanceMatrix * cwWp;',
+              '#endif',
+              'cwWp = modelMatrix * cwWp;',
+              'vCutawayWorldPos = cwWp.xyz;'
+            ].join('\n')
+          );
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nuniform vec3 uCutawayFocus;\nvarying vec3 vCutawayWorldPos;')
+          .replace(
+            '#include <clipping_planes_fragment>',
+            [
+              '#include <clipping_planes_fragment>',
+              'if (vCutawayWorldPos.y > 0.92 && vCutawayWorldPos.z > uCutawayFocus.z + 0.55 && vCutawayWorldPos.z < uCutawayFocus.z + 10.5 && abs(vCutawayWorldPos.x - uCutawayFocus.x) < 5.8) {',
+              '  discard;',
+              '}'
+            ].join('\n')
+          );
+      };
+      return mat;
+    }
+
+    session._applyOverheadCutaway = function (mat, cacheKey) {
+      if (!mat || !session._cutawayFocus) return mat;
+      var focusUniform = session._cutawayFocus;
+      mat.customProgramCacheKey = function () { return 'overhead_cutaway_v1_' + cacheKey; };
+      mat.onBeforeCompile = function (shader) {
+        shader.uniforms.uCutawayFocus = focusUniform;
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vCutawayWorldPos;')
+          .replace(
+            '#include <project_vertex>',
+            [
+              '#include <project_vertex>',
+              'vec4 cwWp = vec4(transformed, 1.0);',
+              '#ifdef USE_INSTANCING',
+              '  cwWp = instanceMatrix * cwWp;',
+              '#endif',
+              'cwWp = modelMatrix * cwWp;',
+              'vCutawayWorldPos = cwWp.xyz;'
+            ].join('\n')
+          );
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nuniform vec3 uCutawayFocus;\nvarying vec3 vCutawayWorldPos;')
+          .replace(
+            '#include <clipping_planes_fragment>',
+            [
+              '#include <clipping_planes_fragment>',
+              'if (vCutawayWorldPos.z > uCutawayFocus.z + 0.4 && vCutawayWorldPos.z < uCutawayFocus.z + 11.5 && abs(vCutawayWorldPos.x - uCutawayFocus.x) < 12.0) {',
+              '  discard;',
+              '}'
+            ].join('\n')
+          );
+      };
+      return mat;
+    };
+
     var wallGeo = session.trackGeo(new THREE.BoxGeometry(1, WALL_HEIGHT, 1));
     var capGeo = session.trackGeo(new THREE.BoxGeometry(1.06, 0.14, 1.06));
-    var capMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x0b0f16, roughness: 0.86, metalness: 0.22 }));
+    var capMat = applyWallCutawayShader(
+      session.trackMat(new THREE.MeshStandardMaterial({ color: 0x0b0f16, roughness: 0.86, metalness: 0.22 })),
+      'cap'
+    );
     var baseTrimGeo = session.trackGeo(new THREE.BoxGeometry(1.04, 0.10, 1.04));
     var baseTrimMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0x06080d }));
 
@@ -1903,14 +2212,14 @@
 
     if (concreteWalls.length > 0) {
       var cTex = session.getTileTex('wall_concrete', '#2b3240', '#161b24');
-      var cMat = session.trackMat(new THREE.MeshStandardMaterial({
+      var cMat = applyWallCutawayShader(session.trackMat(new THREE.MeshStandardMaterial({
         map: cTex,
         normalMap: getNormal('wall_concrete') || null,
         normalScale: new THREE.Vector2(0.78, 0.78),
         roughnessMap: getRoughness('wall_concrete') || null,
         roughness: 0.92,
         metalness: 0.08
-      }));
+      })), 'concrete');
       var cMesh = new THREE.InstancedMesh(wallGeo, cMat, concreteWalls.length);
       var cCap = new THREE.InstancedMesh(capGeo, capMat, concreteWalls.length);
       var cBase = new THREE.InstancedMesh(baseTrimGeo, baseTrimMat, concreteWalls.length);
@@ -1947,7 +2256,7 @@
 
     if (neonWalls.length > 0) {
       var nTex = session.getTileTex('wall_neon', '#233042', '#52d6ea');
-      var nMat = session.trackMat(new THREE.MeshStandardMaterial({
+      var nMat = applyWallCutawayShader(session.trackMat(new THREE.MeshStandardMaterial({
         map: nTex,
         normalMap: getNormal('wall_neon') || null,
         normalScale: new THREE.Vector2(0.75, 0.75),
@@ -1955,14 +2264,19 @@
         roughness: 0.88,
         metalness: 0.12,
         emissive: 0x0a202c,
-        emissiveIntensity: 0.20
-      }));
+        emissiveIntensity: 0.16
+      })), 'neon');
       var nMesh = new THREE.InstancedMesh(wallGeo, nMat, neonWalls.length);
       var nCap = new THREE.InstancedMesh(capGeo, capMat, neonWalls.length);
       var nBase = new THREE.InstancedMesh(baseTrimGeo, baseTrimMat, neonWalls.length);
 
-      var trimGeo = session.trackGeo(new THREE.BoxGeometry(1.04, 0.08, 1.04));
-      var trimMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      // Restrained industrial light trough trim (avoids glaring fullbright cyan/white plastic strips)
+      var trimGeo = session.trackGeo(new THREE.BoxGeometry(1.03, 0.06, 1.03));
+      var trimMat = applyWallCutawayShader(session.trackMat(new THREE.MeshBasicMaterial({
+        color: 0xa6bac8,
+        transparent: true,
+        opacity: 0.68
+      })), 'trim');
       var trimMesh = new THREE.InstancedMesh(trimGeo, trimMat, neonWalls.length);
 
       for (var ni = 0; ni < neonWalls.length; ni++) {
@@ -2090,17 +2404,17 @@
       }));
       var partGlassGeo = session.trackGeo(new THREE.BoxGeometry(0.92, 1.20, 0.92));
       var partGlassMat = session.trackMat(new THREE.MeshStandardMaterial({
-        color: 0xb6e2f2,
-        roughness: 0.16,
-        metalness: 0.24,
+        color: 0x2c465a,
+        roughness: 0.32,
+        metalness: 0.18,
         transparent: true,
-        opacity: 0.32,
+        opacity: 0.24,
         depthWrite: false
       }));
       var partRailGeo = session.trackGeo(new THREE.BoxGeometry(1.02, 0.12, 1.02));
       var partRailMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x101620, roughness: 0.52, metalness: 0.58 }));
       var partTrimGeo = session.trackGeo(new THREE.BoxGeometry(1.03, 0.06, 1.03));
-      var partTrimMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      var partTrimMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0x8ea8b8, transparent: true, opacity: 0.72 }));
       var partMullionGeo = session.trackGeo(new THREE.BoxGeometry(0.14, 1.32, 0.14));
 
       var partDadoInst = new THREE.InstancedMesh(partDadoGeo, partDadoMat, partitions.length);
@@ -2147,7 +2461,7 @@
         }
         if (typeof partGlassInst.setColorAt === 'function') {
           instColor.setHex(accentHex);
-          instColor.lerp(new THREE.Color(0xc8e4f0), 0.55);
+          instColor.lerp(new THREE.Color(0x283e50), 0.72);
           partGlassInst.setColorAt(pti, instColor);
         }
 
@@ -2776,13 +3090,17 @@
       session.scene.add(bSeatInst, bBackInst, bLegInst);
     }
 
-    // 2B. B1 Concourse Painted Storytelling Clutter Clusters (wall/pillar-tucked, zero lane blocking)
+    // 2B. B1 Concourse Painted Storytelling Clutter Clusters (wall/pillar/booth-tucked, zero lane blocking)
     if (session._sceneAEnabled) {
       var clutterSpots = [
-        { x: 2.95, z: 3.15, w: 1.38, h: 1.24, flip: false },
-        { x: 18.85, z: 10.6, w: 1.32, h: 1.18, flip: true },
-        { x: 6.5, z: 7.42, w: 1.18, h: 1.06, flip: false },
-        { x: 14.5, z: 7.42, w: 1.22, h: 1.10, flip: true }
+        { x: 31.35, z: 34.4, w: 1.44, h: 1.26, flip: false },
+        { x: 31.55, z: 40.2, w: 1.32, h: 1.16, flip: true },
+        { x: 51.45, z: 34.4, w: 1.42, h: 1.24, flip: true },
+        { x: 51.55, z: 40.3, w: 1.30, h: 1.14, flip: false },
+        { x: 34.15, z: 28.4, w: 1.22, h: 1.08, flip: false },
+        { x: 48.85, z: 28.4, w: 1.24, h: 1.10, flip: true },
+        { x: 16.20, z: 35.8, w: 1.34, h: 1.18, flip: false },
+        { x: 16.20, z: 44.8, w: 1.36, h: 1.20, flip: true }
       ];
       for (var cl = 0; cl < clutterSpots.length; cl++) {
         var cs = clutterSpots[cl];
@@ -2971,15 +3289,11 @@
     var strip2 = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(86.0, 0.18)), stripMat);
     strip2.rotation.x = -Math.PI / 2;
     strip2.position.set(132.0, 0.022, 74.5);
-    // Concourse north-south promenade linking Clock Totem -> Spawn -> Substation gateway (x=41.5)
-    var strip3 = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(0.18, 44.0)), stripMat);
-    strip3.rotation.x = -Math.PI / 2;
-    strip3.position.set(41.5, 0.022, 51.5);
     // Platform 0 north-south boarding spine (x=186.5)
     var strip4 = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(0.18, 124.0)), stripMat);
     strip4.rotation.x = -Math.PI / 2;
     strip4.position.set(186.5, 0.062, 75.0);
-    session.scene.add(strip1, strip2, strip3, strip4);
+    session.scene.add(strip1, strip2, strip4);
 
     // 8. 6 Zone-Signature 3D Landmarks (distinct ink-outlined silhouettes for instant zone orientation)
     var landmarks = specs.landmarks || [];
@@ -3154,6 +3468,148 @@
         session.scene.add(tbg);
       }
 
+      // West Atrium Staffed Station Inquiry & Duty Booth atop (28..30, 35..39) — directly visible in opening frame
+      if (conc.atriumDutyBooth) {
+        var db = conc.atriumDutyBooth;
+        var dbg = new THREE.Group();
+        dbg.position.set(db.x, 0, db.z);
+        var dbRoof = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(db.w + 0.55, 0.30, db.d + 0.55)), darkSteel);
+        dbRoof.position.y = 2.52;
+        addInkOutline(THREE, session, dbRoof, 24);
+        // Counter ledge facing east into central atrium
+        var dbCounterE = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.38, 0.12, db.d - 0.3)), steelMat);
+        dbCounterE.position.set(db.w * 0.5 + 0.16, 1.02, 0);
+        addInkOutline(THREE, session, dbCounterE, 24);
+        var dbBrassTray = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.24, 0.04, 0.84)), brassValveMat);
+        dbBrassTray.position.set(db.w * 0.5 + 0.20, 1.09, 0.2);
+        // Illuminated canopy signage facing East (towards spawn) and South
+        var dbSignTex = createSignTexture(THREE, session, '站务问询 · 补票亭', 'B1 STATION OFFICE · INQUIRY', '#68c8de', '#091520');
+        var dbSignMat = session.trackMat(new THREE.MeshBasicMaterial({ map: dbSignTex }));
+        var dbSignE = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(4.4, 0.54)), dbSignMat);
+        dbSignE.position.set(db.w * 0.5 + 0.29, 2.52, 0);
+        dbSignE.rotation.y = Math.PI * 0.5;
+        var dbSignS = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(2.7, 0.50)), dbSignMat);
+        dbSignS.position.set(0, 2.52, db.d * 0.5 + 0.29);
+        // Interior clerk monitors + warm amber desk lamp glowing through the glazed window
+        var dbDesk = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(1.1, 0.10, 3.2)), darkMetalMat);
+        dbDesk.position.set(0.2, 1.02, 0);
+        var dbMon1 = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.08, 0.42, 0.58)), cyanLedMat);
+        dbMon1.position.set(0.35, 1.36, -0.75);
+        var dbMon2 = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.08, 0.38, 0.52)), amberLedMat);
+        dbMon2.position.set(0.35, 1.34, 0.72);
+        var dbLampShade = new THREE.Mesh(session.trackGeo(new THREE.ConeGeometry(0.22, 0.16, 8)), brassValveMat);
+        dbLampShade.position.set(-0.1, 1.62, 0.05);
+        var dbLampBulb = new THREE.Mesh(session.trackGeo(new THREE.SphereGeometry(0.11, 8, 8)), amberLedMat);
+        dbLampBulb.position.set(-0.1, 1.52, 0.05);
+        // Illuminated Subway Map framed on south face of booth
+        var dbMapFrame = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(2.1, 1.25, 0.12)), darkMetalMat);
+        dbMapFrame.position.set(0, 1.48, db.d * 0.5 + 0.04);
+        addInkOutline(THREE, session, dbMapFrame, 24);
+        var dbMapFace = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(1.92, 1.08)), session.trackMat(new THREE.MeshBasicMaterial({ map: routeTex })));
+        dbMapFace.position.set(0, 1.48, db.d * 0.5 + 0.11);
+        dbg.add(dbRoof, dbCounterE, dbBrassTray, dbSignE, dbSignS, dbDesk, dbMon1, dbMon2, dbLampShade, dbLampBulb, dbMapFrame, dbMapFace);
+        session.scene.add(dbg);
+      }
+
+      // East Atrium Shuttered Metro Newsstand / Convenience Kiosk atop (52..54, 35..39)
+      if (conc.atriumNewsstand) {
+        var ns = conc.atriumNewsstand;
+        var nsg = new THREE.Group();
+        nsg.position.set(ns.x, 0, ns.z);
+        var nsRoof = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(ns.w + 0.55, 0.30, ns.d + 0.55)), darkSteel);
+        nsRoof.position.y = 2.52;
+        addInkOutline(THREE, session, nsRoof, 24);
+        // Half-jammed corrugated steel shutter facing west into atrium
+        var nsShutter = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.16, 1.68, 4.1)), shutterMat);
+        nsShutter.position.set(-ns.w * 0.5 - 0.04, 1.38, 0);
+        nsShutter.rotation.x = 0.025;
+        addInkOutline(THREE, session, nsShutter, 24);
+        // Horizontal shutter rib seams
+        for (var sr = 0; sr < 5; sr++) {
+          var sRib = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.20, 0.04, 4.05)), darkMetalMat);
+          sRib.position.set(-ns.w * 0.5 - 0.05, 0.72 + sr * 0.32, 0);
+          nsg.add(sRib);
+        }
+        // Backlit fascia sign facing west (toward spawn) and south
+        var nsSignTex = createSignTexture(THREE, session, '零号报刊便利亭 · 封存', 'METRO NEWSSTAND · CLOSED 00:00', '#d6b274', '#13161e');
+        var nsSignMat = session.trackMat(new THREE.MeshBasicMaterial({ map: nsSignTex }));
+        var nsSignW = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(4.4, 0.54)), nsSignMat);
+        nsSignW.position.set(-ns.w * 0.5 - 0.29, 2.52, 0);
+        nsSignW.rotation.y = -Math.PI * 0.5;
+        var nsSignS = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(2.7, 0.50)), nsSignMat);
+        nsSignS.position.set(0, 2.52, ns.d * 0.5 + 0.29);
+        // Mud-smeared metro ad lightbox on south facade facing oncoming corridor traffic
+        var nsAdTex = createMudSmearedAdTexture(THREE, session, 1);
+        var nsAdFrame = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(2.25, 1.18, 0.14)), darkMetalMat);
+        nsAdFrame.position.set(0, 1.44, ns.d * 0.5 + 0.05);
+        addInkOutline(THREE, session, nsAdFrame, 24);
+        var nsAdFace = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(2.08, 1.02)), session.trackMat(new THREE.MeshBasicMaterial({ map: nsAdTex })));
+        nsAdFace.position.set(0, 1.44, ns.d * 0.5 + 0.13);
+        nsg.add(nsRoof, nsShutter, nsSignW, nsSignS, nsAdFrame, nsAdFace);
+        session.scene.add(nsg);
+      }
+
+      // Grounded Architectural Octagonal Curb Plinth & Twin Metro Bins anchoring Clock Totem (41.5, 29.5)
+      if (conc.atriumClockPlinth) {
+        var cp = conc.atriumClockPlinth;
+        var cpg = new THREE.Group();
+        cpg.position.set(cp.x, 0, cp.z);
+        var cpBase = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(1.18, 1.32, 0.22, 8)), darkSteel);
+        cpBase.position.y = 0.11;
+        addInkOutline(THREE, session, cpBase, 24);
+        // Subtle brass outer collar ring with inset dark-slate terrazzo top cap
+        var cpTrim = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(1.22, 1.22, 0.04, 8)), brassValveMat);
+        cpTrim.position.y = 0.21;
+        var cpTopCap = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(1.12, 1.14, 0.05, 8)), steelMat);
+        cpTopCap.position.y = 0.23;
+        addInkOutline(THREE, session, cpTopCap, 24);
+        // Twin dark-steel subway waste bins flanking the clock pedestal
+        var binGeo = session.trackGeo(new THREE.BoxGeometry(0.46, 0.82, 0.42));
+        var binTopGeo = session.trackGeo(new THREE.BoxGeometry(0.50, 0.08, 0.46));
+        var binL = new THREE.Mesh(binGeo, steelMat);
+        binL.position.set(-1.72, 0.41, 0.18);
+        addInkOutline(THREE, session, binL, 24);
+        var binLTop = new THREE.Mesh(binTopGeo, darkMetalMat);
+        binLTop.position.set(-1.72, 0.85, 0.18);
+        var binR = new THREE.Mesh(binGeo, steelMat);
+        binR.position.set(1.72, 0.41, 0.18);
+        addInkOutline(THREE, session, binR, 24);
+        var binRTop = new THREE.Mesh(binTopGeo, darkMetalMat);
+        binRTop.position.set(1.72, 0.85, 0.18);
+        cpg.add(cpBase, cpTrim, cpTopCap, binL, binLTop, binR, binRTop);
+        session.scene.add(cpg);
+      }
+
+      // Overhead Z-01B Heavy-Ink Subway Ceiling Steel I-Beams & Hanging Conduit Pipes (with dynamic player cutaway)
+      var girders = conc.atriumGirders || [];
+      if (girders.length > 0) {
+        var applyOhCut = typeof session._applyOverheadCutaway === 'function' ? session._applyOverheadCutaway : function (m) { return m; };
+        var girderMat = applyOhCut(session.trackMat(new THREE.MeshStandardMaterial({ color: 0x0d121a, roughness: 0.86, metalness: 0.34 })), 'girder');
+        var flangeMat = applyOhCut(session.trackMat(new THREE.MeshStandardMaterial({ color: 0x161c26, roughness: 0.68, metalness: 0.36 })), 'flange');
+        var pipeMat = applyOhCut(session.trackMat(new THREE.MeshStandardMaterial({ color: 0x1d2634, roughness: 0.68, metalness: 0.52 })), 'pipe');
+        var tubeLampMat = applyOhCut(session.trackMat(new THREE.MeshBasicMaterial({ color: 0x9cdcf0, transparent: true, opacity: 0.58 })), 'tube');
+        for (var gi = 0; gi < girders.length; gi++) {
+          var gd = girders[gi];
+          var gg = new THREE.Group();
+          gg.position.set(gd.x, 3.62, gd.z);
+          var beam = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(gd.spanX, 0.28, 0.34)), girderMat);
+          var flange = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(gd.spanX, 0.06, 0.46)), flangeMat);
+          flange.position.y = -0.15;
+          var conduit = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.05, 0.05, gd.spanX, 6)), pipeMat);
+          conduit.rotation.z = Math.PI * 0.5;
+          conduit.position.set(0, -0.22, 0.20);
+          gg.add(beam, flange, conduit);
+          // Recessed fluorescent tube segments along underside of girder
+          var lampOffsets = [-11.5, -4.5, 4.5, 11.5];
+          for (var lo = 0; lo < lampOffsets.length; lo++) {
+            var tube = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(2.6, 0.05, 0.14)), tubeLampMat);
+            tube.position.set(lampOffsets[lo], -0.20, 0);
+            gg.add(tube);
+          }
+          session.scene.add(gg);
+        }
+      }
+
       // Automatic Ticket Vending Machine (TVM) Banks (Instanced)
       var tvms = conc.tvmBanks || [];
       if (tvms.length > 0) {
@@ -3239,38 +3695,46 @@
         session.scene.add(kg);
       }
 
-      // Glowing Beverage/Snack Vending Machines (Instanced)
+      // Heavy-Ink Subway Beverage/Snack Vending Machines (Instanced with detailed drink-shelf texture)
       var vms = conc.vendingMachines || [];
       if (vms.length > 0) {
         var vmBodyGeo = session.trackGeo(new THREE.BoxGeometry(1.10, 2.15, 0.78));
-        var vmGlassGeo = session.trackGeo(new THREE.BoxGeometry(0.84, 1.24, 0.05));
-        var vmGlowMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0x86e0f8 }));
+        var vmGlassGeo = session.trackGeo(new THREE.BoxGeometry(0.86, 1.38, 0.05));
+        var vmGlowMat = session.trackMat(new THREE.MeshBasicMaterial({ map: createVendingFrontTexture(THREE, session) }));
         var vmBodyInst = new THREE.InstancedMesh(vmBodyGeo, darkMetalMat, vms.length);
         var vmGlassInst = new THREE.InstancedMesh(vmGlassGeo, vmGlowMat, vms.length);
         for (var vi = 0; vi < vms.length; vi++) {
           setLocalInstance(vmBodyInst, vi, vms[vi].x, 0, vms[vi].z, vms[vi].rotY, 0, 1.08, 0);
-          setLocalInstance(vmGlassInst, vi, vms[vi].x, 0, vms[vi].z, vms[vi].rotY, 0, 1.32, 0.40);
+          setLocalInstance(vmGlassInst, vi, vms[vi].x, 0, vms[vi].z, vms[vi].rotY, 0, 1.24, 0.40);
         }
         vmBodyInst.instanceMatrix.needsUpdate = true;
         vmGlassInst.instanceMatrix.needsUpdate = true;
         session.scene.add(vmBodyInst, vmGlassInst);
       }
 
-      // Abandoned Passenger Rolling Suitcases (Instanced)
+      // Abandoned Passenger Rolling Suitcases (Style-1 Heavy-Ink Textured Cases + Brass Strap + Handle)
       var lugs = conc.luggageClusters || [];
       if (lugs.length > 0) {
-        var lugGeo = session.trackGeo(new THREE.BoxGeometry(0.56, 0.72, 0.34));
-        var lugHandleGeo = session.trackGeo(new THREE.BoxGeometry(0.28, 0.36, 0.06));
-        var lugMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x3b4858, roughness: 0.74, metalness: 0.22 }));
+        var lugGeo = session.trackGeo(new THREE.BoxGeometry(0.58, 0.72, 0.34));
+        var lugStrapGeo = session.trackGeo(new THREE.BoxGeometry(0.60, 0.12, 0.36));
+        var lugHandleGeo = session.trackGeo(new THREE.BoxGeometry(0.28, 0.34, 0.06));
+        var lugMat = session.trackMat(new THREE.MeshStandardMaterial({
+          map: createStyle1PropTexture(THREE, session, 'dark_case'),
+          roughness: 0.78,
+          metalness: 0.20
+        }));
         var lugInst = new THREE.InstancedMesh(lugGeo, lugMat, lugs.length);
-        var lugHInst = new THREE.InstancedMesh(lugHandleGeo, steelMat, lugs.length);
+        var lugStrapInst = new THREE.InstancedMesh(lugStrapGeo, brassValveMat, lugs.length);
+        var lugHInst = new THREE.InstancedMesh(lugHandleGeo, darkMetalMat, lugs.length);
         for (var li2 = 0; li2 < lugs.length; li2++) {
           setLocalInstance(lugInst, li2, lugs[li2].x, 0, lugs[li2].z, lugs[li2].rotY, 0, 0.36, 0);
+          setLocalInstance(lugStrapInst, li2, lugs[li2].x, 0, lugs[li2].z, lugs[li2].rotY, 0, 0.38, 0);
           setLocalInstance(lugHInst, li2, lugs[li2].x, 0, lugs[li2].z, lugs[li2].rotY, 0, 0.84, 0);
         }
         lugInst.instanceMatrix.needsUpdate = true;
+        lugStrapInst.instanceMatrix.needsUpdate = true;
         lugHInst.instanceMatrix.needsUpdate = true;
-        session.scene.add(lugInst, lugHInst);
+        session.scene.add(lugInst, lugStrapInst, lugHInst);
       }
     }
 
@@ -4241,6 +4705,104 @@
    *    + Dynamic Destructible Covers & Interactive Scene Triggers)
    * Preserves exact engine_25d item contract (group, sprite, mat, ring, ringMat)
    * -------------------------------------------------------------------------- */
+  function createStyle1PropTexture(THREE, session, variant) {
+    var key = '_s1PropTex_' + variant;
+    if (session[key]) return session[key];
+    var S = 128;
+    var c = makeCanvas(S, S);
+    var ctx = c.getContext('2d');
+    if (ctx) {
+      if (variant === 'hazard') {
+        ctx.fillStyle = '#151922';
+        ctx.fillRect(0, 0, S, S);
+        ctx.fillStyle = '#c8922e';
+        for (var d = -S; d < S * 2; d += 36) {
+          ctx.beginPath();
+          ctx.moveTo(d, 0); ctx.lineTo(d + 18, 0);
+          ctx.lineTo(d + 18 - S, S); ctx.lineTo(d - S, S);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = '#05070b';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+      } else if (variant === 'concrete') {
+        ctx.fillStyle = '#2d3744';
+        ctx.fillRect(0, 0, S, S);
+        // Hard oblique cel shadow block
+        ctx.fillStyle = '#1d2530';
+        ctx.beginPath();
+        ctx.moveTo(0, S); ctx.lineTo(S, S); ctx.lineTo(S, S * 0.28); ctx.lineTo(S * 0.18, S * 0.72);
+        ctx.closePath();
+        ctx.fill();
+        // Ink fractures & cross-hatching
+        ctx.strokeStyle = '#06080d';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(14, 24); ctx.lineTo(44, 42); ctx.lineTo(36, 78); ctx.lineTo(66, 108);
+        ctx.moveTo(82, 16); ctx.lineTo(106, 48); ctx.lineTo(92, 86);
+        ctx.stroke();
+        ctx.lineWidth = 1.3;
+        for (var hx = 10; hx < S; hx += 12) {
+          ctx.beginPath(); ctx.moveTo(hx, S - 26); ctx.lineTo(hx + 10, S - 6); ctx.stroke();
+        }
+      } else if (variant === 'dark_case') {
+        ctx.fillStyle = '#121822';
+        ctx.fillRect(0, 0, S, S);
+        ctx.fillStyle = '#1b2432';
+        ctx.fillRect(8, 8, S - 16, S - 16);
+        ctx.fillStyle = '#0c1018';
+        ctx.beginPath();
+        ctx.moveTo(8, S - 8); ctx.lineTo(S - 8, S - 8); ctx.lineTo(S - 8, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#05070b';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(10, 10, S - 20, S - 20);
+        // Industrial vent slats
+        ctx.fillStyle = '#06080d';
+        for (var vy = 26; vy < 76; vy += 12) ctx.fillRect(22, vy, S - 44, 5);
+      } else {
+        // Heavy-ink riveted industrial steel crate / stanchion
+        ctx.fillStyle = '#253140';
+        ctx.fillRect(0, 0, S, S);
+        ctx.fillStyle = '#19222e';
+        ctx.beginPath();
+        ctx.moveTo(0, S); ctx.lineTo(S, S); ctx.lineTo(S, 0);
+        ctx.closePath();
+        ctx.fill();
+        // Diagonal recessed crate brace
+        ctx.strokeStyle = '#06080d';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(5, 5, S - 10, S - 10);
+        ctx.lineWidth = 3;
+        ctx.strokeRect(15, 15, S - 30, S - 30);
+        ctx.beginPath(); ctx.moveTo(16, 16); ctx.lineTo(S - 16, S - 16); ctx.stroke();
+        // Highlight lip
+        ctx.strokeStyle = 'rgba(136, 198, 224, 0.24)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(10, S - 12); ctx.lineTo(10, 10); ctx.lineTo(S - 12, 10); ctx.stroke();
+        // Corner rivets
+        ctx.fillStyle = '#05070b';
+        var rv = [[12,12],[S-12,12],[12,S-12],[S-12,S-12]];
+        for (var ri = 0; ri < rv.length; ri++) {
+          ctx.beginPath(); ctx.arc(rv[ri][0], rv[ri][1], 3.2, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      // Universal bold heavy-ink outer perimeter seam
+      ctx.strokeStyle = '#04060a';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(0, 0, S, S);
+    }
+    var tex = session.trackTex(new THREE.CanvasTexture(c));
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
+    tex.needsUpdate = true;
+    session[key] = tex;
+    return tex;
+  }
+
   function buildInteractables(session) {
     var THREE = session.THREE;
     var defs = [];
@@ -4248,12 +4810,26 @@
       try { defs = session.mapApi.getInteractables() || []; } catch (_) { defs = []; }
     }
 
-    var steelMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.62, metalness: 0.44 }));
-    var darkCaseMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x141922, roughness: 0.72, metalness: 0.34 }));
-    var brassMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0xc29544, roughness: 0.46, metalness: 0.62 }));
-    var hazardMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0xe69f2e, roughness: 0.52, metalness: 0.16 }));
-    var concreteMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x3b4454, roughness: 0.88, metalness: 0.08 }));
-    var rubbleMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x262d38, roughness: 0.92, metalness: 0.06 }));
+    var steelTex = createStyle1PropTexture(THREE, session, 'steel');
+    var darkCaseTex = createStyle1PropTexture(THREE, session, 'dark_case');
+    var concreteTex = createStyle1PropTexture(THREE, session, 'concrete');
+    var hazardTex = createStyle1PropTexture(THREE, session, 'hazard');
+
+    var steelMat = session.trackMat(new THREE.MeshStandardMaterial({ map: steelTex, color: 0xbcd0e2, roughness: 0.72, metalness: 0.30 }));
+    var darkCaseMat = session.trackMat(new THREE.MeshStandardMaterial({ map: darkCaseTex, color: 0xadbcd0, roughness: 0.78, metalness: 0.24 }));
+    var brassMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0xc29544, roughness: 0.48, metalness: 0.56 }));
+    var hazardMat = session.trackMat(new THREE.MeshStandardMaterial({ map: hazardTex, color: 0xe6c88a, roughness: 0.68, metalness: 0.12 }));
+    var concreteMat = session.trackMat(new THREE.MeshStandardMaterial({ map: concreteTex, color: 0xbfd0dc, roughness: 0.88, metalness: 0.08 }));
+    var rubbleMat = session.trackMat(new THREE.MeshStandardMaterial({ map: concreteTex, color: 0x7a8898, roughness: 0.94, metalness: 0.06 }));
+
+    var propAoGeo = session.trackGeo(new THREE.PlaneGeometry(2.05, 1.85));
+    propAoGeo.rotateX(-Math.PI / 2);
+    var propAoMat = session.trackMat(new THREE.MeshBasicMaterial({
+      map: createPillarAoTexture(THREE, session),
+      transparent: true,
+      opacity: 0.86,
+      depthWrite: false
+    }));
 
     var ringGeo = session.trackGeo(new THREE.RingGeometry(0.56, 0.65, 28));
     ringGeo.rotateX(-Math.PI / 2);
@@ -4263,6 +4839,9 @@
       var type = d.type || 'clue';
       var group = new THREE.Group();
       group.position.set(d.x, 0, d.z);
+      var iAo = new THREE.Mesh(propAoGeo, propAoMat);
+      iAo.position.y = 0.024;
+      group.add(iAo);
 
       var interactHex = (INFINITY.ArtTokens && INFINITY.ArtTokens.SEMANTIC && INFINITY.ArtTokens.SEMANTIC.interactInt) || 0x5ce8c8;
       var warningHex = (INFINITY.ArtTokens && INFINITY.ArtTokens.SEMANTIC && INFINITY.ArtTokens.SEMANTIC.warningInt) || 0xffaa3b;
@@ -4369,46 +4948,115 @@
         spriteMesh.position.set(0, 1.26, 0);
 
         group.add(colL, colR, header, signFace, spriteMesh);
-      } else {
-        // Sculpted Holographic Evidence Pedestal + Floating Illuminated Dossier Prism
-        var pad = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.42, 0.50, 0.10, 8)), darkCaseMat);
-        pad.position.y = 0.05;
-        addInkOutline(THREE, session, pad, 24);
-        var caseBox = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.48, 0.16, 0.34)), steelMat);
-        caseBox.position.set(0, 0.17, 0);
-        addInkOutline(THREE, session, caseBox, 24);
-        var clasp = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.14, 0.06, 0.36)), brassMat);
-        clasp.position.set(0, 0.21, 0);
+      } else if (d.id === 'int_clue_concourse') {
+        // Z-01 Hero Environmental Storytelling Micro-Vignette:
+        // Violently sheared subway turnstile + crimson drag-mark + spilled leather briefcase + scattered punched ticket stubs
+        var decalGeo = session.trackGeo(new THREE.PlaneGeometry(2.75, 2.35));
+        decalGeo.rotateX(-Math.PI / 2);
+        var decalMat = session.trackMat(new THREE.MeshBasicMaterial({
+          map: createIncidentClueDecalTexture(THREE, session),
+          transparent: true,
+          opacity: 0.94,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2
+        }));
+        var incidentDecal = new THREE.Mesh(decalGeo, decalMat);
+        incidentDecal.position.set(0.05, 0.028, 0.04);
 
-        // Restrained vertical holographic projection cone
-        var holoCone = new THREE.Mesh(
-          session.trackGeo(new THREE.ConeGeometry(0.36, 1.05, 12, 1, true)),
-          session.trackMat(new THREE.MeshBasicMaterial({
-            color: 0x5cd2e8,
-            transparent: true,
-            opacity: 0.10,
-            side: THREE.DoubleSide,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending
-          }))
-        );
-        holoCone.position.y = 0.68;
-        holoCone.rotation.x = Math.PI;
+        // Violently tilted/sheared steel turnstile post on the right flank
+        var shearedBody = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.32, 0.96, 0.92)), steelMat);
+        shearedBody.position.set(0.56, 0.44, -0.22);
+        shearedBody.rotation.set(0.14, 0.22, -0.34);
+        addInkOutline(THREE, session, shearedBody, 24);
 
-        var clueTex = session.getPropTex('clue_glow', '#6fd8ea');
+        var shearedCap = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.36, 0.09, 0.96)), darkCaseMat);
+        shearedCap.position.set(0.72, 0.88, -0.15);
+        shearedCap.rotation.set(0.14, 0.22, -0.34);
+        addInkOutline(THREE, session, shearedCap, 24);
+
+        // Short-circuiting amber spark LED on broken card reader
+        auxBeaconMat = session.trackMat(new THREE.MeshBasicMaterial({ color: 0xffa838 }));
+        var sparkLed = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.16, 0.08, 0.06)), auxBeaconMat);
+        sparkLed.position.set(0.62, 0.72, 0.24);
+
+        // Snapped stainless turnstile barrier arm lying across the floor
+        var snappedArm = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.028, 0.028, 0.76, 8)), steelMat);
+        snappedArm.rotation.set(Math.PI * 0.5, 0, 0.62);
+        snappedArm.position.set(0.06, 0.045, 0.34);
+        addInkOutline(THREE, session, snappedArm, 24);
+
+        // Dropped battered leather commuter briefcase cracked open on its side
+        var leatherMat = session.trackMat(new THREE.MeshStandardMaterial({ color: 0x3b271e, roughness: 0.84, metalness: 0.14 }));
+        var briefcaseBase = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.56, 0.14, 0.38)), leatherMat);
+        briefcaseBase.position.set(-0.34, 0.09, 0.14);
+        briefcaseBase.rotation.y = 0.42;
+        addInkOutline(THREE, session, briefcaseBase, 24);
+        var briefcaseLid = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.54, 0.05, 0.36)), leatherMat);
+        briefcaseLid.position.set(-0.46, 0.22, -0.02);
+        briefcaseLid.rotation.set(-0.72, 0.42, 0.08);
+        addInkOutline(THREE, session, briefcaseLid, 24);
+        var caseClasp = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.10, 0.06, 0.06)), brassMat);
+        caseClasp.position.set(-0.24, 0.14, 0.32);
+
+        // Tipped yellow-black security stanchion post framing the struggle site
+        var stanchionPost = new THREE.Mesh(session.trackGeo(new THREE.CylinderGeometry(0.05, 0.06, 0.86, 8)), darkCaseMat);
+        stanchionPost.position.set(-0.62, 0.08, -0.44);
+        stanchionPost.rotation.set(1.42, 0.35, -0.62);
+        addInkOutline(THREE, session, stanchionPost, 24);
+
+        // Subtle warm paper-glint interactable indicator hovering gently over the spilled ticket stubs (no sci-fi cone)
+        var clueTex = session.getPropTex('clue_glow', '#e8c47a');
         mainMat = session.trackMat(new THREE.MeshBasicMaterial({
           map: clueTex,
-          color: 0xffffff,
+          color: 0xf4dca4,
           transparent: true,
-          opacity: 0.90,
+          opacity: 0.68,
           side: THREE.DoubleSide,
           depthWrite: false
         }));
-        spriteMesh = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(0.80, 0.80)), mainMat);
-        spriteMesh.position.y = 0.84;
+        spriteMesh = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(0.46, 0.46)), mainMat);
+        spriteMesh.position.set(-0.18, 0.44, 0.10);
         spriteMesh.rotation.x = -0.28;
 
-        group.add(pad, caseBox, clasp, holoCone, spriteMesh);
+        // Restrain ground rings to a quiet forensic glint
+        rMat.opacity = 0.14;
+        pulseMat.opacity = 0.08;
+
+        group.add(
+          incidentDecal, shearedBody, shearedCap, sparkLed, snappedArm,
+          briefcaseBase, briefcaseLid, caseClasp, stanchionPost, spriteMesh
+        );
+      } else {
+        // Grounded Heavy-Ink Forensic Evidence Case + Subtle Diegetic Paper Glint (no arcade hologram cone)
+        var pad = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.68, 0.06, 0.52)), darkCaseMat);
+        pad.position.y = 0.03;
+        addInkOutline(THREE, session, pad, 24);
+        var caseBox = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.52, 0.18, 0.36)), steelMat);
+        caseBox.position.set(0, 0.15, 0);
+        caseBox.rotation.y = 0.24;
+        addInkOutline(THREE, session, caseBox, 24);
+        var clasp = new THREE.Mesh(session.trackGeo(new THREE.BoxGeometry(0.14, 0.06, 0.38)), brassMat);
+        clasp.position.set(0, 0.19, 0);
+        clasp.rotation.y = 0.24;
+
+        var clueTex2 = session.getPropTex('clue_glow', '#d8be84');
+        mainMat = session.trackMat(new THREE.MeshBasicMaterial({
+          map: clueTex2,
+          color: 0xeed9a6,
+          transparent: true,
+          opacity: 0.72,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        }));
+        spriteMesh = new THREE.Mesh(session.trackGeo(new THREE.PlaneGeometry(0.54, 0.54)), mainMat);
+        spriteMesh.position.y = 0.54;
+        spriteMesh.rotation.x = -0.28;
+        rMat.opacity = 0.18;
+        pulseMat.opacity = 0.10;
+
+        group.add(pad, caseBox, clasp, spriteMesh);
       }
 
       session.scene.add(group);
@@ -4432,6 +5080,9 @@
         ringMat: rMat,
         pulseRing: pulseRing,
         pulseMat: pulseMat,
+        spriteBaseY: d.id === 'int_clue_concourse' ? 0.44 : (type === 'clue' ? 0.54 : undefined),
+        spriteBobAmp: d.id === 'int_clue_concourse' ? 0.04 : (type === 'clue' ? 0.06 : undefined),
+        ringBaseOpacity: d.id === 'int_clue_concourse' ? 0.14 : (type === 'clue' ? 0.18 : undefined),
         bobPhase: i * 1.3
       };
 
@@ -4452,6 +5103,10 @@
       var dc = dynSet.destructibles[di];
       var dcGroup = new THREE.Group();
       dcGroup.position.set(dc.x, 0, dc.z);
+      var dcAo = new THREE.Mesh(propAoGeo, propAoMat);
+      dcAo.position.y = 0.024;
+      dcAo.scale.set(1.12, 1.12, 1);
+      dcGroup.add(dcAo);
 
       var dcRingMat = session.trackMat(new THREE.MeshBasicMaterial({
         color: 0xe69f2e,
@@ -4585,6 +5240,10 @@
       var tr = dynSet.triggers[ti];
       var trGroup = new THREE.Group();
       trGroup.position.set(tr.x, 0, tr.z);
+      var trAo = new THREE.Mesh(propAoGeo, propAoMat);
+      trAo.position.y = 0.024;
+      trAo.scale.set(0.92, 0.92, 1);
+      trGroup.add(trAo);
 
       var trColor = tr.triggerEffect === 'acoustic_lure'
         ? 0xffaa3b

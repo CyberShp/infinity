@@ -209,9 +209,23 @@
     };
   }
 
+  var CUTINS = {
+    player: 'assets/portraits/cutin_player.webp',
+    boss: 'assets/portraits/cutin_boss.webp',
+    inspector: 'assets/portraits/cutin_boss.webp'
+  };
+
+  function getCutInUrl(id) {
+    if (!id) return null;
+    var key = String(id).trim().toLowerCase();
+    var rel = CUTINS[key] || PORTRAITS[key];
+    return rel ? resolvePath(rel) : null;
+  }
+
   INFINITY.ASSETS = {
     basePrefix: BASE_PREFIX,
     portraits: PORTRAITS,
+    cutins: CUTINS,
     tiles: TILES,
     icons: ICONS,
     sprites: SPRITES,
@@ -220,6 +234,7 @@
     combatPoseSheets: COMBAT_POSE_SHEETS,
     resolvePath: resolvePath,
     getPortraitUrl: getPortraitUrl,
+    getCutInUrl: getCutInUrl,
     getTileUrl: getTileUrl,
     getIconUrl: getIconUrl,
     getSpriteUrl: getSpriteUrl,

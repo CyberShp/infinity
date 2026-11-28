@@ -3133,6 +3133,18 @@
     return cframe;
   }
 
+  function preloadAllExternalSprites() {
+    var ids = ['player', 'yanci', 'lujin', 'xutan', 'shenyan', 'inspector'];
+    for (var i = 0; i < ids.length; i++) {
+      triggerExternalSpriteLoad(ids[i], false);
+    }
+    triggerExternalSpriteLoad('player:combat', false);
+    var vfxKeys = ['hades_cyan', 'hades_cyan_16f', 'hades_crimson_boss_16f', 'hades_flame', 'hades_emp', 'hades_tao_ground', 'hades_occult_chain', 'hades_heal_aegis'];
+    for (var vi = 0; vi < vfxKeys.length; vi++) {
+      getVfxFlipbookTexture(vfxKeys[vi]);
+    }
+  }
+
   // Optional 3rd arg weaponStyle ('sword' | 'cyber' | 'occult' | 'tactical'); 2-arg calls unchanged.
   // Locks GPU CanvasTexture size upfront (256x256 cast, 320x384 inspector) for WebGL2 texStorage2D safety.
   // All player weaponStyles prefer Style-1 external player_sheet.webp when available, falling back to procedural.
@@ -3154,6 +3166,13 @@
       if (st.sheetStatus === 'loaded' && st.sheetImg) {
         sliceSheetImageIntoEntry(st.sheetImg, entry);
       } else {
+        // Prevent chibi fallback flash on first combat swing if base Style-1 sheet is already loaded
+        if (extId !== cid) {
+          var baseSt = getCharExtState(cid);
+          if (baseSt.sheetStatus === 'loaded' && baseSt.sheetImg) {
+            sliceSheetImageIntoEntry(baseSt.sheetImg, { frame: 'action', canvas: canvas, tex: tex });
+          }
+        }
         triggerExternalSpriteLoad(extId, false);
       }
     }
@@ -3180,6 +3199,12 @@
       } else if (st.sheetStatus === 'loaded' && st.normalStatus === 'error') {
         syncDerivedCharMaps(extId);
       } else {
+        if (extId !== cid) {
+          var baseStN = getCharExtState(cid);
+          if (baseStN.normalStatus === 'loaded' && baseStN.normalImg) {
+            sliceSheetImageIntoEntry(baseStN.normalImg, { frame: 'action', canvas: canvas, tex: tex });
+          }
+        }
         triggerExternalSpriteLoad(extId, false);
       }
     }
@@ -3206,6 +3231,12 @@
       } else if (st.sheetStatus === 'loaded' && st.emissiveStatus === 'error') {
         syncDerivedCharMaps(extId);
       } else {
+        if (extId !== cid) {
+          var baseStE = getCharExtState(cid);
+          if (baseStE.emissiveStatus === 'loaded' && baseStE.emissiveImg) {
+            sliceSheetImageIntoEntry(baseStE.emissiveImg, { frame: 'action', canvas: canvas, tex: tex });
+          }
+        }
         triggerExternalSpriteLoad(extId, false);
       }
     }
@@ -3235,6 +3266,7 @@
     getTileRoughnessTexture: getTileRoughnessTexture,
     reloadExternalTiles: reloadExternalTiles,
     reloadExternalSprites: reloadExternalSprites,
+    preloadAllExternalSprites: preloadAllExternalSprites,
     reloadExternalVfx: reloadExternalVfx,
     getCharTexture: getCharTexture,
     getCharNormalTexture: getCharNormalTexture,

@@ -47,68 +47,81 @@
     return { id: m, primary: '#38d6d6', secondary: '#f2b852', core: '#ffffff' };
   }
 
-  // 6 Category Frame Geometry (64x64 viewBox)
+  // 6 Style-1 Heavy-Ink Category Frame Geometries (64x64 viewBox — bold pitch-black contour + oblique hard block shadow)
   function buildCategoryFrame(category, borderCol, bgFill, isSTier) {
-    var strokeW = isSTier ? '2.4' : '1.9';
+    var strokeW = isSTier ? '2.5' : '2.0';
+    var ink = '#04060a';
     var inner = '';
     switch (category) {
       case 'bloodline':
-        // Double-ring bio/lineage crest
+        // Chamfered diamond-octa lineage medallion with hard diagonal ink shadow
         inner =
-          '<circle cx="32" cy="32" r="27" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '"/>' +
-          '<circle cx="32" cy="32" r="22.5" fill="none" stroke="' + borderCol + '" stroke-width="0.9" stroke-dasharray="4 3" opacity="0.72"/>';
+          '<polygon points="32,3 57,15 61,32 57,49 32,61 7,49 3,32 7,15" fill="' + ink + '"/>' +
+          '<polygon points="32,5.5 54.5,16.5 58.5,32 54.5,47.5 32,58.5 9.5,47.5 5.5,32 9.5,16.5" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '"/>' +
+          '<polygon points="54.5,16.5 58.5,32 54.5,47.5 32,58.5 14,50 48,14" fill="#05070c" opacity="0.62"/>' +
+          '<polygon points="32,10.5 50,19.5 53.5,32 50,44.5 32,53.5 14,44.5 10.5,32 14,19.5" fill="none" stroke="' + borderCol + '" stroke-width="0.9" opacity="0.52"/>';
         break;
       case 'cultivation':
-        // Octagonal Daoist seal
+        // Heavy-ink octagonal Daoist talisman stele
         inner =
-          '<polygon points="20,5 44,5 59,20 59,44 44,59 20,59 5,44 5,20" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '"/>' +
-          '<polygon points="22,9.5 42,9.5 54.5,22 54.5,42 42,54.5 22,54.5 9.5,42 9.5,22" fill="none" stroke="' + borderCol + '" stroke-width="0.85" opacity="0.55"/>';
+          '<polygon points="19,3 45,3 61,19 61,45 45,61 19,61 3,45 3,19" fill="' + ink + '"/>' +
+          '<polygon points="20.5,5.5 43.5,5.5 58.5,20.5 58.5,43.5 43.5,58.5 20.5,58.5 5.5,43.5 5.5,20.5" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '"/>' +
+          '<polygon points="58.5,20.5 58.5,43.5 43.5,58.5 20.5,58.5 12,50 50,12" fill="#05070c" opacity="0.62"/>' +
+          '<polygon points="22.5,10 41.5,10 54,22.5 54,41.5 41.5,54 22.5,54 10,41.5 10,22.5" fill="none" stroke="' + borderCol + '" stroke-width="0.95" opacity="0.5"/>';
         break;
       case 'myth':
-        // Diamond relic stele
+        // Heavy-ink hexagonal relic plaque
         inner =
-          '<polygon points="32,4 58,20 58,44 32,60 6,44 6,20" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '"/>' +
-          '<polygon points="32,9 53,22 53,42 32,55 11,42 11,22" fill="none" stroke="' + borderCol + '" stroke-width="0.85" opacity="0.5"/>';
+          '<polygon points="32,2.5 60,18 60,46 32,61.5 4,46 4,18" fill="' + ink + '"/>' +
+          '<polygon points="32,5 57.5,19.5 57.5,44.5 32,59 6.5,44.5 6.5,19.5" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '"/>' +
+          '<polygon points="57.5,19.5 57.5,44.5 32,59 13,48 50,15" fill="#05070c" opacity="0.62"/>' +
+          '<polygon points="32,10 52.5,22 52.5,42 32,54 11.5,42 11.5,22" fill="none" stroke="' + borderCol + '" stroke-width="0.9" opacity="0.5"/>';
         break;
       case 'tech':
-        // Chamfered tactical microchip frame
+        // Hard-chamfered armored industrial plate
         inner =
-          '<polygon points="13,6 51,6 58,13 58,51 51,58 13,58 6,51 6,13" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '"/>' +
-          '<path d="M12,15 L15,12 M52,15 L49,12 M12,49 L15,52 M52,49 L49,52" stroke="' + borderCol + '" stroke-width="1.4" opacity="0.75"/>';
+          '<polygon points="12,4 52,4 60,12 60,52 52,60 12,60 4,52 4,12" fill="' + ink + '"/>' +
+          '<polygon points="13.5,6 50.5,6 58,13.5 58,50.5 50.5,58 13.5,58 6,50.5 6,13.5" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '"/>' +
+          '<polygon points="58,13.5 58,50.5 50.5,58 13.5,58 10,54 54,10" fill="#05070c" opacity="0.64"/>' +
+          '<path d="M11,16 L16,11 M53,16 L48,11 M11,48 L16,53 M53,48 L48,53" stroke="' + borderCol + '" stroke-width="1.6" opacity="0.72"/>';
         break;
       case 'anomaly':
-        // Fractured containment frame
+        // Fractured heavy-ink containment slab
         inner =
-          '<rect x="6" y="6" width="52" height="52" rx="4" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '" stroke-dasharray="18 3 12 3"/>' +
-          '<path d="M9,14 L14,9 M55,50 L50,55 M9,50 L15,50 M49,14 L55,14" stroke="' + borderCol + '" stroke-width="1.2" opacity="0.7"/>';
+          '<polygon points="5,5 59,5 59,59 5,59" fill="' + ink + '"/>' +
+          '<rect x="6.5" y="6.5" width="51" height="51" rx="1" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '" stroke-dasharray="19 3 11 3"/>' +
+          '<polygon points="57.5,6.5 57.5,57.5 6.5,57.5 57.5,6.5" fill="#05070c" opacity="0.62"/>' +
+          '<path d="M9,15 L15,9 M55,49 L49,55 M9,49 L16,49 M48,15 L55,15" stroke="' + borderCol + '" stroke-width="1.4" opacity="0.72"/>';
         break;
       default:
-        // General tactical square
+        // Heavy-ink beveled tactical slate stamp (zero soft SaaS rounding)
         inner =
-          '<rect x="6" y="6" width="52" height="52" rx="9" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '"/>' +
-          '<rect x="10.5" y="10.5" width="43" height="43" rx="6" fill="none" stroke="' + borderCol + '" stroke-width="0.85" opacity="0.45"/>';
+          '<polygon points="9,4 59,4 59,55 55,60 5,60 5,9" fill="' + ink + '"/>' +
+          '<polygon points="10.5,6 57.5,6 57.5,53.5 53.5,58 6.5,58 6.5,10.5" fill="' + bgFill + '" stroke="' + borderCol + '" stroke-width="' + strokeW + '"/>' +
+          '<polygon points="57.5,6 57.5,53.5 53.5,58 6.5,58 57.5,6" fill="#05070c" opacity="0.62"/>' +
+          '<rect x="10.5" y="10.5" width="43" height="43" rx="0" fill="none" stroke="' + borderCol + '" stroke-width="0.9" opacity="0.42"/>';
         break;
     }
     return inner;
   }
 
-  // 5 Rarity Tier Corner Accents
+  // 5 Rarity Tier Heavy-Ink Stamped Corner Rivets & Notches
   function buildTierAccents(tier, borderCol, accentCol) {
     switch (tier) {
       case 'C':
-        return '<circle cx="11" cy="11" r="1.7" fill="' + borderCol + '"/><circle cx="53" cy="11" r="1.7" fill="' + borderCol + '"/>';
+        return '<rect x="9.5" y="9.5" width="3.5" height="3.5" fill="' + borderCol + '"/><rect x="51" y="9.5" width="3.5" height="3.5" fill="' + borderCol + '"/>';
       case 'B':
-        return '<path d="M6,16 L6,6 L16,6 M48,6 L58,6 L58,16" fill="none" stroke="' + borderCol + '" stroke-width="2.4" stroke-linecap="square"/>';
+        return '<path d="M5.5,17 L5.5,5.5 L17,5.5 M47,5.5 L58.5,5.5 L58.5,17" fill="none" stroke="' + borderCol + '" stroke-width="2.6" stroke-linecap="square"/>';
       case 'A':
         return (
-          '<polygon points="32,2 35.5,6.5 32,11 28.5,6.5" fill="' + borderCol + '"/>' +
-          '<path d="M6,17 L6,6 L17,6 M47,6 L58,6 L58,17 M6,47 L6,58 L17,58" fill="none" stroke="' + borderCol + '" stroke-width="2.2"/>'
+          '<polygon points="32,1.5 36,6.5 32,11.5 28,6.5" fill="' + borderCol + '" stroke="#04060a" stroke-width="1.1"/>' +
+          '<path d="M5.5,18 L5.5,5.5 L18,5.5 M46,5.5 L58.5,5.5 L58.5,18 M5.5,46 L5.5,58.5 L18,58.5" fill="none" stroke="' + borderCol + '" stroke-width="2.5"/>'
         );
       case 'S':
         return (
-          '<polygon points="32,1.5 36.5,6.5 32,11.5 27.5,6.5" fill="' + borderCol + '"/>' +
-          '<polygon points="32,52.5 35.5,57 32,61.5 28.5,57" fill="' + accentCol + '"/>' +
-          '<path d="M5,18 L5,5 L18,5 M46,5 L59,5 L59,18 M5,46 L5,59 L18,59 M46,59 L59,59 L59,46" fill="none" stroke="' + accentCol + '" stroke-width="2.1" opacity="0.9"/>'
+          '<polygon points="32,1 37,6.5 32,12 27,6.5" fill="' + borderCol + '" stroke="#04060a" stroke-width="1.2"/>' +
+          '<polygon points="32,52 36,57 32,62 28,57" fill="' + accentCol + '" stroke="#04060a" stroke-width="1.2"/>' +
+          '<path d="M4.5,19 L4.5,4.5 L19,4.5 M45,4.5 L59.5,4.5 L59.5,19 M4.5,45 L4.5,59.5 L19,59.5 M45,59.5 L59.5,59.5 L59.5,45" fill="none" stroke="' + accentCol + '" stroke-width="2.4" opacity="0.95"/>'
         );
       default:
         return '';
