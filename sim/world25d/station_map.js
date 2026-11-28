@@ -210,24 +210,24 @@
     addPartition(73, 27, 76, 32);
     addPartition(73, 40, 76, 45);
 
-    // Z-01B Central Clock Atrium colonnade, flanking metro booths & seating planters framing spawn plaza (41.5, 37.5)
+    // Z-01B Central B1 Concourse — Authentic Real-World Asymmetric Subway Layout around spawn (41.5, 37.5)
     addPillar(26, 25, 27, 25);
     addPillar(55, 25, 56, 25);
     addPillar(26, 51, 27, 51);
     addPillar(55, 51, 56, 51);
     addPillar(18, 13, 19, 13);
     addPillar(63, 13, 64, 13);
-    // Inner atrium heavy-steel columns visible inside the opening viewport
-    addPillar(33, 29, 33, 29);
-    addPillar(49, 29, 49, 29);
-    addPillar(33, 44, 33, 44);
-    addPillar(49, 44, 49, 44);
-    // West Atrium Station Inquiry Booth & East Shuttered Subway Newsstand framing the central concourse
-    addPartition(28, 35, 30, 39);
-    addPartition(52, 35, 54, 39);
-    // Waist-high tactical concourse cover & info counters framing spawn plaza & side lanes
-    addCover(30, 31, 32, 31);
-    addCover(50, 31, 52, 31);
+    // NW Recessed TVM Wall Alcove & Beefy 2x2 East Ceramic-Tiled Subway Structural Pier
+    addWall(29, 27, 35, 27);
+    addPillar(46, 30, 47, 31);
+    addPillar(33, 45, 33, 45);
+    addPillar(48, 45, 48, 45);
+    // West Customer Service Center Booth, East Sunken B2 Escalator Shaft & Shuttered Convenience Store
+    addPartition(30, 35, 32, 39);
+    addPartition(49, 32, 52, 35);
+    addPartition(49, 37, 51, 40);
+    // Atrium Security X-Ray Scanner Bed beside Service Center + South Concourse Tactical Benches/Covers
+    addCover(33, 32, 34, 33);
     addCover(30, 45, 32, 45);
     addCover(50, 45, 52, 45);
     addCover(27, 62, 29, 62);
@@ -496,8 +496,25 @@
         }
       }
     }
-    // Z-01 Concourse (16 cold cyan subway fluorescents; kept clear of direct spawn sightline 41.5,37.5)
-    addGridLights([13.5, 31.5, 51.5, 69.5], [12.5, 29.5, 46.5, 63.5], ['#6fd8ea', '#78e0f0', '#56b8cc', '#64c6da'], 2.2, 26, 0.06);
+    // Z-01 Concourse (16 architectural cold-vs-warm light pools: warm booth desk lamp, cold AFC tube, sparking gate, warm B2 escalator shaft)
+    arr.push(
+      { x: 33.4, z: 37.5, color: '#ffaa42', intensity: 3.1, distance: 12.0, flicker: 0.03 }, // Warm amber Service Booth interior lamp spill
+      { x: 41.0, z: 29.8, color: '#6ee6fa', intensity: 2.7, distance: 14.0, flicker: 0.05 }, // Cold cyan fluorescent tube above AFC turnstiles
+      { x: 41.6, z: 30.2, color: '#ff9630', intensity: 2.3, distance: 8.5,  flicker: 0.34 }, // Orange-gold sparking broken turnstile gate
+      { x: 49.4, z: 34.4, color: '#ff9c38', intensity: 2.7, distance: 12.0, flicker: 0.06 }, // Warm amber emergency stair light from B2 escalator shaft
+      { x: 48.2, z: 38.8, color: '#5ad0ee', intensity: 1.8, distance: 9.0,  flicker: 0.04 }, // Cool cyan vending machine spill beside shuttered store
+      { x: 32.5, z: 28.4, color: '#58b8cc', intensity: 1.4, distance: 10.0, flicker: 0.05 }, // NW recessed TVM bank glow
+      { x: 18.5, z: 40.5, color: '#f2a44c', intensity: 2.0, distance: 13.0, flicker: 0.14 }, // Z-01C Security bay dramatic amber pool over clue vignette
+      { x: 13.5, z: 12.5, color: '#509eb4', intensity: 1.4, distance: 18.0, flicker: 0.08 },
+      { x: 41.5, z: 12.5, color: '#62b8cc', intensity: 1.6, distance: 18.0, flicker: 0.06 },
+      { x: 69.5, z: 12.5, color: '#509eb4', intensity: 1.4, distance: 18.0, flicker: 0.08 },
+      { x: 13.5, z: 30.5, color: '#4d92a8', intensity: 1.3, distance: 17.0, flicker: 0.08 },
+      { x: 69.5, z: 30.5, color: '#589eb2', intensity: 1.4, distance: 17.0, flicker: 0.08 },
+      { x: 13.5, z: 58.5, color: '#498ca0', intensity: 1.3, distance: 18.0, flicker: 0.08 },
+      { x: 34.5, z: 58.5, color: '#4f96aa', intensity: 1.3, distance: 18.0, flicker: 0.07 },
+      { x: 52.5, z: 58.5, color: '#569cb0', intensity: 1.4, distance: 18.0, flicker: 0.07 },
+      { x: 69.5, z: 58.5, color: '#d4a664', intensity: 1.6, distance: 18.0, flicker: 0.09 }  // Warm spill toward Z-02 corridor gateway
+    );
     // Z-02 Corridor (12 warm sodium & amber boulevard lamps)
     addGridLights([93.5, 112.5, 131.5, 150.5], [58.5, 74.5, 90.5], ['#d6b274', '#e2bc7a', '#e0965c'], 2.1, 26, 0.10);
     // Z-03 Dispatch (10 CRT emerald-teal + amber lockout lamps)

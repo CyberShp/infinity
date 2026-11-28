@@ -332,25 +332,25 @@
     concourse: {
       id: 'concourse',
       accentHex: 0x68c8de,
-      bgColor: 0x060b12,
-      fogColor: 0x070f18,
-      fogDensity: 0.0195,
-      ambientColor: 0x3b5876,
-      ambientIntensity: 0.28,
-      hemiSky: 0x76badc,
-      hemiGround: 0x132230,
-      hemiIntensity: 0.36,
-      keyColor: 0xd8f4ff,
-      keyIntensity: 0.42,
-      rimColor: 0x68c8de,
-      rimIntensity: 0.24,
-      exposure: 1.16,
-      flashColor: 0xdcf5ff,
-      playerGlowColor: 0x7cc8e8,
-      vignetteRgba: 'rgba(6, 16, 26, 0.70)',
-      dust: { color: 0x8cd8f0, size: 0.11, opacity: 0.34, driftX: 0.14, driftY: 0.07, driftZ: 0.03 },
+      bgColor: 0x04070c,
+      fogColor: 0x050a11,
+      fogDensity: 0.0215,
+      ambientColor: 0x263b52,
+      ambientIntensity: 0.17,
+      hemiSky: 0x5c9ab8,
+      hemiGround: 0x0d1722,
+      hemiIntensity: 0.23,
+      keyColor: 0xc2e6f5,
+      keyIntensity: 0.31,
+      rimColor: 0x58b8ce,
+      rimIntensity: 0.22,
+      exposure: 1.10,
+      flashColor: 0xd4f0ff,
+      playerGlowColor: 0x72bddc,
+      vignetteRgba: 'rgba(4, 10, 18, 0.76)',
+      dust: { color: 0x8cd8f0, size: 0.10, opacity: 0.30, driftX: 0.14, driftY: 0.07, driftZ: 0.03 },
       ambientFx: 'fluorescent_motes',
-      assetSet: { key: 'concourse_atrium_rig', groundHazeOpacity: 0.15, shaftOpacity: 0.16, pulseHz: 1.35 },
+      assetSet: { key: 'concourse_atrium_rig', groundHazeOpacity: 0.12, shaftOpacity: 0.14, pulseHz: 1.35 },
       audio: { id: 'concourse_fluorescent', sceneMode: 'station_tense', label: '日光灯镇流器 · 检票厅混响' }
     },
     corridor: {
@@ -3105,11 +3105,22 @@
     shaftCanvas.height = 256;
     var sCtx = shaftCanvas.getContext('2d');
     var sGrad = sCtx.createLinearGradient(0, 0, 0, 256);
-    sGrad.addColorStop(0, 'rgba(255,255,255,0.42)');
-    sGrad.addColorStop(0.55, 'rgba(255,255,255,0.14)');
+    sGrad.addColorStop(0, 'rgba(255,255,255,0.30)');
+    sGrad.addColorStop(0.55, 'rgba(255,255,255,0.10)');
     sGrad.addColorStop(1, 'rgba(255,255,255,0.0)');
     sCtx.fillStyle = sGrad;
     sCtx.fillRect(0, 0, 128, 256);
+    // Soft horizontal bell-curve feather so light shafts have zero hard left/right rectangle borders
+    sCtx.globalCompositeOperation = 'destination-in';
+    var hFade = sCtx.createLinearGradient(0, 0, 128, 0);
+    hFade.addColorStop(0.0, 'rgba(255,255,255,0.0)');
+    hFade.addColorStop(0.28, 'rgba(255,255,255,0.65)');
+    hFade.addColorStop(0.50, 'rgba(255,255,255,1.0)');
+    hFade.addColorStop(0.72, 'rgba(255,255,255,0.65)');
+    hFade.addColorStop(1.0, 'rgba(255,255,255,0.0)');
+    sCtx.fillStyle = hFade;
+    sCtx.fillRect(0, 0, 128, 256);
+    sCtx.globalCompositeOperation = 'source-over';
     var shaftTex = this.trackTex(new THREE.CanvasTexture(shaftCanvas));
     if (THREE.sRGBEncoding !== undefined) shaftTex.encoding = THREE.sRGBEncoding;
 
@@ -4428,8 +4439,9 @@
     // Slightly flatten pitch during close-up cut-ins so heavy-ink character silhouettes dominate
     var pitchDrop = (1.0 - zoom) * 2.1;
 
+    // Subtle three-quarter oblique offset (-2.0m X) gives architectural piers, booths, AFC gates & escalators 3-face diorama depth
     this.camera.position.set(
-      this.camPos.x + sx + this.camKickX,
+      this.camPos.x - 2.0 * zoom + sx + this.camKickX,
       Math.max(4.8, CAMERA_25D_SPEC.offsetY * zoom - pitchDrop) + sy,
       this.camPos.z + CAMERA_25D_SPEC.offsetZ * zoom + this.camKickZ
     );
@@ -6595,6 +6607,9 @@
 
     for (var i = 0; i < this.interactables.length; i++) {
       var it = this.interactables[i];
+      var d = dist2D(p.x, p.z, it.x, it.z);
+      // Proximity fade: keep the station floor free of arcade glowing target circles until the player walks close
+      var prox = clamp(1.0 - (d - 2.6) / 3.2, 0.0, 1.0);
       it.bobPhase += simDt * 2.8;
       var statusHex = COL_PENDING;
       var pulseSpeed = 1.6;
@@ -6603,16 +6618,17 @@
       if (it.type === 'clue') {
         var baseY = it.spriteBaseY !== undefined ? it.spriteBaseY : 0.78;
         var bobAmp = it.spriteBobAmp !== undefined ? it.spriteBobAmp : 0.12;
-        var baseRingOp = it.ringBaseOpacity !== undefined ? it.ringBaseOpacity : 0.38;
+        var baseRingOp = it.ringBaseOpacity !== undefined ? it.ringBaseOpacity : 0.24;
         it.sprite.position.y = baseY + Math.sin(it.bobPhase) * bobAmp;
         it.ring.rotation.z += simDt * 0.85;
         statusHex = it.done ? COL_DONE : (it.id === 'int_clue_concourse' ? 0xdcb46a : COL_PENDING);
         it.ringMat.color.setHex(statusHex);
         if (it.done) {
-          it.mat.opacity = 0.16;
-          it.ringMat.opacity = 0.08;
+          it.mat.opacity = 0.12 * prox;
+          it.ringMat.opacity = 0.05 * prox;
         } else {
-          it.ringMat.opacity = baseRingOp + Math.sin(this.elapsedReal * 3.4 + i) * (baseRingOp * 0.25);
+          it.mat.opacity = 0.24 + prox * 0.44;
+          it.ringMat.opacity = (baseRingOp + Math.sin(this.elapsedReal * 3.4 + i) * (baseRingOp * 0.25)) * prox;
         }
         if (it.beaconMat && it.id === 'int_clue_concourse') {
           var sparkOn = !it.done && Math.sin(this.elapsedReal * 23.0) > -0.45;
@@ -6624,14 +6640,14 @@
         statusHex = it.done ? COL_DONE : (inProg ? COL_ACTIVE : COL_PENDING);
         pulseSpeed = inProg ? 3.2 : 1.8;
         it.ringMat.color.setHex(statusHex);
-        it.ringMat.opacity = it.done ? 0.28 : (inProg ? 0.68 : 0.46);
+        it.ringMat.opacity = (it.done ? 0.20 : (inProg ? 0.56 : 0.34)) * Math.max(0.28, prox);
         if (it.beaconMat) it.beaconMat.color.setHex(statusHex);
       } else if (it.type === 'exit') {
         it.ring.rotation.z += simDt * (exitUnlocked ? 2.4 : 0.7);
         statusHex = exitUnlocked ? COL_EXIT_RDY : (this.trainInStation ? COL_ACTIVE : COL_WARNING);
         pulseSpeed = exitUnlocked ? 2.8 : 1.2;
         it.ringMat.color.setHex(statusHex);
-        it.ringMat.opacity = exitUnlocked ? (0.58 + Math.sin(this.elapsedReal * 6) * 0.16) : 0.36;
+        it.ringMat.opacity = exitUnlocked ? (0.54 + Math.sin(this.elapsedReal * 6) * 0.14) : 0.28;
         if (it.mat && it.mat.color) {
           it.mat.color.setHex(statusHex);
           it.mat.opacity = exitUnlocked ? (0.56 + Math.sin(this.elapsedReal * 4) * 0.12) : 0.30;
@@ -6654,7 +6670,7 @@
         var damagedRatio = it.maxHp > 0 ? (it.hp / it.maxHp) : 0;
         statusHex = it.destroyed ? COL_DONE : (damagedRatio <= 0.5 ? 0xff6b35 : COL_WARNING);
         it.ringMat.color.setHex(statusHex);
-        it.ringMat.opacity = it.destroyed ? 0.14 : (0.34 + Math.sin(this.elapsedReal * 3.8 + i) * 0.08);
+        it.ringMat.opacity = (it.destroyed ? 0.08 : (0.24 + Math.sin(this.elapsedReal * 3.8 + i) * 0.06)) * prox;
         if (it.fractureMat) {
           it.fractureMat.color.setHex(it.hitFlash > 0.05 ? 0xffffff : (damagedRatio <= 0.5 ? 0xff5a2c : 0xffa838));
           it.fractureMat.opacity = it.destroyed ? 0 : (damagedRatio <= 0.5 ? 0.96 : 0.68);
@@ -6665,7 +6681,7 @@
         statusHex = it.done ? COL_DONE : baseTrHex;
         pulseSpeed = it.done ? 0.6 : 1.9;
         it.ringMat.color.setHex(statusHex);
-        it.ringMat.opacity = it.done ? 0.22 : (0.42 + Math.sin(this.elapsedReal * 4.0 + i) * 0.10);
+        it.ringMat.opacity = (it.done ? 0.14 : (0.28 + Math.sin(this.elapsedReal * 4.0 + i) * 0.08)) * prox;
         if (it.beaconMat) it.beaconMat.color.setHex(statusHex);
         if (it.animPart) {
           if (it.triggerEffect === 'vent_purge') {
@@ -6677,7 +6693,8 @@
       }
 
       if (it.pulseRing && it.pulseMat) {
-        if (it.done && it.type !== 'exit') {
+        var pulseVis = (!it.done || it.type === 'exit') && (it.type === 'exit' || it.type === 'console' || prox > 0.08);
+        if (!pulseVis) {
           it.pulseRing.visible = false;
         } else {
           it.pulseRing.visible = true;
@@ -6685,11 +6702,11 @@
           var pSc = pulseBaseScale * (1.0 + ph * 0.65);
           it.pulseRing.scale.set(pSc, 1, pSc);
           it.pulseMat.color.setHex(statusHex);
-          it.pulseMat.opacity = (1.0 - ph) * (exitUnlocked && it.type === 'exit' ? 0.40 : 0.24);
+          var pBase = (exitUnlocked && it.type === 'exit') ? 0.36 : (it.type === 'console' ? 0.18 : 0.16 * prox);
+          it.pulseMat.opacity = (1.0 - ph) * pBase;
         }
       }
 
-      var d = dist2D(p.x, p.z, it.x, it.z);
       var rangeLim = it.type === 'destructible_cover' ? (bestDist + 0.35) : bestDist;
       if (d <= rangeLim) {
         if (it.type === 'exit' || !it.done) {
